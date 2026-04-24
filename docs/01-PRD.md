@@ -166,7 +166,7 @@ Premier solves both ends by making capture frictionless and retrieval intelligen
 - Maintenance reminders
 - Annual property report
 
-### 6.3 Capture pipeline (Phase 2)
+### 6.3 Capture pipeline (Phase 1)
 
 **Quick-capture button** (mobile app)
 - Tap-and-hold to record
@@ -179,8 +179,8 @@ Premier solves both ends by making capture frictionless and retrieval intelligen
 - Same processing pipeline as native captures
 
 **Other inputs**
-- Inbound SMS auto-attached to job thread
-- Inbound email parsed and threaded
+- Inbound SMS auto-attached to job thread (Phase 2 — requires Twilio provisioning)
+- Inbound email parsed and threaded (Phase 2)
 - Inbound calls transcribed (when AI receptionist enabled, Phase 5)
 - Photos uploaded with EXIF data preserved (geotag, timestamp)
 
@@ -193,7 +193,7 @@ Premier solves both ends by making capture frictionless and retrieval intelligen
 6. Index into vault with embeddings
 7. Notify user with summary + suggested actions
 
-### 6.4 Vault (Phase 2)
+### 6.4 Vault (Phase 1)
 
 **What goes in:**
 - Every transcribed recording
@@ -283,7 +283,7 @@ Every vault item upload includes the user's current location. If inside a geofen
 - User can delete any segment, any day, or all history
 - Zero visibility to customers ever
 
-### 6.5 AI Assistant — Premier Brain (Phase 3)
+### 6.5 AI Assistant — Premier Brain (Phase 2)
 
 **Chat interface** (web + mobile)
 - Single conversation thread
@@ -291,7 +291,7 @@ Every vault item upload includes the user's current location. If inside a geofen
 - Tool use visible inline
 - Approve/edit destructive actions before execution
 
-**Available tools** (see `04-tool-definitions.md`)
+**Available tools** (see `packages/ai/tools/`)
 - Vault: query_vault, search_recordings, find_similar_jobs
 - CRM read: lookup_customer, lookup_property, lookup_job, list_quotes, list_invoices
 - CRM write: create_quote, send_message, schedule_followup, create_task, update_job_status
@@ -318,7 +318,7 @@ Every vault item upload includes the user's current location. If inside a geofen
 
 ### 6.6 Pricing intelligence (Phase 1 foundation, Phase 4 full features)
 
-See `05-pricing-engine.md` for full spec.
+Full pricing engine spec deferred to Phase 3 documentation.
 
 **Phase 1:** every quote line writes to `quote_line_items` table with full metadata (service, zip, quantity, price, outcome, ai_confidence)
 
@@ -358,10 +358,9 @@ See `05-pricing-engine.md` for full spec.
 ## 8. Tech stack
 
 **Frontend**
-- Next.js 15 (App Router) — web app + customer portal
-- React Native (Expo) — mobile app, Phase 1 PWA, Phase 2 native
+- Next.js 15 (App Router) — web app + customer portal as PWA
+- PWA primary; native deferred indefinitely (see `MOBILE-STRATEGY.md`)
 - Tailwind + shadcn/ui
-- TanStack Query for data fetching
 
 **Backend**
 - Supabase (Postgres 15 + Auth + Storage + Realtime + Edge Functions)
@@ -370,8 +369,8 @@ See `05-pricing-engine.md` for full spec.
 - Deno-based Edge Functions for webhooks and async processing
 
 **AI**
-- Anthropic Claude Sonnet 4.5 (primary) and Haiku 4.5 (cheap classification)
-- Anthropic Claude Opus 4.7 for hard estimator reasoning (sparingly)
+- Anthropic Claude Sonnet 4.6 (primary) and Haiku 4.5 (cheap classification)
+- Anthropic Claude Opus 4.7 for complex synthesis (sparingly)
 - OpenAI Whisper or Deepgram for transcription
 - LM Studio + Qwen for local dev fallback (Kevin's existing setup)
 - text-embedding-3-large for embeddings (OpenAI, cheap)

@@ -6,6 +6,63 @@ Format: each decision is dated. Most recent at the top.
 
 ---
 
+## 2026-04-24: User → org association via Supabase Auth trigger
+
+**Context:** New users signing in via magic link need to be associated with the Premier org automatically. Two options: database trigger on `auth.users`, or a server-side setup flow that runs after sign-in.
+
+**Decision:** Supabase Auth trigger (`handle_new_user()`) in migration `0009_user_org_association.sql`. First active user to sign up becomes org owner (status `active`); subsequent users join as pending employees (status `pending`) until an owner approves them. Also adds `status` column to `org_members` and updates `user_is_in_org()` to respect it.
+
+**Alternatives considered:**
+- Server-side setup flow at `/setup` after sign-in (more application code, more failure modes — window where user exists without org association)
+
+**Reasoning:** Database trigger is foolproof — it fires before any application code, so there is no race condition or forgettable setup step. Matches the pattern already used in migration `0006` (`handle_new_org()`).
+
+---
+
+## 2026-04-24: Manual multi-day job flag over auto-detection
+
+**Context:** Multi-day jobs waive the trip fee (replaced by a mileage line item). Need to distinguish intentional multi-day projects from single-day jobs that ran long.
+
+**Decision:** Manual boolean flag on the job record (`is_multi_day`). Kevin sets this when creating or editing a job.
+
+**Alternatives considered:**
+- Auto-detect by calendar spread (if job spans >1 calendar day in the schedule)
+- Auto-detect by number of site visits (>1 geofence entry)
+
+**Reasoning:** Auto-detection is too error-prone. A one-day job that spills into a second day due to weather or scope change should not retroactively waive the trip fee and recalculate mileage. The manual flag is explicit, auditable, and easy to set at job creation.
+
+**Trade-off accepted:** Requires Kevin to set the flag intentionally. Forgetting it means the trip fee stays on — correctable at invoice review, low-stakes.
+
+---
+
+## 2026-04-24: Consolidate automation engine into top-level packages/automation/
+
+**Context:** `packages/ai/automation/engine.ts` existed but both `ARCHITECTURE.md` and `README.md` specified a separate top-level `packages/automation/` package. The engine was in the wrong place.
+
+**Decision:** Move `packages/ai/automation/engine.ts` → `packages/automation/engine.ts`. Top-level `packages/automation/` is the single home for all automation engine code.
+
+**Alternatives considered:**
+- Keep in `packages/ai/` (simpler monorepo, but blurs the boundary between AI tool dispatch and rule evaluation)
+
+**Reasoning:** The automation engine evaluates conditions and executes actions based on database rules — it does not call Claude directly. Keeping it separate from `packages/ai/` gives it clean test boundaries and lets it be developed and published independently of the AI dependency.
+
+---
+
+## 2026-04-24: Use @ducanh2912/next-pwa for PWA service worker
+
+**Context:** PWA service worker is required for offline mode, background sync, and push notifications per `MOBILE-STRATEGY.md`. The canonical `next-pwa` package is unmaintained and incompatible with Next.js 13+ App Router.
+
+**Decision:** Use `@ducanh2912/next-pwa` — the actively maintained fork with full Next.js 15 App Router support.
+
+**Alternatives considered:**
+- Original `next-pwa` (unmaintained, breaks on App Router)
+- Custom Workbox implementation (more control, significantly more boilerplate)
+- `next-offline` (unmaintained)
+
+**Reasoning:** `@ducanh2912/next-pwa` is the de facto successor to `next-pwa`, well-documented, and gets precaching + background sync with minimal config. If it becomes unmaintained we can migrate to custom Workbox — the API surface is compatible.
+
+---
+
 ## 2026-04-24: Re-sequence build to bring AI capture forward
 
 **Context:** Original build sequence had AI assistant arriving in Phase 3 (week 12). Kevin needs the AI capturing notes and learning from his work as soon as possible — that's the whole point of the system over a generic CRM.

@@ -60,10 +60,8 @@ premier-crm/
 │   │   │   └── catalog-tools.ts     Service catalog management tools
 │   │   ├── handlers/                Tool execution handlers
 │   │   ├── prompts/                 System prompts and templates
-│   │   ├── automation/
-│   │   │   └── engine.ts            Trigger → conditions → actions evaluator
 │   │   └── transcription/           Deepgram, Whisper, LM Studio providers
-│   └── automation/             Rule engine (separate package for clarity)
+│   └── automation/             Rule engine (trigger → conditions → actions)
 ├── supabase/
 │   ├── migrations/             SQL migrations (run in order, never edit)
 │   │   ├── 0001_init.sql                       Extensions, orgs, users, helpers
