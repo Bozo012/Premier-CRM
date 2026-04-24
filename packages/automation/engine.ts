@@ -1,9 +1,13 @@
 /**
- * Premier Brain — Automation Engine
+ * Premier — Automation Engine
  *
  * Evaluates automation rules against events and executes matching actions.
  * This is the heart of location-aware behaviors but also handles non-location
  * triggers (quote_stale, scheduled_time, capture_uploaded, etc.).
+ *
+ * Lives in packages/automation/ (top-level package) rather than packages/ai/
+ * because the engine runs without Claude — it evaluates conditions and executes
+ * actions based on rules defined in the database.
  *
  * Usage:
  *   const engine = new AutomationEngine(supabase, anthropic);
@@ -172,10 +176,10 @@ export class AutomationEngine {
           conditionsFailedAt: conditionResult.failedAt,
           outcome: 'skipped',
         });
-        results.push({ 
-          ruleId: rule.id, 
-          outcome: 'skipped', 
-          reason: `condition ${conditionResult.failedAt} failed` 
+        results.push({
+          ruleId: rule.id,
+          outcome: 'skipped',
+          reason: `condition ${conditionResult.failedAt} failed`
         });
         continue;
       }
@@ -189,10 +193,10 @@ export class AutomationEngine {
           outcome: actionResults.every(r => r.status === 'ok') ? 'succeeded' : 'partial',
         });
         await this.incrementRuleStats(rule.id, event.occurredAt);
-        results.push({ 
-          ruleId: rule.id, 
-          outcome: 'executed', 
-          actionResults 
+        results.push({
+          ruleId: rule.id,
+          outcome: 'executed',
+          actionResults
         });
       } catch (err: any) {
         await this.logEvent(rule, event, {
@@ -200,10 +204,10 @@ export class AutomationEngine {
           outcome: 'failed',
           errorMessage: err.message,
         });
-        results.push({ 
-          ruleId: rule.id, 
-          outcome: 'failed', 
-          error: err.message 
+        results.push({
+          ruleId: rule.id,
+          outcome: 'failed',
+          error: err.message
         });
       }
     }
@@ -371,7 +375,6 @@ export class AutomationEngine {
   }
 
   private resolvePath(path: string, event: AutomationEvent): any {
-    // Special prefixes
     const root: any = {
       event: { ...event.payload, ...event.context },
       ...event.context,
@@ -469,28 +472,30 @@ export class AutomationEngine {
           withinMinutes: config.within_minutes ?? 30,
         });
 
-      case 'send_sms':
-        const smsRecipient = config.to === 'customer' ? ctx.customer?.phone_primary : config.to;
-        if (!smsRecipient) return { skipped: 'no recipient' };
+      case 'send_sms': {
+        const recipient = config.to === 'customer' ? ctx.customer?.phone_primary : config.to;
+        if (!recipient) return { skipped: 'no recipient' };
         return svc.sendSms({
           orgId: event.orgId,
           customerId: ctx.customer?.id,
           jobId: ctx.job?.id,
-          to: smsRecipient,
+          to: recipient,
           body: config.body_template ?? config.body,
         });
+      }
 
-      case 'send_email':
-        const emailRecipient = config.to === 'customer' ? ctx.customer?.email : config.to;
-        if (!emailRecipient) return { skipped: 'no recipient' };
+      case 'send_email': {
+        const recipient = config.to === 'customer' ? ctx.customer?.email : config.to;
+        if (!recipient) return { skipped: 'no recipient' };
         return svc.sendEmail({
           orgId: event.orgId,
           customerId: ctx.customer?.id,
           jobId: ctx.job?.id,
-          to: emailRecipient,
+          to: recipient,
           subject: config.subject,
           body: config.body_template ?? config.body,
         });
+      }
 
       case 'push_notification':
         return svc.pushNotification({
@@ -550,7 +555,6 @@ export class AutomationEngine {
         });
 
       case 'run_tool':
-        // Escape hatch: execute an AI tool from the registry
         return svc.runTool(config.tool_name, config.tool_args, event);
 
       default:
@@ -613,7 +617,7 @@ export class AutomationEngine {
     const eMin = eh * 60 + em;
     const nMin = now.getHours() * 60 + now.getMinutes();
 
-    // Handle quiet hours that span midnight (e.g. 20:00 - 08:00)
+    // Quiet hours that span midnight (e.g. 21:00–07:00)
     if (sMin > eMin) {
       return nMin >= sMin || nMin < eMin;
     }

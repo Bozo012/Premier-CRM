@@ -8,7 +8,7 @@ How content flows from the moment it's captured (mic press, photo snap, inbound 
 ┌─────────────┐
 │  Capture    │  Mobile mic, Plaud, inbound SMS/email/call, manual upload
 └──────┬──────┘
-       │ POST to /api/capture/upload (includes current GPS location)
+       │ POST to /api/v1/captures (includes current GPS location)
        ▼
 ┌─────────────┐
 │  Receive    │  Validate, store raw asset, create vault_item (status='pending')
@@ -165,7 +165,7 @@ Photo of a receipt → OCR + line item extraction.
 
 ### Step 1: Receive
 
-Endpoint: `POST /api/capture/upload`
+Endpoint: `POST /api/v1/captures`
 
 ```typescript
 // Request body
@@ -203,11 +203,11 @@ Endpoint: `POST /api/capture/upload`
 }
 ```
 
-Implementation: Supabase Edge Function. Validates, creates row, enqueues background job via pg_cron or external queue (Inngest recommended for real workloads).
+Implementation: Route handler at `app/api/v1/captures/route.ts`. Validates, creates row, enqueues background job via pg_net (see DECISIONS.md — no external queue).
 
 ### Step 2: Transcribe (audio only)
 
-Provider abstraction layer in `packages/ai/transcription`. Default to Deepgram (fast, accurate, ~$0.0043/min) with Whisper fallback.
+Provider abstraction layer in `packages/ai/transcription/providers/`. Default to Deepgram (fast, accurate, ~$0.0043/min) with Whisper fallback.
 
 ```typescript
 async function transcribe(audioUrl: string, options: TranscribeOptions) {
