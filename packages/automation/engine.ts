@@ -333,7 +333,9 @@ export class AutomationEngine {
     event: AutomationEvent
   ): { passed: boolean; failedAt: number | null } {
     for (let i = 0; i < conditions.length; i++) {
-      if (!this.evaluateClause(conditions[i], event)) {
+      const clause = conditions[i];
+      if (clause === undefined) continue;
+      if (!this.evaluateClause(clause, event)) {
         return { passed: false, failedAt: i };
       }
     }
@@ -595,14 +597,15 @@ export class AutomationEngine {
   // ===========================================================================
 
   private isBusinessHours(now: Date, businessHours: any): boolean {
-    const dayKey = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][now.getDay()];
+    // getDay() is always 0-6; the array has exactly 7 elements
+    const dayKey = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][now.getDay()]!;
     const ranges = businessHours[dayKey] ?? [];
     if (ranges.length === 0) return false;
 
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     for (const [start, end] of ranges) {
-      const [sh, sm] = start.split(':').map(Number);
-      const [eh, em] = end.split(':').map(Number);
+      const [sh = 0, sm = 0] = start.split(':').map(Number);
+      const [eh = 0, em = 0] = end.split(':').map(Number);
       const sMin = sh * 60 + sm;
       const eMin = eh * 60 + em;
       if (nowMinutes >= sMin && nowMinutes < eMin) return true;
@@ -611,8 +614,8 @@ export class AutomationEngine {
   }
 
   private isInQuietHours(now: Date, start: string, end: string): boolean {
-    const [sh, sm] = start.split(':').map(Number);
-    const [eh, em] = end.split(':').map(Number);
+    const [sh = 0, sm = 0] = start.split(':').map(Number);
+    const [eh = 0, em = 0] = end.split(':').map(Number);
     const sMin = sh * 60 + sm;
     const eMin = eh * 60 + em;
     const nMin = now.getHours() * 60 + now.getMinutes();

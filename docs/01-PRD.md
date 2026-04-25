@@ -394,7 +394,7 @@ Full pricing engine spec deferred to Phase 3 documentation.
 **Dev tooling**
 - pnpm workspaces (monorepo)
 - TypeScript strict mode
-- Biome (lint + format)
+- ESLint 9 (flat config) + Prettier (lint + format)
 - Vitest + Playwright (testing)
 - Claude Code (primary development assistant)
 

@@ -1,0 +1,20 @@
+{
+  "name": "premier-crm",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --filter @premier/web dev",
+    "build": "pnpm --filter @premier/web build",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "db:types": "supabase gen types typescript --local > packages/db/types.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  }
+}
