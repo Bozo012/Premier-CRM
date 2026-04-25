@@ -6,6 +6,19 @@ Format: each decision is dated. Most recent at the top.
 
 ---
 
+## 2026-04-25: Tailwind CSS 3.4.x (v3-lts) over 4.x
+
+**Context:** Phase 0 Step 2 required Tailwind CSS. Tailwind 4 is the current `latest` on npm (4.2.4 as of this writing). shadcn/ui is in the process of migrating to Tailwind 4 but the migration removes `tailwind.config.ts` in favour of CSS-only configuration, and the shadcn component generation path for v4 is still shifting.
+
+**Decision:** Pin `tailwindcss@^3.4.x` (v3-lts, currently 3.4.19). All shadcn/ui CSS variable tokens and component patterns are written for Tailwind 3. Standard `tailwind.config.ts` API is stable and well-understood.
+
+**Alternatives considered:**
+- Tailwind 4.x (current `latest`) — CSS-first config, no `tailwind.config.ts`, faster builds, but shadcn/ui upgrade path is incomplete
+
+**Reasoning:** The risk of shadcn/ui generating v4-incompatible component code mid-project outweighs the speed benefit. v3-lts is explicitly maintained by the Tailwind team. Migrate to v4 once shadcn publishes a stable upgrade guide.
+
+---
+
 ## 2026-04-25: ESLint 9 + Prettier over Biome
 
 **Context:** PRD listed Biome for lint + format. At Phase 0 scaffold, Kevin explicitly specified ESLint flat config + Prettier.
