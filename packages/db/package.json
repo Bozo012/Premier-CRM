@@ -1,0 +1,12 @@
+{
+  "name": "@premier/db",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./index.ts",
+    "./*": "./*"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.47.0"
+  }
+}

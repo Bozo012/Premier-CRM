@@ -6,6 +6,32 @@ Format: each decision is dated. Most recent at the top.
 
 ---
 
+## 2026-04-25: ESLint 9 + Prettier over Biome
+
+**Context:** PRD listed Biome for lint + format. At Phase 0 scaffold, Kevin explicitly specified ESLint flat config + Prettier.
+
+**Decision:** ESLint 9 (flat config, `eslint.config.mjs`) + Prettier (`.prettierrc`). Root config with `typescript-eslint` v8 recommended rules. Per-package overrides added when needed (e.g., Next.js rules in `apps/web/`).
+
+**Alternatives considered:**
+- Biome (faster, single tool, but younger ecosystem — fewer Next.js-specific rules, less community tooling)
+
+**Reasoning:** ESLint has first-class Next.js integration (`eslint-config-next`), is the default for `create-next-app`, and has a larger rule ecosystem for the patterns this project uses. Prettier is the standard pair for formatting. The speed advantage of Biome doesn't matter at this project's scale.
+
+---
+
+## 2026-04-25: pnpm 10 (not 9) as package manager
+
+**Context:** README and initial requirement said `pnpm@9.x`. The installed environment has pnpm 10.33.0, which is the current stable major version.
+
+**Decision:** Use pnpm 10. `packageManager` field in root `package.json` set to `pnpm@10.33.0`.
+
+**Alternatives considered:**
+- Force pnpm 9 via Corepack (works, but fights the environment and misses pnpm 10 improvements)
+
+**Reasoning:** pnpm 10 is current stable. No pnpm 9-specific features are required. Use what's installed.
+
+---
+
 ## 2026-04-24: User → org association via Supabase Auth trigger
 
 **Context:** New users signing in via magic link need to be associated with the Premier org automatically. Two options: database trigger on `auth.users`, or a server-side setup flow that runs after sign-in.

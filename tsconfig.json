@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@premier/shared": ["./packages/shared/index.ts"],
+      "@premier/shared/*": ["./packages/shared/*"],
+      "@premier/db": ["./packages/db/index.ts"],
+      "@premier/db/*": ["./packages/db/*"],
+      "@premier/ai": ["./packages/ai/index.ts"],
+      "@premier/ai/*": ["./packages/ai/*"],
+      "@premier/automation": ["./packages/automation/engine.ts"],
+      "@premier/automation/*": ["./packages/automation/*"]
+    }
+  }
+}

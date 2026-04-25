@@ -97,10 +97,10 @@ premier-crm/
 
 ### Prerequisites
 
-- Node 22+
-- pnpm 9+
+- Node 22+ (`.nvmrc` pins the exact version — use `nvm use` or `fnm use`)
+- pnpm 10+ (`npm install -g pnpm` or via Corepack)
 - Docker (for local Supabase, optional)
-- Supabase CLI (for production migrations)
+- Supabase CLI (for running migrations — `brew install supabase/tap/supabase`)
 - Anthropic API key (required)
 - OpenAI API key (for embeddings)
 - Deepgram API key (for transcription)
@@ -115,13 +115,14 @@ pnpm install
 
 # Environment variables
 cp .env.example .env.local
-# Fill in API keys in .env.local
+# Fill in API keys — see .env.example for descriptions of each variable
 
-# Set up Supabase (cloud free tier or local)
-# Cloud: create project at supabase.com, copy URL and keys to .env.local
-# Local:
+# Set up Supabase (cloud free tier or local Docker)
+# Cloud: create project at supabase.com, copy URL and keys to .env.local, then:
+supabase db push   # Runs all migrations 0001-0009 against your cloud project
+# Local Docker:
 supabase start
-supabase db reset   # Runs all migrations 0001-0008
+supabase db reset  # Runs all migrations 0001-0009
 
 # Generate TypeScript types from Supabase schema
 pnpm db:types

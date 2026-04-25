@@ -1,0 +1,16 @@
+{
+  "name": "@premier/automation",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./engine.ts",
+    "./*": "./*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.36.0",
+    "@supabase/supabase-js": "^2.47.0"
+  }
+}
