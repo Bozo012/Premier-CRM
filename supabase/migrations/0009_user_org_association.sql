@@ -23,6 +23,9 @@ ALTER TABLE org_members
 
 -- Promote any existing owner rows to active.
 -- On a fresh install this is a no-op; on re-run it's idempotent.
+-- WARNING: any pre-existing non-owner rows (role != 'owner') will default to
+-- status = 'pending' and lose data access until manually promoted via UPDATE.
+-- On a fresh install there are no rows, so this is not a concern.
 UPDATE org_members SET status = 'active' WHERE role = 'owner' AND status = 'pending';
 
 -- ============================================================================
@@ -106,6 +109,15 @@ CREATE TRIGGER on_auth_user_created
 -- ============================================================================
 -- RLS: owners and admins can approve / reject pending members
 -- ============================================================================
+
+-- Allow pending users to see their own membership row so they know they're
+-- awaiting approval. The existing "Members see memberships in their orgs"
+-- policy from 0001 calls user_is_in_org() which now requires status='active',
+-- so pending users would be invisible to themselves without this policy.
+-- Multiple SELECT policies OR together in Postgres — no conflict.
+CREATE POLICY "Users can read their own membership"
+  ON org_members FOR SELECT
+  USING (user_id = auth.uid());
 
 CREATE POLICY "Owners and admins can manage member status"
   ON org_members FOR UPDATE
