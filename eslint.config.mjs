@@ -12,6 +12,7 @@ export default tseslint.config(
       '**/build/**',
       '**/*.config.mjs',
       '**/*.config.js',
+      '**/next-env.d.ts',
       'packages/db/types.ts', // generated file
     ],
   },

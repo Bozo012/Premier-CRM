@@ -1,18 +1,42 @@
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from './types'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import type { Database } from './types';
 
-/** Browser / anon client — respects RLS */
-export function createBrowserClient() {
-  return createClient<Database>(supabaseUrl, supabaseAnonKey)
+function getEnv(name: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY' | 'SUPABASE_SERVICE_ROLE_KEY'): string {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value;
 }
 
-/** Service-role client — bypasses RLS. Server-side only. */
-export function createServiceClient() {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  return createClient<Database>(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  })
+export function createBrowserClient(): SupabaseClient<Database> {
+  const url = getEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const anonKey = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+
+  return createClient<Database>(url, anonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+}
+
+export function createServiceClient(): SupabaseClient<Database> {
+  if (typeof window !== 'undefined') {
+    throw new Error('createServiceClient() must only be called on the server.');
+  }
+
+  const url = getEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const serviceRoleKey = getEnv('SUPABASE_SERVICE_ROLE_KEY');
+
+  return createClient<Database>(url, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
 }
