@@ -12,7 +12,7 @@ CREATE TYPE customer_type AS ENUM ('residential', 'commercial', 'property_manage
 CREATE TYPE preferred_channel AS ENUM ('sms', 'email', 'call', 'portal');
 
 CREATE TABLE customers (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   -- Identity
@@ -64,7 +64,7 @@ CREATE TRIGGER customers_updated_at BEFORE UPDATE ON customers
 -- Properties are first-class. They survive customer changes (next owner).
 
 CREATE TABLE properties (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   -- Address
@@ -134,7 +134,7 @@ CREATE INDEX ON customer_properties (property_id);
 -- ============================================================================
 
 CREATE TABLE service_categories (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   name            TEXT NOT NULL,
   parent_id       UUID REFERENCES service_categories(id),
@@ -143,7 +143,7 @@ CREATE TABLE service_categories (
 );
 
 CREATE TABLE service_items (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   name            TEXT NOT NULL,
@@ -181,7 +181,7 @@ CREATE TRIGGER service_items_updated_at BEFORE UPDATE ON service_items
 -- ============================================================================
 
 CREATE TABLE materials (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   name            TEXT NOT NULL,
@@ -225,7 +225,7 @@ CREATE TABLE service_materials (
 
 -- Time-series of observed material prices
 CREATE TABLE material_prices (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   material_id     UUID NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
   source          TEXT NOT NULL,           -- 'home_depot_api', 'lowes_api', 'manual', 'receipt'
   zip_code        TEXT,
@@ -251,7 +251,7 @@ CREATE TYPE job_status AS ENUM (
 CREATE TYPE job_priority AS ENUM ('low', 'normal', 'high', 'emergency');
 
 CREATE TABLE jobs (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   customer_id     UUID NOT NULL REFERENCES customers(id),
   property_id     UUID NOT NULL REFERENCES properties(id),
@@ -309,7 +309,7 @@ CREATE TRIGGER jobs_updated_at BEFORE UPDATE ON jobs
 
 -- Job phases (for multi-stage projects)
 CREATE TABLE job_phases (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id          UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   name            TEXT NOT NULL,
   description     TEXT,
@@ -339,7 +339,7 @@ CREATE TYPE quote_status AS ENUM (
 );
 
 CREATE TABLE quotes (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   job_id          UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   
@@ -371,7 +371,7 @@ CREATE TABLE quotes (
   decline_reason  TEXT,
   
   -- Magic link access
-  share_token     UUID DEFAULT uuid_generate_v4(),
+  share_token     UUID DEFAULT gen_random_uuid(),
   
   -- Versioning
   version         INTEGER DEFAULT 1,
@@ -404,7 +404,7 @@ CREATE TRIGGER quotes_updated_at BEFORE UPDATE ON quotes
 -- ============================================================================
 
 CREATE TABLE quote_line_items (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   quote_id        UUID NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
   job_id          UUID REFERENCES jobs(id),                      -- denormalized for queries
@@ -472,7 +472,7 @@ CREATE TYPE invoice_status AS ENUM (
 CREATE TYPE invoice_kind AS ENUM ('deposit', 'progress', 'final', 'standalone');
 
 CREATE TABLE invoices (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   job_id          UUID NOT NULL REFERENCES jobs(id),
   quote_id        UUID REFERENCES quotes(id),
@@ -501,7 +501,7 @@ CREATE TABLE invoices (
   paid_at         TIMESTAMPTZ,
   
   -- Magic link
-  share_token     UUID DEFAULT uuid_generate_v4(),
+  share_token     UUID DEFAULT gen_random_uuid(),
   
   -- Stripe
   stripe_payment_intent_id TEXT,
@@ -522,7 +522,7 @@ CREATE TRIGGER invoices_updated_at BEFORE UPDATE ON invoices
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE invoice_line_items (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_id      UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
   quote_line_id   UUID REFERENCES quote_line_items(id),
   
@@ -546,7 +546,7 @@ CREATE INDEX ON invoice_line_items (invoice_id);
 CREATE TYPE payment_method AS ENUM ('card', 'ach', 'check', 'cash', 'venmo', 'other');
 
 CREATE TABLE payments (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   invoice_id      UUID NOT NULL REFERENCES invoices(id),
   
@@ -572,7 +572,7 @@ CREATE INDEX ON payments (invoice_id);
 -- ============================================================================
 
 CREATE TABLE time_entries (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id),
   job_id          UUID NOT NULL REFERENCES jobs(id),
@@ -605,7 +605,7 @@ CREATE INDEX ON time_entries (user_id, started_at DESC);
 -- ============================================================================
 
 CREATE TABLE job_material_uses (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   job_id          UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   phase_id        UUID REFERENCES job_phases(id),

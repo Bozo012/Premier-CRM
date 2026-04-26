@@ -23,7 +23,7 @@ CREATE EXTENSION IF NOT EXISTS "citext";        -- case-insensitive text
 -- open-source path.
 
 CREATE TABLE organizations (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name            TEXT NOT NULL,
   slug            TEXT UNIQUE NOT NULL,
   email           CITEXT,
@@ -74,7 +74,7 @@ CREATE TABLE user_profiles (
 CREATE TYPE user_role AS ENUM ('owner', 'admin', 'employee', 'subcontractor', 'viewer');
 
 CREATE TABLE org_members (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   role            user_role NOT NULL DEFAULT 'employee',

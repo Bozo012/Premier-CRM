@@ -12,7 +12,7 @@ CREATE TYPE comm_channel AS ENUM ('sms', 'email', 'call', 'portal_message', 'in_
 CREATE TYPE comm_direction AS ENUM ('inbound', 'outbound');
 
 CREATE TABLE communications (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   -- Routing
@@ -100,7 +100,7 @@ CREATE TYPE vault_source AS ENUM (
 );
 
 CREATE TABLE vault_items (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   -- Type & source
@@ -187,7 +187,7 @@ CREATE TYPE task_status AS ENUM ('open', 'in_progress', 'done', 'cancelled', 'sn
 CREATE TYPE task_priority AS ENUM ('low', 'normal', 'high', 'urgent');
 
 CREATE TABLE tasks (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   title           TEXT NOT NULL,
@@ -233,7 +233,7 @@ CREATE TRIGGER tasks_updated_at BEFORE UPDATE ON tasks
 -- The chat history with Premier Brain.
 
 CREATE TABLE assistant_conversations (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id),
   
@@ -259,7 +259,7 @@ CREATE TRIGGER assistant_conversations_updated_at BEFORE UPDATE ON assistant_con
 CREATE TYPE message_role AS ENUM ('user', 'assistant', 'tool', 'system');
 
 CREATE TABLE assistant_messages (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID NOT NULL REFERENCES assistant_conversations(id) ON DELETE CASCADE,
   
   role            message_role NOT NULL,
@@ -288,7 +288,7 @@ CREATE INDEX ON assistant_messages (conversation_id, created_at);
 CREATE TYPE action_status AS ENUM ('proposed', 'approved', 'executed', 'rejected', 'failed');
 
 CREATE TABLE assistant_actions (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   conversation_id UUID REFERENCES assistant_conversations(id),
   message_id      UUID REFERENCES assistant_messages(id),
@@ -323,7 +323,7 @@ CREATE INDEX ON assistant_actions (status, created_at) WHERE status = 'proposed'
 -- ============================================================================
 
 CREATE TABLE daily_briefings (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id),
   
@@ -359,7 +359,7 @@ CREATE INDEX ON daily_briefings (user_id, briefing_date DESC);
 -- Per-feature cost tracking so we know what's expensive.
 
 CREATE TABLE ai_usage_events (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID REFERENCES auth.users(id),
   

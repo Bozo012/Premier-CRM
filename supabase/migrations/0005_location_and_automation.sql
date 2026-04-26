@@ -55,7 +55,7 @@ ALTER TABLE properties
 -- Partitioned by week for efficient retention purging.
 
 CREATE TABLE location_events (
-  id              UUID NOT NULL DEFAULT uuid_generate_v4(),
+  id              UUID NOT NULL DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   
@@ -105,7 +105,7 @@ CREATE TYPE geofence_type AS ENUM (
 );
 
 CREATE TABLE geofences (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   -- What this fence represents
@@ -179,7 +179,7 @@ CREATE TRIGGER properties_auto_geofence
 CREATE TYPE geofence_event_type AS ENUM ('entered', 'exited', 'dwelled');
 
 CREATE TABLE geofence_events (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   geofence_id     UUID NOT NULL REFERENCES geofences(id) ON DELETE CASCADE,
@@ -234,7 +234,7 @@ CREATE TYPE trip_purpose AS ENUM (
 );
 
 CREATE TABLE trips (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   
@@ -467,7 +467,7 @@ $$ LANGUAGE plpgsql STABLE;
 -- ============================================================================
 
 CREATE TABLE automation_rules (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID REFERENCES auth.users(id) ON DELETE CASCADE,  -- null = org-wide
   
@@ -525,7 +525,7 @@ CREATE TRIGGER automation_rules_updated_at BEFORE UPDATE ON automation_rules
 
 -- Execution log
 CREATE TABLE automation_events (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   rule_id         UUID NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
   user_id         UUID REFERENCES auth.users(id),
@@ -564,7 +564,7 @@ CREATE INDEX ON automation_events (outcome, occurred_at DESC) WHERE outcome = 'f
 CREATE TYPE prompt_status AS ENUM ('pending', 'approved', 'rejected', 'snoozed', 'expired', 'auto_resolved');
 
 CREATE TABLE user_prompts (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   automation_event_id UUID REFERENCES automation_events(id),
