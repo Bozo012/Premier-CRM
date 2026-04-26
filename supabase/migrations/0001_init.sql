@@ -144,17 +144,17 @@ CREATE POLICY "Owners can update their org"
 CREATE POLICY "Users see profiles in shared orgs"
   ON user_profiles FOR SELECT
   USING (
-    id = auth.uid() 
+    user_profiles.id = auth.uid()
     OR EXISTS (
       SELECT 1 FROM org_members om1
       JOIN org_members om2 ON om1.org_id = om2.org_id
-      WHERE om1.user_id = auth.uid() AND om2.user_id = id
+      WHERE om1.user_id = auth.uid() AND om2.user_id = user_profiles.id
     )
   );
 
 CREATE POLICY "Users update their own profile"
   ON user_profiles FOR UPDATE
-  USING (id = auth.uid());
+  USING (user_profiles.id = auth.uid());
 
 -- Memberships: see ones for orgs you're in
 CREATE POLICY "Members see memberships in their orgs"
