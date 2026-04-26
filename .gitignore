@@ -21,8 +21,6 @@ supabase/.branches
 supabase/.temp
 supabase/functions/.env
 
-# Generated — regenerate with pnpm db:types
-packages/db/types.ts
 
 # TypeScript incremental build info
 *.tsbuildinfo
