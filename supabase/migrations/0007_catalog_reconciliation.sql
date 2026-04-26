@@ -164,7 +164,7 @@ CREATE POLICY "org_isolation_pricing_policy" ON org_pricing_policy
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS permit_guardrails (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   service_category TEXT NOT NULL,
   jurisdiction    TEXT,

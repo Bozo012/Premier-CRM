@@ -23,7 +23,7 @@ CREATE EXTENSION IF NOT EXISTS "citext";        -- case-insensitive text
 -- open-source path.
 
 CREATE TABLE organizations (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name            TEXT NOT NULL,
   slug            TEXT UNIQUE NOT NULL,
   email           CITEXT,
@@ -74,7 +74,7 @@ CREATE TABLE user_profiles (
 CREATE TYPE user_role AS ENUM ('owner', 'admin', 'employee', 'subcontractor', 'viewer');
 
 CREATE TABLE org_members (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   role            user_role NOT NULL DEFAULT 'employee',
@@ -131,30 +131,30 @@ ALTER TABLE org_members ENABLE ROW LEVEL SECURITY;
 -- Orgs: see your own
 CREATE POLICY "Users see their own orgs"
   ON organizations FOR SELECT
-  USING (user_is_in_org(id));
+  USING (user_is_in_org(organizations.id));
 
 CREATE POLICY "Owners can update their org"
   ON organizations FOR UPDATE
   USING (EXISTS (
     SELECT 1 FROM org_members 
-    WHERE org_id = id AND user_id = auth.uid() AND role IN ('owner', 'admin')
+    WHERE org_id = organizations.id AND user_id = auth.uid() AND role IN ('owner', 'admin')
   ));
 
 -- Profiles: see your own + others in your org
 CREATE POLICY "Users see profiles in shared orgs"
   ON user_profiles FOR SELECT
   USING (
-    id = auth.uid() 
+    user_profiles.id = auth.uid()
     OR EXISTS (
       SELECT 1 FROM org_members om1
       JOIN org_members om2 ON om1.org_id = om2.org_id
-      WHERE om1.user_id = auth.uid() AND om2.user_id = id
+      WHERE om1.user_id = auth.uid() AND om2.user_id = user_profiles.id
     )
   );
 
 CREATE POLICY "Users update their own profile"
   ON user_profiles FOR UPDATE
-  USING (id = auth.uid());
+  USING (user_profiles.id = auth.uid());
 
 -- Memberships: see ones for orgs you're in
 CREATE POLICY "Members see memberships in their orgs"
