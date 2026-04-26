@@ -652,7 +652,7 @@ BEGIN
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
     
     -- For tables with org_id directly
-    IF tbl NOT IN ('customer_properties', 'service_materials', 'invoice_line_items', 'material_prices') THEN
+    IF tbl NOT IN ('customer_properties', 'service_materials', 'invoice_line_items', 'material_prices', 'job_phases') THEN
       EXECUTE format('
         CREATE POLICY "org_isolation_%s" ON %I 
         FOR ALL USING (user_is_in_org(org_id))
@@ -680,4 +680,9 @@ CREATE POLICY "invoice_line_items_isolation" ON invoice_line_items
 CREATE POLICY "material_prices_isolation" ON material_prices
   FOR ALL USING (
     EXISTS (SELECT 1 FROM materials WHERE id = material_id AND user_is_in_org(org_id))
+  );
+
+CREATE POLICY "job_phases_isolation" ON job_phases
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM jobs WHERE id = job_id AND user_is_in_org(org_id))
   );
