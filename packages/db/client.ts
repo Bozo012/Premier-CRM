@@ -2,19 +2,39 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from './types';
 
-function getEnv(name: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY' | 'SUPABASE_SERVICE_ROLE_KEY'): string {
-  const value = process.env[name];
+function getPublicSupabaseUrl(): string {
+  const value = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
   if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
+    throw new Error('Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL');
+  }
+
+  return value;
+}
+
+function getPublicSupabaseAnonKey(): string {
+  const value = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!value) {
+    throw new Error('Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  }
+
+  return value;
+}
+
+function getSupabaseServiceRoleKey(): string {
+  const value = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!value) {
+    throw new Error('Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY');
   }
 
   return value;
 }
 
 export function createBrowserClient(): SupabaseClient<Database> {
-  const url = getEnv('NEXT_PUBLIC_SUPABASE_URL');
-  const anonKey = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  const url = getPublicSupabaseUrl();
+const anonKey = getPublicSupabaseAnonKey();
 
   return createClient<Database>(url, anonKey, {
     auth: {
@@ -30,8 +50,8 @@ export function createServiceClient(): SupabaseClient<Database> {
     throw new Error('createServiceClient() must only be called on the server.');
   }
 
-  const url = getEnv('NEXT_PUBLIC_SUPABASE_URL');
-  const serviceRoleKey = getEnv('SUPABASE_SERVICE_ROLE_KEY');
+  const url = getPublicSupabaseUrl();
+const serviceRoleKey = getSupabaseServiceRoleKey();
 
   return createClient<Database>(url, serviceRoleKey, {
     auth: {
