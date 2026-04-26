@@ -131,13 +131,13 @@ ALTER TABLE org_members ENABLE ROW LEVEL SECURITY;
 -- Orgs: see your own
 CREATE POLICY "Users see their own orgs"
   ON organizations FOR SELECT
-  USING (user_is_in_org(id));
+  USING (user_is_in_org(organizations.id));
 
 CREATE POLICY "Owners can update their org"
   ON organizations FOR UPDATE
   USING (EXISTS (
     SELECT 1 FROM org_members 
-    WHERE org_id = id AND user_id = auth.uid() AND role IN ('owner', 'admin')
+    WHERE org_id = organizations.id AND user_id = auth.uid() AND role IN ('owner', 'admin')
   ));
 
 -- Profiles: see your own + others in your org
