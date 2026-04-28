@@ -656,15 +656,15 @@ async function main() {
   }
 
   const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
     },
-  }
-);
+  );
 
   const { data: orgRows, error: orgError } = await supabase.select('organizations', 'id,name', `id=eq.${DEFAULT_ORG_ID}&limit=1`);
   if (orgError) {
