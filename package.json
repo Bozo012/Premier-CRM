@@ -7,7 +7,9 @@
     "build": "pnpm --filter @premier/web build",
     "lint": "eslint .",
     "typecheck": "pnpm -r --if-present typecheck",
-    "db:types": "npx supabase gen types typescript --linked --schema public > packages/db/types.ts"
+    "db:types": "npx supabase gen types typescript --linked --schema public > packages/db/types.ts",
+    "jobber:preview": "node scripts/import-jobber-export.mjs --preview",
+    "jobber:import": "node scripts/import-jobber-export.mjs --execute"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

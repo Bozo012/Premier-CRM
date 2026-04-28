@@ -1,0 +1,606 @@
+#!/usr/bin/env node
+
+/**
+ * Jobber CSV import utility (safe by default).
+ *
+ * Usage:
+ *   node scripts/import-jobber-export.mjs --preview
+ *   node scripts/import-jobber-export.mjs --execute
+ *
+ * Notes:
+ * - Preview is default mode (no writes).
+ * - --execute is required to write to Supabase.
+ * - Expects Jobber CSV files extracted into ./scripts (ZIPs are detected and reported).
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+const DEFAULT_IMPORT_DIRS = [
+  path.resolve('scripts', 'imports', 'jobber'),
+  path.resolve('scripts', 'Import', 'jobber'),
+  path.resolve('scripts'),
+];
+const DEFAULT_ORG_ID = 'a0000000-0000-0000-0000-000000000001';
+const BATCH_SIZE = 100;
+
+const args = new Set(process.argv.slice(2));
+const executeMode = args.has('--execute');
+const previewMode = !executeMode;
+
+function getArgValue(name) {
+  const full = process.argv.find((arg) => arg.startsWith(`${name}=`));
+  if (full) return full.slice(name.length + 1);
+  const idx = process.argv.indexOf(name);
+  if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
+  return '';
+}
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, 'utf8');
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq < 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+
+function walkFiles(dir) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkFiles(fullPath));
+    else out.push(fullPath);
+  }
+  return out;
+}
+
+function normalizeHeader(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function normalizePhone(value) {
+  const digits = String(value || '').replace(/\D+/g, '');
+  if (!digits) return null;
+  if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1);
+  return digits;
+}
+
+function normalizeEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  return email || null;
+}
+
+function parseCsv(content) {
+  const rows = [];
+  let row = [];
+  let value = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < content.length; i += 1) {
+    const ch = content[i];
+    const next = content[i + 1];
+
+    if (ch === '"') {
+      if (inQuotes && next === '"') {
+        value += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      row.push(value);
+      value = '';
+    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && next === '\n') i += 1;
+      row.push(value);
+      const hasContent = row.some((cell) => String(cell || '').trim() !== '');
+      if (hasContent) rows.push(row);
+      row = [];
+      value = '';
+    } else {
+      value += ch;
+    }
+  }
+
+  if (value.length > 0 || row.length > 0) {
+    row.push(value);
+    const hasContent = row.some((cell) => String(cell || '').trim() !== '');
+    if (hasContent) rows.push(row);
+  }
+
+  if (rows.length === 0) return [];
+  const headers = rows[0].map((h) => String(h || '').trim());
+  return rows.slice(1).map((cells) => {
+    const record = {};
+    headers.forEach((header, idx) => {
+      record[header] = (cells[idx] ?? '').trim();
+    });
+    return record;
+  });
+}
+
+function pickField(row, candidates) {
+  const entries = Object.entries(row);
+  for (const candidate of candidates) {
+    const wanted = normalizeHeader(candidate);
+    const hit = entries.find(([k, v]) => normalizeHeader(k) === wanted && String(v || '').trim() !== '');
+    if (hit) return String(hit[1]).trim();
+  }
+  for (const [key, val] of entries) {
+    const k = normalizeHeader(key);
+    if (!String(val || '').trim()) continue;
+    for (const candidate of candidates) {
+      if (k.includes(normalizeHeader(candidate))) return String(val).trim();
+    }
+  }
+  return '';
+}
+
+function detectEntityType(filePath) {
+  const name = path.basename(filePath).toLowerCase();
+  if (name.includes('client') || name.includes('customer')) return 'customers';
+  if (name.includes('propert')) return 'properties';
+  if (name.includes('job')) return 'jobs';
+  return 'unknown';
+}
+
+function normalizeCustomer(row, rowNumber) {
+  const firstName = pickField(row, ['first name']);
+  const lastName = pickField(row, ['last name']);
+  const name = pickField(row, ['name', 'client name']);
+  const company = pickField(row, ['company', 'company name']);
+  const email = normalizeEmail(pickField(row, ['email', 'email address']));
+  const phone = normalizePhone(pickField(row, ['phone', 'mobile', 'phone number']));
+  const jobberId = pickField(row, ['jobber id', 'client id', 'customer id', 'id']) || null;
+
+  const inferredFirst = !firstName && name ? name.split(' ')[0] : firstName;
+  const inferredLast = !lastName && name && name.split(' ').length > 1 ? name.split(' ').slice(1).join(' ') : lastName;
+
+  return {
+    sourceRowNumber: rowNumber,
+    raw: row,
+    jobber_id: jobberId,
+    first_name: inferredFirst || null,
+    last_name: inferredLast || null,
+    company_name: company || null,
+    email,
+    phone_primary: phone,
+    notes: pickField(row, ['notes']) || null,
+    source_client_id: jobberId,
+  };
+}
+
+function normalizeProperty(row, rowNumber) {
+  const fullAddress = pickField(row, ['address', 'property address']);
+  let street1 = pickField(row, ['street 1', 'address line 1', 'street']);
+  const street2 = pickField(row, ['street 2', 'address line 2']) || null;
+  const city = pickField(row, ['city']);
+  const state = pickField(row, ['state', 'province']);
+  const zip = pickField(row, ['zip', 'zip code', 'postal code']);
+  if (!street1 && fullAddress) street1 = fullAddress.split(',')[0]?.trim();
+
+  return {
+    sourceRowNumber: rowNumber,
+    raw: row,
+    jobber_id: pickField(row, ['jobber id', 'property id', 'id']) || null,
+    source_client_id: pickField(row, ['client id', 'customer id']) || null,
+    address_line_1: street1 || '',
+    address_line_2: street2,
+    city: city || '',
+    state: state || '',
+    zip: zip || '',
+    notes: pickField(row, ['notes']) || null,
+  };
+}
+
+function mapJobStatus(statusRaw) {
+  const s = normalizeHeader(statusRaw);
+  if (s.includes('complete')) return 'completed';
+  if (s.includes('progress')) return 'in_progress';
+  if (s.includes('schedule')) return 'scheduled';
+  if (s.includes('approve')) return 'approved';
+  if (s.includes('quote')) return 'quoted';
+  if (s.includes('invoice')) return 'invoiced';
+  if (s.includes('paid')) return 'paid';
+  if (s.includes('cancel')) return 'cancelled';
+  if (s.includes('hold')) return 'on_hold';
+  return 'lead';
+}
+
+function normalizeJob(row, rowNumber) {
+  return {
+    sourceRowNumber: rowNumber,
+    raw: row,
+    jobber_id: pickField(row, ['jobber id', 'job id', 'id']) || null,
+    source_client_id: pickField(row, ['client id', 'customer id']) || null,
+    source_property_id: pickField(row, ['property id']) || null,
+    title: pickField(row, ['title', 'job title']) || 'Imported Job',
+    description: pickField(row, ['description']) || null,
+    status: mapJobStatus(pickField(row, ['status'])),
+    scheduled_start: pickField(row, ['start date', 'scheduled start']) || null,
+    scheduled_end: pickField(row, ['end date', 'scheduled end']) || null,
+  };
+}
+
+function validateCustomers(records) {
+  const errors = [];
+  const warnings = [];
+  let valid = 0;
+  const duplicateCheck = new Set();
+
+  for (const rec of records) {
+    const hasName = Boolean(rec.company_name || rec.first_name || rec.last_name);
+    if (!hasName) {
+      errors.push(`row ${rec.sourceRowNumber}: missing name/company`);
+      continue;
+    }
+
+    const dedupeKey = rec.jobber_id || `${rec.email || ''}|${rec.phone_primary || ''}|${(rec.first_name || '') + (rec.last_name || '')}`;
+    if (duplicateCheck.has(dedupeKey)) warnings.push(`row ${rec.sourceRowNumber}: likely duplicate customer (${dedupeKey})`);
+    duplicateCheck.add(dedupeKey);
+
+    if (!rec.email && rec.phone_primary) warnings.push(`row ${rec.sourceRowNumber}: missing email but has phone`);
+    valid += 1;
+  }
+
+  return { valid, errors, warnings };
+}
+
+function validateProperties(records) {
+  const errors = [];
+  const warnings = [];
+  let valid = 0;
+  const dupes = new Set();
+  for (const rec of records) {
+    if (!rec.address_line_1 || !rec.city || !rec.state || !rec.zip) {
+      errors.push(`row ${rec.sourceRowNumber}: missing required address field(s)`);
+      continue;
+    }
+    const key = rec.jobber_id || `${rec.address_line_1}|${rec.city}|${rec.state}|${rec.zip}`;
+    if (dupes.has(key)) warnings.push(`row ${rec.sourceRowNumber}: likely duplicate property (${key})`);
+    dupes.add(key);
+    valid += 1;
+  }
+  return { valid, errors, warnings };
+}
+
+function validateJobs(records) {
+  const errors = [];
+  let valid = 0;
+  const warnings = [];
+  const dupes = new Set();
+  for (const rec of records) {
+    if (!rec.title) {
+      errors.push(`row ${rec.sourceRowNumber}: missing title`);
+      continue;
+    }
+    const key = rec.jobber_id || `${rec.title}|${rec.source_client_id || ''}|${rec.source_property_id || ''}`;
+    if (dupes.has(key)) warnings.push(`row ${rec.sourceRowNumber}: likely duplicate job (${key})`);
+    dupes.add(key);
+    valid += 1;
+  }
+  return { valid, errors, warnings };
+}
+
+function createSupabaseRestClient(url, serviceRoleKey) {
+  const base = `${url.replace(/\/$/, '')}/rest/v1`;
+  const headers = {
+    apikey: serviceRoleKey,
+    Authorization: `Bearer ${serviceRoleKey}`,
+    'Content-Type': 'application/json',
+  };
+
+  async function request(endpoint, init = {}) {
+    const res = await fetch(`${base}/${endpoint}`, { ...init, headers: { ...headers, ...(init.headers || {}) } });
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { message: text };
+    }
+    if (!res.ok) {
+      return { data: null, error: { message: data?.message || `${res.status} ${res.statusText}` } };
+    }
+    return { data, error: null };
+  }
+
+  return {
+    async select(table, selectClause, filterQuery = '') {
+      const query = `select=${encodeURIComponent(selectClause)}${filterQuery ? `&${filterQuery}` : ''}`;
+      return request(`${table}?${query}`, { method: 'GET' });
+    },
+    async upsert(table, rows, onConflict, returning = 'id') {
+      const query = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : '';
+      return request(`${table}${query}`, {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify(rows),
+      }).then((res) => {
+        if (res.error) return res;
+        if (!returning) return res;
+        return { data: (res.data || []).map((row) => ({ [returning]: row[returning] })), error: null };
+      });
+    },
+  };
+}
+
+async function upsertBatches(supabase, table, rows, onConflict) {
+  let imported = 0;
+  let failed = 0;
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase.upsert(table, batch, onConflict, 'id');
+    if (error) {
+      failed += batch.length;
+      console.error(`[${table}] batch failed (${i}-${i + batch.length - 1}): ${error.message}`);
+    } else {
+      imported += data?.length || batch.length;
+    }
+  }
+  return { imported, failed };
+}
+
+async function main() {
+  loadEnvFile(path.resolve('.env.local'));
+  loadEnvFile(path.resolve('.env'));
+
+  const requestedDir = getArgValue('--dir');
+  const importDirs = requestedDir ? [path.resolve(requestedDir)] : DEFAULT_IMPORT_DIRS;
+  const existingImportDirs = importDirs.filter((dir) => fs.existsSync(dir));
+  const allFiles = existingImportDirs.flatMap((dir) => walkFiles(dir));
+  const csvFiles = allFiles.filter((f) => f.toLowerCase().endsWith('.csv'));
+  const zipFiles = allFiles.filter((f) => f.toLowerCase().endsWith('.zip'));
+
+  console.log(`Mode: ${executeMode ? 'EXECUTE' : 'PREVIEW (default)'}\n`);
+  console.log('Scanned directories:');
+  importDirs.forEach((dir) => {
+    const status = fs.existsSync(dir) ? 'found' : 'missing';
+    console.log(`- ${path.relative(process.cwd(), dir) || '.'} (${status})`);
+  });
+  console.log('');
+
+  if (zipFiles.length) {
+    console.log('Detected ZIP files (extract before import):');
+    zipFiles.forEach((f) => console.log(`- ${path.relative(process.cwd(), f)}`));
+    console.log('');
+  }
+
+  if (!csvFiles.length) {
+    const targetLabel = requestedDir ? requestedDir : 'scripts/imports/jobber (and fallback script directories)';
+    console.log(`No CSV files found under ${targetLabel}.`);
+    console.log('No data written. Re-run with extracted Jobber CSV files.');
+    return;
+  }
+
+  const entityRows = {
+    customers: [],
+    properties: [],
+    jobs: [],
+  };
+
+  console.log('Detected CSV files:');
+  for (const file of csvFiles) {
+    const content = fs.readFileSync(file, 'utf8');
+    const rows = parseCsv(content);
+    const entity = detectEntityType(file);
+    console.log(`- ${path.relative(process.cwd(), file)} (${rows.length} rows, detected: ${entity})`);
+
+    if (entity === 'customers') {
+      rows.forEach((row, idx) => entityRows.customers.push(normalizeCustomer(row, idx + 2)));
+    } else if (entity === 'properties') {
+      rows.forEach((row, idx) => entityRows.properties.push(normalizeProperty(row, idx + 2)));
+    } else if (entity === 'jobs') {
+      rows.forEach((row, idx) => entityRows.jobs.push(normalizeJob(row, idx + 2)));
+    }
+  }
+
+  const customerValidation = validateCustomers(entityRows.customers);
+  const propertyValidation = validateProperties(entityRows.properties);
+  const jobValidation = validateJobs(entityRows.jobs);
+
+  console.log('\nEntity counts:');
+  console.log(`- Customers parsed: ${entityRows.customers.length}`);
+  console.log(`- Properties parsed: ${entityRows.properties.length}`);
+  console.log(`- Jobs parsed: ${entityRows.jobs.length}`);
+
+  console.log('\nNormalized preview (first 3 each):');
+  console.log('Customers:', entityRows.customers.slice(0, 3).map((c) => ({ jobber_id: c.jobber_id, name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.company_name, email: c.email, phone_primary: c.phone_primary })));
+  console.log('Properties:', entityRows.properties.slice(0, 3).map((p) => ({ jobber_id: p.jobber_id, address_line_1: p.address_line_1, city: p.city, state: p.state, zip: p.zip, source_client_id: p.source_client_id })));
+  console.log('Jobs:', entityRows.jobs.slice(0, 3).map((j) => ({ jobber_id: j.jobber_id, title: j.title, status: j.status, source_client_id: j.source_client_id, source_property_id: j.source_property_id })));
+
+  console.log('\nValidation summary:');
+  for (const [label, v] of [
+    ['Customers', customerValidation],
+    ['Properties', propertyValidation],
+    ['Jobs', jobValidation],
+  ]) {
+    console.log(`- ${label}: ${v.valid} valid, ${v.errors.length} fatal errors, ${v.warnings.length} warnings`);
+  }
+
+  const allErrors = [...customerValidation.errors, ...propertyValidation.errors, ...jobValidation.errors];
+  if (allErrors.length) {
+    console.log('\nFatal validation errors (first 20):');
+    allErrors.slice(0, 20).forEach((e) => console.log(`  - ${e}`));
+  }
+
+  const allWarnings = [...customerValidation.warnings, ...propertyValidation.warnings, ...jobValidation.warnings];
+  if (allWarnings.length) {
+    console.log('\nWarnings (first 20):');
+    allWarnings.slice(0, 20).forEach((w) => console.log(`  - ${w}`));
+  }
+
+  if (!executeMode) {
+    console.log('\nNo data written. Re-run with --execute to import.');
+    return;
+  }
+
+  if (allErrors.length) {
+    console.error('\nImport blocked: fix fatal validation errors before running --execute.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    console.error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment/.env(.local).');
+    process.exitCode = 1;
+    return;
+  }
+
+  const supabase = createSupabaseRestClient(url, serviceRoleKey);
+
+  const { data: orgRows, error: orgError } = await supabase.select('organizations', 'id,name', `id=eq.${DEFAULT_ORG_ID}&limit=1`);
+  if (orgError) {
+    console.error(`Failed org lookup: ${orgError.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  if (!orgRows?.length) {
+    console.error(`Organization not found: ${DEFAULT_ORG_ID}`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`\nTarget organization: ${orgRows[0].name} (${orgRows[0].id})`);
+
+  const customerRows = entityRows.customers
+    .filter((r) => !customerValidation.errors.some((e) => e.includes(`row ${r.sourceRowNumber}:`)))
+    .map((r) => ({
+      org_id: DEFAULT_ORG_ID,
+      jobber_id: r.jobber_id,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      company_name: r.company_name,
+      email: r.email,
+      phone_primary: r.phone_primary,
+      notes: r.notes,
+      source: 'jobber_import',
+      type: 'residential',
+    }));
+
+  const propertyRows = entityRows.properties
+    .filter((r) => !propertyValidation.errors.some((e) => e.includes(`row ${r.sourceRowNumber}:`)))
+    .map((r) => ({
+      org_id: DEFAULT_ORG_ID,
+      jobber_id: r.jobber_id,
+      address_line_1: r.address_line_1,
+      address_line_2: r.address_line_2,
+      city: r.city,
+      state: r.state,
+      zip: r.zip,
+      notes: r.notes,
+      country: 'US',
+    }));
+
+  const customerResult = await upsertBatches(supabase, 'customers', customerRows, 'jobber_id');
+  const propertyResult = await upsertBatches(supabase, 'properties', propertyRows, 'jobber_id');
+
+  const { data: customersDb, error: customerMapError } = await supabase.select(
+    'customers',
+    'id,jobber_id',
+    `org_id=eq.${DEFAULT_ORG_ID}&jobber_id=not.is.null`,
+  );
+  if (customerMapError) {
+    console.error(`Failed to read customer map: ${customerMapError.message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const { data: propertiesDb, error: propertyMapError } = await supabase.select(
+    'properties',
+    'id,jobber_id',
+    `org_id=eq.${DEFAULT_ORG_ID}&jobber_id=not.is.null`,
+  );
+  if (propertyMapError) {
+    console.error(`Failed to read property map: ${propertyMapError.message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const customerIdByJobber = new Map(customersDb.map((x) => [x.jobber_id, x.id]));
+  const propertyIdByJobber = new Map(propertiesDb.map((x) => [x.jobber_id, x.id]));
+
+  const customerPropertyRows = [];
+  const customerPropertyFailures = [];
+
+  for (const p of entityRows.properties) {
+    if (!p.source_client_id) continue;
+    const customerId = customerIdByJobber.get(p.source_client_id);
+    const propertyId = p.jobber_id ? propertyIdByJobber.get(p.jobber_id) : null;
+    if (!customerId || !propertyId) {
+      customerPropertyFailures.push(`property row ${p.sourceRowNumber}: missing link customer_id(${p.source_client_id}) or property_id(${p.jobber_id})`);
+      continue;
+    }
+    customerPropertyRows.push({
+      customer_id: customerId,
+      property_id: propertyId,
+      relationship: 'owner',
+      is_primary: false,
+    });
+  }
+
+  const cpResult = await upsertBatches(supabase, 'customer_properties', customerPropertyRows, 'customer_id,property_id');
+
+  const jobRows = [];
+  const jobFailures = [];
+
+  for (const j of entityRows.jobs) {
+    const customerId = j.source_client_id ? customerIdByJobber.get(j.source_client_id) : null;
+    const propertyId = j.source_property_id ? propertyIdByJobber.get(j.source_property_id) : null;
+
+    if (!customerId || !propertyId) {
+      jobFailures.push(`job row ${j.sourceRowNumber}: unresolved customer/property reference`);
+      continue;
+    }
+
+    jobRows.push({
+      org_id: DEFAULT_ORG_ID,
+      jobber_id: j.jobber_id,
+      customer_id: customerId,
+      property_id: propertyId,
+      title: j.title,
+      description: j.description,
+      status: j.status,
+      scheduled_start: j.scheduled_start || null,
+      scheduled_end: j.scheduled_end || null,
+      priority: 'normal',
+    });
+  }
+
+  const jobResult = await upsertBatches(supabase, 'jobs', jobRows, 'jobber_id');
+
+  console.log('\nImport complete:');
+  console.log(`- Customers imported/updated: ${customerResult.imported}`);
+  console.log(`- Customers failed: ${customerResult.failed}`);
+  console.log(`- Properties imported/updated: ${propertyResult.imported}`);
+  console.log(`- Properties failed: ${propertyResult.failed}`);
+  console.log(`- Customer-property links imported/updated: ${cpResult.imported}`);
+  console.log(`- Customer-property links failed: ${cpResult.failed + customerPropertyFailures.length}`);
+  console.log(`- Jobs imported/updated: ${jobResult.imported}`);
+  console.log(`- Jobs failed: ${jobResult.failed + jobFailures.length}`);
+
+  if (customerPropertyFailures.length || jobFailures.length) {
+    console.log('\nSkipped rows (first 20):');
+    [...customerPropertyFailures, ...jobFailures].slice(0, 20).forEach((f) => console.log(`  - ${f}`));
+  }
+}
+
+main().catch((err) => {
+  console.error('Fatal import error:', err?.message || err);
+  process.exitCode = 1;
+});
