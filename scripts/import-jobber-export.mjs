@@ -6,6 +6,7 @@
  * Usage:
  *   node scripts/import-jobber-export.mjs --preview
  *   node scripts/import-jobber-export.mjs --execute
+ *   node scripts/import-jobber-export.mjs --execute --allow-partial
  *
  * Notes:
  * - Preview is default mode (no writes).
@@ -27,6 +28,8 @@ const BATCH_SIZE = 100;
 const args = new Set(process.argv.slice(2));
 const executeMode = args.has('--execute');
 const previewMode = !executeMode;
+const allowPartialMode = args.has('--allow-partial');
+const strictOrgCheck = args.has('--strict-org-check');
 
 function getArgValue(name) {
   const full = process.argv.find((arg) => arg.startsWith(`${name}=`));
@@ -451,10 +454,14 @@ async function main() {
     return;
   }
 
-  if (allErrors.length) {
-    console.error('\nImport blocked: fix fatal validation errors before running --execute.');
+  if (allErrors.length && !allowPartialMode) {
+    console.error('\nImport blocked: fix fatal validation errors before running --execute (or pass --allow-partial to skip invalid rows).');
     process.exitCode = 1;
     return;
+  }
+
+  if (allErrors.length && allowPartialMode) {
+    console.warn(`\nContinuing with --allow-partial. Skipping ${allErrors.length} invalid row(s).`);
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -470,16 +477,26 @@ async function main() {
 
   const { data: orgRows, error: orgError } = await supabase.select('organizations', 'id,name', `id=eq.${DEFAULT_ORG_ID}&limit=1`);
   if (orgError) {
-    console.error(`Failed org lookup: ${orgError.message}`);
-    process.exitCode = 1;
-    return;
+    if (strictOrgCheck) {
+      console.error(`Failed org lookup: ${orgError.message}`);
+      process.exitCode = 1;
+      return;
+    }
+    console.warn(`Org lookup warning (continuing): ${orgError.message}`);
   }
-  if (!orgRows?.length) {
-    console.error(`Organization not found: ${DEFAULT_ORG_ID}`);
-    process.exitCode = 1;
-    return;
+  if (!orgError && !orgRows?.length) {
+    if (strictOrgCheck) {
+      console.error(`Organization not found: ${DEFAULT_ORG_ID}`);
+      process.exitCode = 1;
+      return;
+    }
+    console.warn(`Org lookup warning (continuing): organization not found: ${DEFAULT_ORG_ID}`);
   }
-  console.log(`\nTarget organization: ${orgRows[0].name} (${orgRows[0].id})`);
+  if (orgRows?.length) {
+    console.log(`\nTarget organization: ${orgRows[0].name} (${orgRows[0].id})`);
+  } else {
+    console.log(`\nTarget organization id (unverified): ${DEFAULT_ORG_ID}`);
+  }
 
   const customerRows = entityRows.customers
     .filter((r) => !customerValidation.errors.some((e) => e.includes(`row ${r.sourceRowNumber}:`)))
