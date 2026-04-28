@@ -9,6 +9,7 @@ import { getBrowserSupabase } from '@/lib/supabase';
 
 interface TodayState {
   userEmail: string;
+  userName: string;
   orgName: string;
   orgRole: string;
   customerCount: number;
@@ -66,9 +67,10 @@ export default function TodayPage() {
           ? String(membership.organizations.name)
           : 'Unknown org';
 
-      const [customersResult, jobsResult] = await Promise.all([
+      const [customersResult, jobsResult, profileResult] = await Promise.all([
         supabase.from('customers').select('*', { count: 'exact', head: true }).eq('org_id', membership.org_id),
         supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('org_id', membership.org_id),
+        supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle(),
       ]);
 
       if (customersResult.error || jobsResult.error) {
@@ -77,8 +79,12 @@ export default function TodayPage() {
         return;
       }
 
+      const fullName = profileResult.data?.full_name ?? null;
+      const firstName = fullName ? fullName.split(' ')[0] : null;
+
       setData({
         userEmail: user.email || 'No email found',
+        userName: firstName ?? user.email ?? 'there',
         orgName: orgNameValue,
         orgRole: membership.role,
         customerCount: customersResult.count || 0,
@@ -116,8 +122,8 @@ export default function TodayPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 p-6 md:p-10">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
-          <p className="text-sm text-muted-foreground">Signed in as {data?.userEmail}</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Hi {data?.userName}</h1>
+          <p className="text-sm text-muted-foreground">{data?.userEmail}</p>
         </div>
         <Button variant="outline" onClick={handleSignOut}>
           Sign out

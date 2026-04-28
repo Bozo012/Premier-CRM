@@ -74,7 +74,14 @@ premier-crm/
 │   │   ├── 0007_catalog_reconciliation.sql     Extends service_items with catalog
 │   │   │                                        fields, customer archetypes,
 │   │   │                                        org pricing policy, permit guardrails
-│   │   └── 0008_premier_seed.sql               Premier-specific seed data
+│   │   ├── 0008_premier_seed.sql               Premier-specific seed data
+│   │   ├── 0009_user_org_association.sql       Auto org join on signup, membership
+│   │   │                                        status (pending/active), owner approval
+│   │   ├── 0010_fix_auth_trigger_and_…         Schema-qualified handle_new_user,
+│   │   │   dashboard_permissions.sql           pinned search_path on SECURITY DEFINER
+│   │   │                                        functions, authenticated role grants
+│   │   └── 0011_jobber_import_columns.sql      jobber_id columns + indexes on imported
+│   │                                            tables for dedup during Jobber import
 │   ├── functions/              Edge functions
 │   └── seed.sql                Demo data (synthetic, for development)
 ├── scripts/                    One-off scripts (data import, etc.)
@@ -119,10 +126,10 @@ cp .env.example .env.local
 
 # Set up Supabase (cloud free tier or local Docker)
 # Cloud: create project at supabase.com, copy URL and keys to .env.local, then:
-supabase db push   # Runs all migrations 0001-0009 against your cloud project
+supabase db push   # Runs all migrations 0001-0011 against your cloud project
 # Local Docker:
 supabase start
-supabase db reset  # Runs all migrations 0001-0009
+supabase db reset  # Runs all migrations 0001-0011
 
 # Generate TypeScript types from Supabase schema
 pnpm db:types
