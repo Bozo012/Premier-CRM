@@ -9,7 +9,7 @@ import { getBrowserSupabase } from '@/lib/supabase';
 
 interface TodayState {
   userEmail: string;
-  userName: string;
+  firstName: string;
   orgName: string;
   orgRole: string;
   customerCount: number;
@@ -88,11 +88,13 @@ export default function TodayPage() {
       }
 
       const fullName = profileResult.data?.full_name ?? null;
-      const firstName = fullName ? fullName.split(' ')[0] : null;
+      const firstNameFromProfile = fullName ? fullName.split(' ')[0] : null;
+      const firstNameFromEmail = user.email ? user.email.split('@')[0] : null;
+      const resolvedFirstName = firstNameFromProfile ?? firstNameFromEmail ?? 'there';
 
       setData({
         userEmail: user.email || 'No email found',
-        userName: firstName ?? user.email ?? 'there',
+        firstName: resolvedFirstName,
         orgName: orgNameValue,
         orgRole: membership.role,
         customerCount: customersResult.count || 0,
@@ -110,7 +112,7 @@ export default function TodayPage() {
   };
 
   const handlePlaceholderAction = (label: string) => {
-    setStatusText(`${label} is coming soon.`);
+    setStatusText(`${label} is unavailable in this preview.`);
   };
 
   const greeting = useMemo(() => {
@@ -160,13 +162,21 @@ export default function TodayPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              {greeting}, {data?.userName}
+              {greeting}, {data?.firstName}
             </h1>
             <p className="text-sm text-muted-foreground">{formattedDate}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={handleSignOut}>
-            Sign out
-          </Button>
+          <div className="rounded-xl border bg-muted/30 px-3 py-2 text-right">
+            <p className="text-xs font-medium text-foreground">{data?.firstName}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto px-0 py-0 text-xs font-normal text-muted-foreground hover:text-foreground"
+              onClick={handleSignOut}
+            >
+              Sign out
+            </Button>
+          </div>
         </div>
 
         <div className="inline-flex max-w-full items-center rounded-full border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
@@ -180,13 +190,13 @@ export default function TodayPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Quick actions</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           {quickActions.map((action) => (
             <Button
               key={action.id}
               type="button"
               variant="outline"
-              className="h-14 justify-start px-4 text-base"
+              className="h-16 justify-start px-4 text-left text-sm sm:text-base"
               onClick={() => handlePlaceholderAction(action.label)}
             >
               {action.label}
@@ -202,38 +212,38 @@ export default function TodayPage() {
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Business snapshot</h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Customers</CardTitle>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customers</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{data?.customerCount}</p>
+              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">{data?.customerCount}</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Jobs</CardTitle>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Jobs</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{data?.jobCount}</p>
+              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">{data?.jobCount}</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Open tasks</CardTitle>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Open tasks</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">0</p>
+              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">0</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Follow-ups</CardTitle>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Follow-ups</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">0</p>
+              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">0</p>
             </CardContent>
           </Card>
         </div>
@@ -260,7 +270,7 @@ export default function TodayPage() {
       <section>
         <Card>
           <CardHeader>
-            <CardTitle>Next best step</CardTitle>
+            <CardTitle>Next Best Step</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
