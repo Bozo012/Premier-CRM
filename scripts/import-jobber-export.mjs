@@ -16,13 +16,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const SCRIPT_DIR = path.resolve('scripts');
+const DEFAULT_IMPORT_DIRS = [
+  path.resolve('scripts', 'imports', 'jobber'),
+  path.resolve('scripts', 'Import', 'jobber'),
+  path.resolve('scripts'),
+];
 const DEFAULT_ORG_ID = 'a0000000-0000-0000-0000-000000000001';
 const BATCH_SIZE = 100;
 
 const args = new Set(process.argv.slice(2));
 const executeMode = args.has('--execute');
 const previewMode = !executeMode;
+
+function getArgValue(name) {
+  const full = process.argv.find((arg) => arg.startsWith(`${name}=`));
+  if (full) return full.slice(name.length + 1);
+  const idx = process.argv.indexOf(name);
+  if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
+  return '';
+}
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -346,11 +358,20 @@ async function main() {
   loadEnvFile(path.resolve('.env.local'));
   loadEnvFile(path.resolve('.env'));
 
-  const allFiles = walkFiles(SCRIPT_DIR);
+  const requestedDir = getArgValue('--dir');
+  const importDirs = requestedDir ? [path.resolve(requestedDir)] : DEFAULT_IMPORT_DIRS;
+  const existingImportDirs = importDirs.filter((dir) => fs.existsSync(dir));
+  const allFiles = existingImportDirs.flatMap((dir) => walkFiles(dir));
   const csvFiles = allFiles.filter((f) => f.toLowerCase().endsWith('.csv'));
   const zipFiles = allFiles.filter((f) => f.toLowerCase().endsWith('.zip'));
 
   console.log(`Mode: ${executeMode ? 'EXECUTE' : 'PREVIEW (default)'}\n`);
+  console.log('Scanned directories:');
+  importDirs.forEach((dir) => {
+    const status = fs.existsSync(dir) ? 'found' : 'missing';
+    console.log(`- ${path.relative(process.cwd(), dir) || '.'} (${status})`);
+  });
+  console.log('');
 
   if (zipFiles.length) {
     console.log('Detected ZIP files (extract before import):');
@@ -359,7 +380,8 @@ async function main() {
   }
 
   if (!csvFiles.length) {
-    console.log('No CSV files found under scripts/.');
+    const targetLabel = requestedDir ? requestedDir : 'scripts/imports/jobber (and fallback script directories)';
+    console.log(`No CSV files found under ${targetLabel}.`);
     console.log('No data written. Re-run with extracted Jobber CSV files.');
     return;
   }
