@@ -16,10 +16,18 @@ interface TodayState {
   jobCount: number;
 }
 
+const quickActions = [
+  { id: 'capture-note', label: 'Capture note' },
+  { id: 'new-customer', label: 'New customer' },
+  { id: 'new-job', label: 'New job' },
+  { id: 'new-estimate', label: 'New estimate' },
+] as const;
+
 export default function TodayPage() {
   const [data, setData] = useState<TodayState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [statusText, setStatusText] = useState<string | null>(null);
 
   const supabase = useMemo(
     () => getBrowserSupabase() as unknown as SupabaseClient,
@@ -101,9 +109,37 @@ export default function TodayPage() {
     window.location.href = '/login';
   };
 
+  const handlePlaceholderAction = (label: string) => {
+    setStatusText(`${label} is coming soon.`);
+  };
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+
+    if (hour < 12) {
+      return 'Good morning';
+    }
+
+    if (hour < 18) {
+      return 'Good afternoon';
+    }
+
+    return 'Good evening';
+  }, []);
+
+  const formattedDate = useMemo(
+    () =>
+      new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+    []
+  );
+
   if (isLoading) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-4xl items-center justify-center p-6">
+      <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center p-6">
         <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
       </main>
     );
@@ -111,7 +147,7 @@ export default function TodayPage() {
 
   if (error) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col items-center justify-center gap-4 p-6">
+      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center gap-4 p-6">
         <p className="text-sm text-red-600">{error}</p>
         <Button onClick={() => window.location.reload()}>Retry</Button>
       </main>
@@ -119,46 +155,150 @@ export default function TodayPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 p-6 md:p-10">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Hi {data?.userName}</h1>
-          <p className="text-sm text-muted-foreground">{data?.userEmail}</p>
+    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
+      <header className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              {greeting}, {data?.userName}
+            </h1>
+            <p className="text-sm text-muted-foreground">{formattedDate}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleSignOut}>
+            Sign out
+          </Button>
         </div>
-        <Button variant="outline" onClick={handleSignOut}>
-          Sign out
-        </Button>
+
+        <div className="inline-flex max-w-full items-center rounded-full border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+          <span className="truncate">
+            {data?.orgName} • <span className="capitalize">{data?.orgRole}</span>
+          </span>
+        </div>
+
+        <p className="text-xs text-muted-foreground">Signed in as {data?.userEmail}</p>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Organization</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-medium">{data?.orgName}</p>
-            <p className="text-sm text-muted-foreground capitalize">Role: {data?.orgRole}</p>
-          </CardContent>
-        </Card>
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Quick actions</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {quickActions.map((action) => (
+            <Button
+              key={action.id}
+              type="button"
+              variant="outline"
+              className="h-14 justify-start px-4 text-base"
+              onClick={() => handlePlaceholderAction(action.label)}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
+        <p aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
+          {statusText ?? 'Actions are placeholders for this foundation pass.'}
+        </p>
+      </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Customers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold">{data?.customerCount}</p>
-          </CardContent>
-        </Card>
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Business snapshot</h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Customers</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-semibold">{data?.customerCount}</p>
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Jobs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-semibold">{data?.jobCount}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Open tasks</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-semibold">0</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Follow-ups</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-semibold">0</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section>
         <Card>
           <CardHeader>
-            <CardTitle>Jobs</CardTitle>
+            <CardTitle>Today&apos;s work</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold">{data?.jobCount}</p>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">No jobs scheduled for today yet.</p>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => handlePlaceholderAction('Import jobs')}
+            >
+              Import jobs or create your first job
+            </Button>
           </CardContent>
         </Card>
-      </div>
+      </section>
+
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Next best step</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Import your Jobber data or capture your first field note to start building your business memory.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => handlePlaceholderAction('Import customers')}>
+                Import customers
+              </Button>
+              <Button type="button" variant="outline" onClick={() => handlePlaceholderAction('Capture field note')}>
+                Capture field note
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <nav className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <ul className="mx-auto grid w-full max-w-5xl grid-cols-5 text-xs">
+          {['Today', 'Capture', 'Jobs', 'Customers', 'More'].map((item) => (
+            <li key={item} className="flex">
+              <button
+                type="button"
+                className={`min-h-14 w-full px-2 py-3 text-center ${
+                  item === 'Today' ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                }`}
+                onClick={() => {
+                  if (item !== 'Today') {
+                    handlePlaceholderAction(`${item} navigation`);
+                  }
+                }}
+              >
+                {item}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </main>
   );
 }
