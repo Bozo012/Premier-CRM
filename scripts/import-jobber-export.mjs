@@ -151,9 +151,12 @@ function pickField(row, candidates) {
 
 function detectEntityType(filePath) {
   const name = path.basename(filePath).toLowerCase();
-  if (name.includes('client') || name.includes('customer')) return 'customers';
-  if (name.includes('propert')) return 'properties';
-  if (name.includes('job')) return 'jobs';
+  const normalized = name.replace(/[^a-z0-9]+/g, ' ').trim();
+
+  // Prioritize property-related exports (e.g. "Client Properties.csv")
+  if (/\bpropert(?:y|ies)?\b/.test(normalized)) return 'properties';
+  if (/\b(client|clients|customer|customers)\b/.test(normalized)) return 'customers';
+  if (/\b(job|jobs)\b/.test(normalized)) return 'jobs';
   return 'unknown';
 }
 
