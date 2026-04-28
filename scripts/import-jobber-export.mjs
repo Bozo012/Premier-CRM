@@ -301,7 +301,7 @@ function validateJobs(records) {
   return { valid, errors, warnings };
 }
 
-function createSupabaseRestClient(url, serviceRoleKey) {
+function createClient(url, serviceRoleKey, _options = {}) {
   const base = `${url.replace(/\/$/, '')}/rest/v1`;
   const headers = {
     apikey: serviceRoleKey,
@@ -473,7 +473,16 @@ async function main() {
     return;
   }
 
-  const supabase = createSupabaseRestClient(url, serviceRoleKey);
+  const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  }
+);
 
   const { data: orgRows, error: orgError } = await supabase.select('organizations', 'id,name', `id=eq.${DEFAULT_ORG_ID}&limit=1`);
   if (orgError) {
