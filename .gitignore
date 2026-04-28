@@ -60,3 +60,7 @@ Thumbs.db
 # LM Studio / local AI
 *.gguf
 *.ggml
+
+# Jobber import data — CSVs contain real customer PII, never commit
+scripts/import/jobber/*
+!scripts/import/jobber/.gitkeep
