@@ -30,6 +30,7 @@ const executeMode = args.has('--execute');
 const previewMode = !executeMode;
 const allowPartialMode = args.has('--allow-partial');
 const strictOrgCheck = args.has('--strict-org-check');
+const jobsOnlyMode = args.has('--jobs-only');
 
 function getArgValue(name) {
   const full = process.argv.find((arg) => arg.startsWith(`${name}=`));
@@ -84,6 +85,24 @@ function normalizePhone(value) {
 function normalizeEmail(value) {
   const email = String(value || '').trim().toLowerCase();
   return email || null;
+}
+
+function normalizeKey(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeAddressKey(street1, city, state, zip) {
+  return [street1, city, state, zip]
+    .map((part) => normalizeKey(part))
+    .filter(Boolean)
+    .join('|');
+}
+
+function compactText(value) {
+  return normalizeKey(value).replace(/[^a-z0-9]/g, '');
 }
 
 function parseCsv(content) {
@@ -227,18 +246,136 @@ function mapJobStatus(statusRaw) {
 }
 
 function normalizeJob(row, rowNumber) {
+  const sourceClientId = pickField(row, ['client id', 'customer id']) || null;
+  const sourcePropertyId = pickField(row, ['property id']) || null;
+  const sourceClientRef =
+    sourceClientId ||
+    pickField(row, ['client', 'customer', 'client name', 'customer name', 'customer/client']) ||
+    null;
+  const sourcePropertyRef =
+    sourcePropertyId ||
+    pickField(row, ['property', 'property name', 'property address', 'address', 'service address']) ||
+    null;
+
   return {
     sourceRowNumber: rowNumber,
     raw: row,
     jobber_id: pickField(row, ['jobber id', 'job id', 'id']) || null,
-    source_client_id: pickField(row, ['client id', 'customer id']) || null,
-    source_property_id: pickField(row, ['property id']) || null,
+    source_client_id: sourceClientId,
+    source_property_id: sourcePropertyId,
+    source_client_ref: sourceClientRef,
+    source_property_ref: sourcePropertyRef,
     title: pickField(row, ['title', 'job title']) || 'Imported Job',
     description: pickField(row, ['description']) || null,
     status: mapJobStatus(pickField(row, ['status'])),
     scheduled_start: pickField(row, ['start date', 'scheduled start']) || null,
     scheduled_end: pickField(row, ['end date', 'scheduled end']) || null,
   };
+}
+
+function inferReferenceShape(value) {
+  const normalized = normalizeKey(value);
+  if (!normalized) return 'empty';
+  if (/^\d+$/.test(normalized)) return 'numeric_id';
+  if (/^[a-f0-9-]{8,}$/i.test(normalized)) return 'uuidish_or_hex_id';
+  if (normalized.includes('@')) return 'email_like';
+  if (/^\+?[\d()\-\s.]+$/.test(normalized)) return 'phone_like';
+  if (/\d+\s+\w+/.test(normalized) || /,\s*[a-z]{2}\b/.test(normalized)) return 'address_like';
+  if (/[a-z]/.test(normalized) && /\s/.test(normalized)) return 'name_like';
+  return 'text';
+}
+
+function printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJobber) {
+  const jobs = entityRows.jobs || [];
+  const customers = entityRows.customers || [];
+  const properties = entityRows.properties || [];
+
+  console.log('\nJob-link diagnostics:');
+  console.log('- Normalized job rows (first 20, linking fields + raw values):');
+  jobs.slice(0, 20).forEach((job) => {
+    const rawClient = pickField(job.raw, ['client id', 'customer id', 'client', 'customer']);
+    const rawProperty = pickField(job.raw, ['property id', 'property', 'address', 'property address']);
+    const rawJobberId = pickField(job.raw, ['jobber id', 'job id', 'id']);
+    const rawTitle = pickField(job.raw, ['title', 'job title']);
+    console.log(
+      `  - row ${job.sourceRowNumber}: source_client_id="${job.source_client_id || ''}" source_client_ref="${job.source_client_ref || ''}" (raw="${rawClient || ''}"), source_property_id="${job.source_property_id || ''}" source_property_ref="${job.source_property_ref || ''}" (raw="${rawProperty || ''}"), jobber_id="${job.jobber_id || ''}" (raw="${rawJobberId || ''}"), title="${job.title || ''}" (raw="${rawTitle || ''}")`,
+    );
+  });
+
+  console.log('- Available imported customer map keys (first 20 customers.jobber_id):');
+  Array.from(customerIdByJobber.keys())
+    .slice(0, 20)
+    .forEach((key) => console.log(`  - ${key}`));
+  if (!customerIdByJobber.size) console.log('  - <none>');
+
+  console.log('- Available imported property map keys (first 20 properties.jobber_id):');
+  Array.from(propertyIdByJobber.keys())
+    .slice(0, 20)
+    .forEach((key) => console.log(`  - ${key}`));
+  if (!propertyIdByJobber.size) console.log('  - <none>');
+
+  const missingCustomer = [];
+  const missingProperty = [];
+
+  for (const job of jobs) {
+    if (!job.source_client_id || !customerIdByJobber.has(job.source_client_id)) {
+      missingCustomer.push(`${job.jobber_id || `row-${job.sourceRowNumber}`} (source_client_id="${job.source_client_id || ''}", source_client_ref="${job.source_client_ref || ''}")`);
+    }
+    if (!job.source_property_id || !propertyIdByJobber.has(job.source_property_id)) {
+      missingProperty.push(`${job.jobber_id || `row-${job.sourceRowNumber}`} (source_property_id="${job.source_property_id || ''}", source_property_ref="${job.source_property_ref || ''}")`);
+    }
+  }
+
+  console.log('- Jobs with no matching customer (first 50):');
+  if (!missingCustomer.length) console.log('  - <none>');
+  missingCustomer.slice(0, 50).forEach((line) => console.log(`  - ${line}`));
+
+  console.log('- Jobs with no matching property (first 50):');
+  if (!missingProperty.length) console.log('  - <none>');
+  missingProperty.slice(0, 50).forEach((line) => console.log(`  - ${line}`));
+
+  const customerShapes = new Set(jobs.map((j) => inferReferenceShape(j.source_client_id || j.source_client_ref)));
+  const propertyShapes = new Set(jobs.map((j) => inferReferenceShape(j.source_property_id || j.source_property_ref)));
+  const usesNamesForCustomer = customerShapes.has('name_like') || customerShapes.has('email_like') || customerShapes.has('phone_like');
+  const usesAddressForProperty = propertyShapes.has('address_like') || propertyShapes.has('name_like');
+
+  console.log('- Link-field shape analysis:');
+  console.log(`  - customer source values look like: ${Array.from(customerShapes).join(', ') || 'none'}`);
+  console.log(`  - property source values look like: ${Array.from(propertyShapes).join(', ') || 'none'}`);
+  console.log(`  - jobs CSV appears to use customer names/emails/phones instead of IDs: ${usesNamesForCustomer ? 'yes' : 'no'}`);
+  console.log(`  - jobs CSV appears to use property names/addresses instead of IDs: ${usesAddressForProperty ? 'yes' : 'no'}`);
+
+  const customerNameKeys = new Set();
+  const customerEmailKeys = new Set();
+  const customerPhoneKeys = new Set();
+  customers.forEach((c) => {
+    const fullName = normalizeKey(`${c.first_name || ''} ${c.last_name || ''}`.trim() || c.company_name);
+    if (fullName) customerNameKeys.add(fullName);
+    if (c.email) customerEmailKeys.add(normalizeEmail(c.email));
+    if (c.phone_primary) customerPhoneKeys.add(normalizePhone(c.phone_primary));
+  });
+
+  const propertyAddressKeys = new Set();
+  properties.forEach((p) => {
+    const key = normalizeAddressKey(p.address_line_1, p.city, p.state, p.zip);
+    if (key) propertyAddressKeys.add(key);
+  });
+
+  const likelyCustomerFallbackMatches = jobs.filter((j) => {
+    const rawClient = j.source_client_ref || pickField(j.raw, ['client', 'customer', 'client name', 'customer name', 'email', 'phone']);
+    const normalized = normalizeKey(rawClient);
+    if (!normalized) return false;
+    return customerNameKeys.has(normalized) || customerEmailKeys.has(normalized) || customerPhoneKeys.has(normalizePhone(normalized));
+  }).length;
+  const likelyPropertyFallbackMatches = jobs.filter((j) => {
+    const rawAddress = j.source_property_ref || pickField(j.raw, ['property', 'address', 'property address']);
+    const key = normalizeKey(rawAddress);
+    if (!key) return false;
+    return Array.from(propertyAddressKeys).some((addressKey) => addressKey.includes(key) || key.includes(addressKey));
+  }).length;
+
+  console.log(`- Potential fallback matches by customer name/email/phone: ${likelyCustomerFallbackMatches}/${jobs.length}`);
+  console.log(`- Potential fallback matches by property address: ${likelyPropertyFallbackMatches}/${jobs.length}`);
 }
 
 function validateCustomers(records) {
@@ -372,6 +509,9 @@ async function main() {
   const zipFiles = allFiles.filter((f) => f.toLowerCase().endsWith('.zip'));
 
   console.log(`Mode: ${executeMode ? 'EXECUTE' : 'PREVIEW (default)'}\n`);
+  if (jobsOnlyMode) {
+    console.log('Flag enabled: --jobs-only (customers/properties upsert skipped; jobs rely on existing imported maps).');
+  }
   console.log('Scanned directories:');
   importDirs.forEach((dir) => {
     const status = fs.existsSync(dir) ? 'found' : 'missing';
@@ -450,6 +590,17 @@ async function main() {
   }
 
   if (!executeMode) {
+    const customerIdByJobber = new Map(
+      entityRows.customers
+        .filter((c) => c.jobber_id)
+        .map((c) => [c.jobber_id, `preview-customer-${c.sourceRowNumber}`]),
+    );
+    const propertyIdByJobber = new Map(
+      entityRows.properties
+        .filter((p) => p.jobber_id)
+        .map((p) => [p.jobber_id, `preview-property-${p.sourceRowNumber}`]),
+    );
+    printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJobber);
     console.log('\nNo data written. Re-run with --execute to import.');
     return;
   }
@@ -536,8 +687,12 @@ async function main() {
       country: 'US',
     }));
 
-  const customerResult = await upsertBatches(supabase, 'customers', customerRows, 'jobber_id');
-  const propertyResult = await upsertBatches(supabase, 'properties', propertyRows, 'jobber_id');
+  const customerResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await upsertBatches(supabase, 'customers', customerRows, 'jobber_id');
+  const propertyResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await upsertBatches(supabase, 'properties', propertyRows, 'jobber_id');
 
   const { data: customersDb, error: customerMapError } = await supabase.select(
     'customers',
@@ -563,37 +718,123 @@ async function main() {
 
   const customerIdByJobber = new Map(customersDb.map((x) => [x.jobber_id, x.id]));
   const propertyIdByJobber = new Map(propertiesDb.map((x) => [x.jobber_id, x.id]));
+  printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJobber);
+
+  const { data: customersForFallback, error: customerFallbackError } = await supabase.select(
+    'customers',
+    'id,jobber_id,first_name,last_name,company_name,email,phone_primary',
+    `org_id=eq.${DEFAULT_ORG_ID}`,
+  );
+  if (customerFallbackError) {
+    console.error(`Failed to read customers for fallback matching: ${customerFallbackError.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  const { data: propertiesForFallback, error: propertyFallbackError } = await supabase.select(
+    'properties',
+    'id,jobber_id,address_line_1,city,state,zip',
+    `org_id=eq.${DEFAULT_ORG_ID}`,
+  );
+  if (propertyFallbackError) {
+    console.error(`Failed to read properties for fallback matching: ${propertyFallbackError.message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const customerIdByName = new Map();
+  const customerIdByEmail = new Map();
+  const customerIdByPhone = new Map();
+  for (const c of customersForFallback) {
+    const fullName = normalizeKey(`${c.first_name || ''} ${c.last_name || ''}`.trim());
+    const companyName = normalizeKey(c.company_name);
+    if (fullName && !customerIdByName.has(fullName)) customerIdByName.set(fullName, c.id);
+    if (companyName && !customerIdByName.has(companyName)) customerIdByName.set(companyName, c.id);
+    const emailKey = normalizeEmail(c.email);
+    if (emailKey && !customerIdByEmail.has(emailKey)) customerIdByEmail.set(emailKey, c.id);
+    const phoneKey = normalizePhone(c.phone_primary);
+    if (phoneKey && !customerIdByPhone.has(phoneKey)) customerIdByPhone.set(phoneKey, c.id);
+    if (c.jobber_id && !customerIdByJobber.has(c.jobber_id)) customerIdByJobber.set(c.jobber_id, c.id);
+  }
+
+  const propertyIdByAddress = new Map();
+  const propertyIdByStreet = new Map();
+  const propertyIdByCompactAddress = new Map();
+  for (const p of propertiesForFallback) {
+    const key = normalizeAddressKey(p.address_line_1, p.city, p.state, p.zip);
+    if (key && !propertyIdByAddress.has(key)) propertyIdByAddress.set(key, p.id);
+    const streetKey = normalizeKey(p.address_line_1);
+    if (streetKey && !propertyIdByStreet.has(streetKey)) propertyIdByStreet.set(streetKey, p.id);
+    const compactAddress = compactText(`${p.address_line_1 || ''} ${p.city || ''} ${p.state || ''} ${p.zip || ''}`);
+    if (compactAddress && !propertyIdByCompactAddress.has(compactAddress)) propertyIdByCompactAddress.set(compactAddress, p.id);
+    if (p.jobber_id && !propertyIdByJobber.has(p.jobber_id)) propertyIdByJobber.set(p.jobber_id, p.id);
+  }
 
   const customerPropertyRows = [];
   const customerPropertyFailures = [];
 
-  for (const p of entityRows.properties) {
-    if (!p.source_client_id) continue;
-    const customerId = customerIdByJobber.get(p.source_client_id);
-    const propertyId = p.jobber_id ? propertyIdByJobber.get(p.jobber_id) : null;
-    if (!customerId || !propertyId) {
-      customerPropertyFailures.push(`property row ${p.sourceRowNumber}: missing link customer_id(${p.source_client_id}) or property_id(${p.jobber_id})`);
-      continue;
+  if (!jobsOnlyMode) {
+    for (const p of entityRows.properties) {
+      if (!p.source_client_id) continue;
+      const customerId = customerIdByJobber.get(p.source_client_id);
+      const propertyId = p.jobber_id ? propertyIdByJobber.get(p.jobber_id) : null;
+      if (!customerId || !propertyId) {
+        customerPropertyFailures.push(`property row ${p.sourceRowNumber}: missing link customer_id(${p.source_client_id}) or property_id(${p.jobber_id})`);
+        continue;
+      }
+      customerPropertyRows.push({
+        customer_id: customerId,
+        property_id: propertyId,
+        relationship: 'owner',
+        is_primary: false,
+      });
     }
-    customerPropertyRows.push({
-      customer_id: customerId,
-      property_id: propertyId,
-      relationship: 'owner',
-      is_primary: false,
-    });
   }
 
-  const cpResult = await upsertBatches(supabase, 'customer_properties', customerPropertyRows, 'customer_id,property_id');
+  const cpResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await upsertBatches(supabase, 'customer_properties', customerPropertyRows, 'customer_id,property_id');
 
   const jobRows = [];
   const jobFailures = [];
 
   for (const j of entityRows.jobs) {
-    const customerId = j.source_client_id ? customerIdByJobber.get(j.source_client_id) : null;
-    const propertyId = j.source_property_id ? propertyIdByJobber.get(j.source_property_id) : null;
+    let customerId = j.source_client_id ? customerIdByJobber.get(j.source_client_id) : null;
+    let propertyId = j.source_property_id ? propertyIdByJobber.get(j.source_property_id) : null;
+
+    if (!customerId) {
+      const rawClient = j.source_client_ref || pickField(j.raw, ['client', 'customer', 'client name', 'customer name', 'email', 'phone']);
+      const normalizedClient = normalizeKey(rawClient);
+      const byName = customerIdByName.get(normalizedClient);
+      const byEmail = customerIdByEmail.get(normalizeEmail(rawClient));
+      const byPhone = customerIdByPhone.get(normalizePhone(rawClient));
+      let fuzzyName = null;
+      if (!byName && normalizedClient) {
+        fuzzyName =
+          Array.from(customerIdByName.entries()).find(
+            ([name]) => name.includes(normalizedClient) || normalizedClient.includes(name),
+          )?.[1] || null;
+      }
+      customerId = byName || byEmail || byPhone || fuzzyName || null;
+    }
+
+    if (!propertyId) {
+      const rawAddress = j.source_property_ref || pickField(j.raw, ['property address', 'address', 'property', 'service address']);
+      const normalizedAddress = normalizeKey(rawAddress);
+      if (normalizedAddress) {
+        const compactAddress = compactText(rawAddress);
+        propertyId =
+          propertyIdByStreet.get(normalizedAddress) ||
+          propertyIdByCompactAddress.get(compactAddress) ||
+          Array.from(propertyIdByAddress.entries()).find(
+            ([addressKey]) => addressKey.includes(normalizedAddress) || normalizedAddress.includes(addressKey),
+          )?.[1] || null;
+      }
+    }
 
     if (!customerId || !propertyId) {
-      jobFailures.push(`job row ${j.sourceRowNumber}: unresolved customer/property reference`);
+      jobFailures.push(
+        `job row ${j.sourceRowNumber}: unresolved customer/property reference (customer_source_id="${j.source_client_id || ''}", customer_source_ref="${j.source_client_ref || ''}", property_source_id="${j.source_property_id || ''}", property_source_ref="${j.source_property_ref || ''}", title="${j.title}")`,
+      );
       continue;
     }
 
