@@ -27,7 +27,6 @@ const BATCH_SIZE = 100;
 
 const args = new Set(process.argv.slice(2));
 const executeMode = args.has('--execute');
-const previewMode = !executeMode;
 const allowPartialMode = args.has('--allow-partial');
 const strictOrgCheck = args.has('--strict-org-check');
 const jobsOnlyMode = args.has('--jobs-only');
@@ -171,6 +170,30 @@ function pickField(row, candidates) {
   return '';
 }
 
+function pickLinkField(row, candidates, excludedTokens = []) {
+  const entries = Object.entries(row);
+  const normalizedExclusions = excludedTokens.map((t) => normalizeHeader(t));
+
+  for (const candidate of candidates) {
+    const wanted = normalizeHeader(candidate);
+    const exact = entries.find(([k, v]) => {
+      const nk = normalizeHeader(k);
+      return nk === wanted && String(v || '').trim() !== '';
+    });
+    if (exact) return String(exact[1]).trim();
+  }
+
+  for (const [key, val] of entries) {
+    const nk = normalizeHeader(key);
+    if (!String(val || '').trim()) continue;
+    if (normalizedExclusions.some((token) => nk.includes(token))) continue;
+    for (const candidate of candidates) {
+      if (nk.includes(normalizeHeader(candidate))) return String(val).trim();
+    }
+  }
+  return '';
+}
+
 function detectEntityType(filePath) {
   const name = path.basename(filePath).toLowerCase();
   const normalized = name.replace(/[^a-z0-9]+/g, ' ').trim();
@@ -246,15 +269,23 @@ function mapJobStatus(statusRaw) {
 }
 
 function normalizeJob(row, rowNumber) {
-  const sourceClientId = pickField(row, ['client id', 'customer id']) || null;
+  const sourceClientId = pickLinkField(row, ['client id', 'customer id']) || null;
   const sourcePropertyId = pickField(row, ['property id']) || null;
   const sourceClientRef =
     sourceClientId ||
-    pickField(row, ['client', 'customer', 'client name', 'customer name', 'customer/client']) ||
+    pickLinkField(
+      row,
+      ['client name', 'customer name', 'customer/client', 'client', 'customer'],
+      ['id', 'note', 'email', 'phone', 'address'],
+    ) ||
     null;
   const sourcePropertyRef =
     sourcePropertyId ||
-    pickField(row, ['property', 'property name', 'property address', 'address', 'service address']) ||
+    pickLinkField(
+      row,
+      ['property name', 'property address', 'service address', 'property', 'address'],
+      ['id', 'note', 'email', 'phone'],
+    ) ||
     null;
 
   return {
