@@ -685,6 +685,7 @@ export type Database = {
           first_name: string | null
           id: string
           is_archived: boolean | null
+          jobber_id: string | null
           last_contact_at: string | null
           last_job_completed_at: string | null
           last_name: string | null
@@ -715,6 +716,7 @@ export type Database = {
           first_name?: string | null
           id?: string
           is_archived?: boolean | null
+          jobber_id?: string | null
           last_contact_at?: string | null
           last_job_completed_at?: string | null
           last_name?: string | null
@@ -745,6 +747,7 @@ export type Database = {
           first_name?: string | null
           id?: string
           is_archived?: boolean | null
+          jobber_id?: string | null
           last_contact_at?: string | null
           last_job_completed_at?: string | null
           last_name?: string | null
@@ -1074,6 +1077,7 @@ export type Database = {
           invoice_number: string | null
           issued_date: string
           job_id: string
+          jobber_id: string | null
           kind: Database["public"]["Enums"]["invoice_kind"]
           notes: string | null
           org_id: string
@@ -1102,6 +1106,7 @@ export type Database = {
           invoice_number?: string | null
           issued_date?: string
           job_id: string
+          jobber_id?: string | null
           kind?: Database["public"]["Enums"]["invoice_kind"]
           notes?: string | null
           org_id: string
@@ -1130,6 +1135,7 @@ export type Database = {
           invoice_number?: string | null
           issued_date?: string
           job_id?: string
+          jobber_id?: string | null
           kind?: Database["public"]["Enums"]["invoice_kind"]
           notes?: string | null
           org_id?: string
@@ -1379,6 +1385,7 @@ export type Database = {
           id: string
           invoiced_total: number | null
           job_number: string | null
+          jobber_id: string | null
           org_id: string
           paid_total: number | null
           priority: Database["public"]["Enums"]["job_priority"]
@@ -1412,6 +1419,7 @@ export type Database = {
           id?: string
           invoiced_total?: number | null
           job_number?: string | null
+          jobber_id?: string | null
           org_id: string
           paid_total?: number | null
           priority?: Database["public"]["Enums"]["job_priority"]
@@ -1445,6 +1453,7 @@ export type Database = {
           id?: string
           invoiced_total?: number | null
           job_number?: string | null
+          jobber_id?: string | null
           org_id?: string
           paid_total?: number | null
           priority?: Database["public"]["Enums"]["job_priority"]
@@ -2131,6 +2140,7 @@ export type Database = {
           hazards: string[] | null
           hide_from_auto_tracking: boolean | null
           id: string
+          jobber_id: string | null
           location: unknown
           lot_size_sqft: number | null
           notes: string | null
@@ -2160,6 +2170,7 @@ export type Database = {
           hazards?: string[] | null
           hide_from_auto_tracking?: boolean | null
           id?: string
+          jobber_id?: string | null
           location?: unknown
           lot_size_sqft?: number | null
           notes?: string | null
@@ -2189,6 +2200,7 @@ export type Database = {
           hazards?: string[] | null
           hide_from_auto_tracking?: boolean | null
           id?: string
+          jobber_id?: string | null
           location?: unknown
           lot_size_sqft?: number | null
           notes?: string | null
@@ -2372,6 +2384,7 @@ export type Database = {
           id: string
           intro_text: string | null
           job_id: string
+          jobber_id: string | null
           org_id: string
           outro_text: string | null
           parent_quote_id: string | null
@@ -2406,6 +2419,7 @@ export type Database = {
           id?: string
           intro_text?: string | null
           job_id: string
+          jobber_id?: string | null
           org_id: string
           outro_text?: string | null
           parent_quote_id?: string | null
@@ -2440,6 +2454,7 @@ export type Database = {
           id?: string
           intro_text?: string | null
           job_id?: string
+          jobber_id?: string | null
           org_id?: string
           outro_text?: string | null
           parent_quote_id?: string | null
@@ -2816,6 +2831,7 @@ export type Database = {
           id: string
           is_billable: boolean | null
           job_id: string
+          jobber_id: string | null
           notes: string | null
           org_id: string
           phase_id: string | null
@@ -2837,6 +2853,7 @@ export type Database = {
           id?: string
           is_billable?: boolean | null
           job_id: string
+          jobber_id?: string | null
           notes?: string | null
           org_id: string
           phase_id?: string | null
@@ -2858,6 +2875,7 @@ export type Database = {
           id?: string
           is_billable?: boolean | null
           job_id?: string
+          jobber_id?: string | null
           notes?: string | null
           org_id?: string
           phase_id?: string | null
