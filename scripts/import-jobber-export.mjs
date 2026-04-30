@@ -833,29 +833,18 @@ async function main() {
     let propertyId = j.source_property_id ? propertyIdByJobber.get(j.source_property_id) : null;
 
     if (!customerId) {
-      const rawClient = j.source_client_ref || pickField(j.raw, ['client', 'customer', 'client name', 'customer name', 'email', 'phone']);
-      const normalizedClient = normalizeKey(rawClient);
-      const byName = customerIdByName.get(normalizedClient);
+      const rawClient = pickField(j.raw, ['client', 'customer', 'client name', 'customer name', 'email', 'phone']);
+      const byName = customerIdByName.get(normalizeKey(rawClient));
       const byEmail = customerIdByEmail.get(normalizeEmail(rawClient));
       const byPhone = customerIdByPhone.get(normalizePhone(rawClient));
-      let fuzzyName = null;
-      if (!byName && normalizedClient) {
-        fuzzyName =
-          Array.from(customerIdByName.entries()).find(
-            ([name]) => name.includes(normalizedClient) || normalizedClient.includes(name),
-          )?.[1] || null;
-      }
-      customerId = byName || byEmail || byPhone || fuzzyName || null;
+      customerId = byName || byEmail || byPhone || null;
     }
 
     if (!propertyId) {
-      const rawAddress = j.source_property_ref || pickField(j.raw, ['property address', 'address', 'property', 'service address']);
+      const rawAddress = pickField(j.raw, ['property address', 'address', 'property']);
       const normalizedAddress = normalizeKey(rawAddress);
       if (normalizedAddress) {
-        const compactAddress = compactText(rawAddress);
         propertyId =
-          propertyIdByStreet.get(normalizedAddress) ||
-          propertyIdByCompactAddress.get(compactAddress) ||
           Array.from(propertyIdByAddress.entries()).find(
             ([addressKey]) => addressKey.includes(normalizedAddress) || normalizedAddress.includes(addressKey),
           )?.[1] || null;
