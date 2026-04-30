@@ -1,5 +1,6 @@
 'use client'; // Client component required for session-aware Supabase reads and sign-out interactions.
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -16,11 +17,30 @@ interface TodayState {
   jobCount: number;
 }
 
-const quickActions = [
+interface QuickAction {
+  href?: string;
+  id: string;
+  label: string;
+}
+
+interface FooterNavItem {
+  href?: string;
+  label: string;
+}
+
+const quickActions: QuickAction[] = [
   { id: 'capture-note', label: 'Capture note' },
-  { id: 'new-customer', label: 'New customer' },
+  { id: 'new-customer', label: 'New customer', href: '/customers' },
   { id: 'new-job', label: 'New job' },
   { id: 'new-estimate', label: 'New estimate' },
+] as const;
+
+const footerNavItems: FooterNavItem[] = [
+  { label: 'Today' },
+  { label: 'Capture' },
+  { label: 'Jobs' },
+  { label: 'Customers', href: '/customers' },
+  { label: 'More' },
 ] as const;
 
 export default function TodayPage() {
@@ -192,15 +212,26 @@ export default function TodayPage() {
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Quick actions</h2>
         <div className="grid grid-cols-2 gap-3">
           {quickActions.map((action) => (
-            <Button
-              key={action.id}
-              type="button"
-              variant="outline"
-              className="h-16 justify-start px-4 text-left text-sm sm:text-base"
-              onClick={() => handlePlaceholderAction(action.label)}
-            >
-              {action.label}
-            </Button>
+            action.href ? (
+              <Button
+                key={action.id}
+                variant="outline"
+                className="h-16 justify-start px-4 text-left text-sm sm:text-base"
+                asChild
+              >
+                <Link href={action.href}>{action.label}</Link>
+              </Button>
+            ) : (
+              <Button
+                key={action.id}
+                type="button"
+                variant="outline"
+                className="h-16 justify-start px-4 text-left text-sm sm:text-base"
+                onClick={() => handlePlaceholderAction(action.label)}
+              >
+                {action.label}
+              </Button>
+            )
           ))}
         </div>
         <p aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
@@ -211,14 +242,16 @@ export default function TodayPage() {
       <section className="space-y-3">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Business snapshot</h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customers</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">{data?.customerCount}</p>
-            </CardContent>
-          </Card>
+          <Link href="/customers" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <Card className="transition-colors hover:bg-muted/30">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customers</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">{data?.customerCount}</p>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Card>
             <CardHeader className="pb-1">
@@ -277,8 +310,8 @@ export default function TodayPage() {
               Import your Jobber data or capture your first field note to start building your business memory.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => handlePlaceholderAction('Import customers')}>
-                Import customers
+              <Button type="button" variant="outline" asChild>
+                <Link href="/customers">Import customers</Link>
               </Button>
               <Button type="button" variant="outline" onClick={() => handlePlaceholderAction('Capture field note')}>
                 Capture field note
@@ -290,21 +323,30 @@ export default function TodayPage() {
 
       <nav className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <ul className="mx-auto grid w-full max-w-5xl grid-cols-5 text-xs">
-          {['Today', 'Capture', 'Jobs', 'Customers', 'More'].map((item) => (
-            <li key={item} className="flex">
-              <button
-                type="button"
-                className={`min-h-14 w-full px-2 py-3 text-center ${
-                  item === 'Today' ? 'font-semibold text-foreground' : 'text-muted-foreground'
-                }`}
-                onClick={() => {
-                  if (item !== 'Today') {
-                    handlePlaceholderAction(`${item} navigation`);
-                  }
-                }}
-              >
-                {item}
-              </button>
+          {footerNavItems.map((item) => (
+            <li key={item.label} className="flex">
+              {item.href ? (
+                <Link
+                  href={item.href}
+                  className="min-h-14 w-full px-2 py-3 text-center text-muted-foreground"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  className={`min-h-14 w-full px-2 py-3 text-center ${
+                    item.label === 'Today' ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                  }`}
+                  onClick={() => {
+                    if (item.label !== 'Today') {
+                      handlePlaceholderAction(`${item.label} navigation`);
+                    }
+                  }}
+                >
+                  {item.label}
+                </button>
+              )}
             </li>
           ))}
         </ul>
