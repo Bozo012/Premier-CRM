@@ -80,6 +80,15 @@ export function createServerClient(cookies: CookieMethodsServer) {
 }
 
 /**
+ * Shape of the SSR-backed Supabase client returned by both
+ * `createBrowserClient` and `createServerClient`. Use this as the parameter
+ * type for query functions that work against either side of the SSR/CSR
+ * boundary. Inferred from `createBrowserClient` so the type stays in sync
+ * with whatever `@supabase/ssr` returns.
+ */
+export type DbClient = ReturnType<typeof createBrowserClient>;
+
+/**
  * Service-role Supabase client. Bypasses RLS — only use for trusted
  * server-side operations like webhook handlers, cron jobs, and migration
  * scripts. Never expose this client to user-facing routes; use
