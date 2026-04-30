@@ -38,23 +38,33 @@ function getSupabaseServiceRoleKey(): string {
 }
 
 /**
+ * Canonical Supabase client type used across the codebase. We deliberately
+ * pin this to the OUTER `@supabase/supabase-js`'s `SupabaseClient<Database>`
+ * (i.e. the one apps/web depends on directly), rather than to the version
+ * bundled inside `@supabase/ssr`. Both have the same shape at runtime, but
+ * TypeScript treats them as nominally distinct identities. Pinning here lets
+ * query functions, server components, and call sites all share one identity
+ * and lets `.from('table').select(...)` chains preserve `Database` typing
+ * end-to-end.
+ */
+export type DbClient = SupabaseClient<Database>;
+
+/**
  * Browser-side Supabase client. Uses @supabase/ssr so the session JWT is
  * stored in cookies (shared with the server-side client). Replaces the
  * previous @supabase/supabase-js createClient call which stored the JWT in
  * localStorage — cookies are required so server components can see the
  * user's session and RLS can enforce org isolation server-side.
  *
- * Return type is intentionally inferred (not explicitly annotated as
- * SupabaseClient<Database>) because @supabase/ssr bundles its own copy of
- * @supabase/supabase-js types, which TypeScript treats as nominally distinct
- * from this package's @supabase/supabase-js types even when structurally
- * identical. Inference avoids the false-positive TS2322 mismatch.
+ * Cast at the boundary: `@supabase/ssr` returns its own bundled
+ * `SupabaseClient<Database>` type. The cast unifies it with `DbClient`
+ * so callers see one consistent type. Runtime contract is unchanged.
  */
-export function createBrowserClient() {
+export function createBrowserClient(): DbClient {
   const url = getPublicSupabaseUrl();
   const anonKey = getPublicSupabaseAnonKey();
 
-  return createSsrBrowserClient<Database>(url, anonKey);
+  return createSsrBrowserClient<Database>(url, anonKey) as unknown as DbClient;
 }
 
 /**
@@ -65,28 +75,17 @@ export function createBrowserClient() {
  *
  * Use this from server components, server actions, and route handlers when
  * you want reads/writes performed as the authenticated user.
- *
- * Return type intentionally inferred — see note on `createBrowserClient`.
  */
-export function createServerClient(cookies: CookieMethodsServer) {
-  if (typeof window !== 'undefined') {
+export function createServerClient(cookies: CookieMethodsServer): DbClient {
+  if (typeof globalThis !== 'undefined' && 'window' in globalThis) {
     throw new Error('createServerClient() must only be called on the server.');
   }
 
   const url = getPublicSupabaseUrl();
   const anonKey = getPublicSupabaseAnonKey();
 
-  return createSsrServerClient<Database>(url, anonKey, { cookies });
+  return createSsrServerClient<Database>(url, anonKey, { cookies }) as unknown as DbClient;
 }
-
-/**
- * Shape of the SSR-backed Supabase client returned by both
- * `createBrowserClient` and `createServerClient`. Use this as the parameter
- * type for query functions that work against either side of the SSR/CSR
- * boundary. Inferred from `createBrowserClient` so the type stays in sync
- * with whatever `@supabase/ssr` returns.
- */
-export type DbClient = ReturnType<typeof createBrowserClient>;
 
 /**
  * Service-role Supabase client. Bypasses RLS — only use for trusted
@@ -94,8 +93,8 @@ export type DbClient = ReturnType<typeof createBrowserClient>;
  * scripts. Never expose this client to user-facing routes; use
  * `createServerClient` instead.
  */
-export function createServiceClient(): SupabaseClient<Database> {
-  if (typeof window !== 'undefined') {
+export function createServiceClient(): DbClient {
+  if (typeof globalThis !== 'undefined' && 'window' in globalThis) {
     throw new Error('createServiceClient() must only be called on the server.');
   }
 
