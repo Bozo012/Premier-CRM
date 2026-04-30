@@ -1,2 +1,6 @@
-export { createBrowserClient, createServiceClient } from './client';
+export {
+  createBrowserClient,
+  createServerClient,
+  createServiceClient,
+} from './client';
 export type { Database, Json } from './types';
