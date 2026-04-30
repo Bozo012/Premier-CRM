@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { listCustomers, type Customer } from '@premier/db';
@@ -137,18 +138,25 @@ function CustomerRow({ customer }: { customer: Customer }) {
   const subtitle = resolveSubtitle(customer);
 
   return (
-    <li className="flex items-start gap-3 px-4 py-3 sm:px-5">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-base font-medium text-foreground">
-            {displayName}
-          </span>
-          <ArchetypeBadge archetype={customer.archetype} />
+    <li>
+      <Link
+        href={`/customers/${customer.id}`}
+        className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-5"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-base font-medium text-foreground">
+              {displayName}
+            </span>
+            <ArchetypeBadge archetype={customer.archetype} />
+          </div>
+          {subtitle ? (
+            <p className="truncate text-sm text-muted-foreground">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
-        {subtitle ? (
-          <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
-        ) : null}
-      </div>
+      </Link>
     </li>
   );
 }
