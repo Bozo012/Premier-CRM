@@ -27,7 +27,6 @@ const BATCH_SIZE = 100;
 
 const args = new Set(process.argv.slice(2));
 const executeMode = args.has('--execute');
-const previewMode = !executeMode;
 const allowPartialMode = args.has('--allow-partial');
 const strictOrgCheck = args.has('--strict-org-check');
 const jobsOnlyMode = args.has('--jobs-only');
@@ -101,6 +100,10 @@ function normalizeAddressKey(street1, city, state, zip) {
     .join('|');
 }
 
+function compactText(value) {
+  return normalizeKey(value).replace(/[^a-z0-9]/g, '');
+}
+
 function parseCsv(content) {
   const rows = [];
   let row = [];
@@ -162,6 +165,30 @@ function pickField(row, candidates) {
     if (!String(val || '').trim()) continue;
     for (const candidate of candidates) {
       if (k.includes(normalizeHeader(candidate))) return String(val).trim();
+    }
+  }
+  return '';
+}
+
+function pickLinkField(row, candidates, excludedTokens = []) {
+  const entries = Object.entries(row);
+  const normalizedExclusions = excludedTokens.map((t) => normalizeHeader(t));
+
+  for (const candidate of candidates) {
+    const wanted = normalizeHeader(candidate);
+    const exact = entries.find(([k, v]) => {
+      const nk = normalizeHeader(k);
+      return nk === wanted && String(v || '').trim() !== '';
+    });
+    if (exact) return String(exact[1]).trim();
+  }
+
+  for (const [key, val] of entries) {
+    const nk = normalizeHeader(key);
+    if (!String(val || '').trim()) continue;
+    if (normalizedExclusions.some((token) => nk.includes(token))) continue;
+    for (const candidate of candidates) {
+      if (nk.includes(normalizeHeader(candidate))) return String(val).trim();
     }
   }
   return '';
@@ -242,12 +269,33 @@ function mapJobStatus(statusRaw) {
 }
 
 function normalizeJob(row, rowNumber) {
+  const sourceClientId = pickLinkField(row, ['client id', 'customer id']) || null;
+  const sourcePropertyId = pickField(row, ['property id']) || null;
+  const sourceClientRef =
+    sourceClientId ||
+    pickLinkField(
+      row,
+      ['client name', 'customer name', 'customer/client', 'client', 'customer'],
+      ['id', 'note', 'email', 'phone', 'address'],
+    ) ||
+    null;
+  const sourcePropertyRef =
+    sourcePropertyId ||
+    pickLinkField(
+      row,
+      ['property name', 'property address', 'service address', 'property', 'address'],
+      ['id', 'note', 'email', 'phone'],
+    ) ||
+    null;
+
   return {
     sourceRowNumber: rowNumber,
     raw: row,
     jobber_id: pickField(row, ['jobber id', 'job id', 'id']) || null,
-    source_client_id: pickField(row, ['client id', 'customer id']) || null,
-    source_property_id: pickField(row, ['property id']) || null,
+    source_client_id: sourceClientId,
+    source_property_id: sourcePropertyId,
+    source_client_ref: sourceClientRef,
+    source_property_ref: sourcePropertyRef,
     title: pickField(row, ['title', 'job title']) || 'Imported Job',
     description: pickField(row, ['description']) || null,
     status: mapJobStatus(pickField(row, ['status'])),
@@ -281,7 +329,7 @@ function printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJob
     const rawJobberId = pickField(job.raw, ['jobber id', 'job id', 'id']);
     const rawTitle = pickField(job.raw, ['title', 'job title']);
     console.log(
-      `  - row ${job.sourceRowNumber}: source_client_id="${job.source_client_id || ''}" (raw="${rawClient || ''}"), source_property_id="${job.source_property_id || ''}" (raw="${rawProperty || ''}"), jobber_id="${job.jobber_id || ''}" (raw="${rawJobberId || ''}"), title="${job.title || ''}" (raw="${rawTitle || ''}")`,
+      `  - row ${job.sourceRowNumber}: source_client_id="${job.source_client_id || ''}" source_client_ref="${job.source_client_ref || ''}" (raw="${rawClient || ''}"), source_property_id="${job.source_property_id || ''}" source_property_ref="${job.source_property_ref || ''}" (raw="${rawProperty || ''}"), jobber_id="${job.jobber_id || ''}" (raw="${rawJobberId || ''}"), title="${job.title || ''}" (raw="${rawTitle || ''}")`,
     );
   });
 
@@ -302,10 +350,10 @@ function printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJob
 
   for (const job of jobs) {
     if (!job.source_client_id || !customerIdByJobber.has(job.source_client_id)) {
-      missingCustomer.push(`${job.jobber_id || `row-${job.sourceRowNumber}`} (source_client_id="${job.source_client_id || ''}")`);
+      missingCustomer.push(`${job.jobber_id || `row-${job.sourceRowNumber}`} (source_client_id="${job.source_client_id || ''}", source_client_ref="${job.source_client_ref || ''}")`);
     }
     if (!job.source_property_id || !propertyIdByJobber.has(job.source_property_id)) {
-      missingProperty.push(`${job.jobber_id || `row-${job.sourceRowNumber}`} (source_property_id="${job.source_property_id || ''}")`);
+      missingProperty.push(`${job.jobber_id || `row-${job.sourceRowNumber}`} (source_property_id="${job.source_property_id || ''}", source_property_ref="${job.source_property_ref || ''}")`);
     }
   }
 
@@ -317,8 +365,8 @@ function printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJob
   if (!missingProperty.length) console.log('  - <none>');
   missingProperty.slice(0, 50).forEach((line) => console.log(`  - ${line}`));
 
-  const customerShapes = new Set(jobs.map((j) => inferReferenceShape(j.source_client_id)));
-  const propertyShapes = new Set(jobs.map((j) => inferReferenceShape(j.source_property_id)));
+  const customerShapes = new Set(jobs.map((j) => inferReferenceShape(j.source_client_id || j.source_client_ref)));
+  const propertyShapes = new Set(jobs.map((j) => inferReferenceShape(j.source_property_id || j.source_property_ref)));
   const usesNamesForCustomer = customerShapes.has('name_like') || customerShapes.has('email_like') || customerShapes.has('phone_like');
   const usesAddressForProperty = propertyShapes.has('address_like') || propertyShapes.has('name_like');
 
@@ -345,13 +393,13 @@ function printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJob
   });
 
   const likelyCustomerFallbackMatches = jobs.filter((j) => {
-    const rawClient = pickField(j.raw, ['client', 'customer', 'client name', 'customer name', 'email', 'phone']);
+    const rawClient = j.source_client_ref || pickField(j.raw, ['client', 'customer', 'client name', 'customer name', 'email', 'phone']);
     const normalized = normalizeKey(rawClient);
     if (!normalized) return false;
     return customerNameKeys.has(normalized) || customerEmailKeys.has(normalized) || customerPhoneKeys.has(normalizePhone(normalized));
   }).length;
   const likelyPropertyFallbackMatches = jobs.filter((j) => {
-    const rawAddress = pickField(j.raw, ['property', 'address', 'property address']);
+    const rawAddress = j.source_property_ref || pickField(j.raw, ['property', 'address', 'property address']);
     const key = normalizeKey(rawAddress);
     if (!key) return false;
     return Array.from(propertyAddressKeys).some((addressKey) => addressKey.includes(key) || key.includes(addressKey));
@@ -608,15 +656,15 @@ async function main() {
   }
 
   const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
     },
-  }
-);
+  );
 
   const { data: orgRows, error: orgError } = await supabase.select('organizations', 'id,name', `id=eq.${DEFAULT_ORG_ID}&limit=1`);
   if (orgError) {
@@ -740,9 +788,15 @@ async function main() {
   }
 
   const propertyIdByAddress = new Map();
+  const propertyIdByStreet = new Map();
+  const propertyIdByCompactAddress = new Map();
   for (const p of propertiesForFallback) {
     const key = normalizeAddressKey(p.address_line_1, p.city, p.state, p.zip);
     if (key && !propertyIdByAddress.has(key)) propertyIdByAddress.set(key, p.id);
+    const streetKey = normalizeKey(p.address_line_1);
+    if (streetKey && !propertyIdByStreet.has(streetKey)) propertyIdByStreet.set(streetKey, p.id);
+    const compactAddress = compactText(`${p.address_line_1 || ''} ${p.city || ''} ${p.state || ''} ${p.zip || ''}`);
+    if (compactAddress && !propertyIdByCompactAddress.has(compactAddress)) propertyIdByCompactAddress.set(compactAddress, p.id);
     if (p.jobber_id && !propertyIdByJobber.has(p.jobber_id)) propertyIdByJobber.set(p.jobber_id, p.id);
   }
 
@@ -799,7 +853,7 @@ async function main() {
 
     if (!customerId || !propertyId) {
       jobFailures.push(
-        `job row ${j.sourceRowNumber}: unresolved customer/property reference (customer_source="${j.source_client_id || ''}", property_source="${j.source_property_id || ''}", title="${j.title}")`,
+        `job row ${j.sourceRowNumber}: unresolved customer/property reference (customer_source_id="${j.source_client_id || ''}", customer_source_ref="${j.source_client_ref || ''}", property_source_id="${j.source_property_id || ''}", property_source_ref="${j.source_property_ref || ''}", title="${j.title}")`,
       );
       continue;
     }
