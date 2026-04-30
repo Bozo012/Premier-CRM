@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 
-import { createServerClient } from '@premier/db';
+import { createServerClient, type DbClient } from '@premier/db';
 
 /**
  * Returns a Supabase client bound to the current request's cookie store.
@@ -17,7 +17,7 @@ import { createServerClient } from '@premier/db';
  * that case so reads still work. If a session-refresh-on-read is desired,
  * wire it up via middleware in a follow-up PR.
  */
-export async function getServerSupabase() {
+export async function getServerSupabase(): Promise<DbClient> {
   const cookieStore = await cookies();
 
   return createServerClient({
