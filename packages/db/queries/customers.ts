@@ -14,6 +14,54 @@ import type { Database } from '../types';
  * shape so call sites don't have to drill into `Database['public']['Tables']`.
  */
 export type Customer = Database['public']['Tables']['customers']['Row'];
+export type Property = Database['public']['Tables']['properties']['Row'];
+
+export interface Customer360RecentJob {
+  id: string;
+  scheduled_start: string | null;
+  status: Database['public']['Enums']['job_status'];
+  title: string;
+  total: number | null;
+}
+
+export interface Customer360Quote {
+  id: string;
+  job_title: string | null;
+  sent_at: string | null;
+  total: number | null;
+}
+
+export interface Customer360Invoice {
+  amount_due: number | null;
+  days_overdue: number | null;
+  due_date: string | null;
+  id: string;
+}
+
+export interface Customer360Stats {
+  last_contact_at: string | null;
+  last_job_completed_at: string | null;
+  total_jobs: number | null;
+  total_revenue: number | null;
+}
+
+export interface Customer360 {
+  customer: Customer;
+  openQuotes: Customer360Quote[];
+  properties: Property[];
+  recentJobs: Customer360RecentJob[];
+  stats: Customer360Stats;
+  unpaidInvoices: Customer360Invoice[];
+}
+
+interface Customer360RpcPayload {
+  customer?: Customer | null;
+  open_quotes?: Customer360Quote[] | null;
+  properties?: Property[] | null;
+  recent_jobs?: Customer360RecentJob[] | null;
+  stats?: Customer360Stats | null;
+  unpaid_invoices?: Customer360Invoice[] | null;
+}
 
 /**
  * Paginated result of a customer list query.
@@ -23,6 +71,13 @@ export interface CustomerListPage {
   total: number;
 }
 
+const EMPTY_CUSTOMER_360_STATS: Customer360Stats = {
+  last_contact_at: null,
+  last_job_completed_at: null,
+  total_jobs: null,
+  total_revenue: null,
+};
+
 /**
  * Escape characters that are wildcards in SQL LIKE/ILIKE patterns so a
  * user's literal `%` or `_` doesn't act as a wildcard. Backslash is also
@@ -30,6 +85,14 @@ export interface CustomerListPage {
  */
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }
 
 /**
@@ -105,4 +168,44 @@ export async function getCustomerById(
   }
 
   return ok(data);
+}
+
+/**
+ * Load the customer detail payload through the `get_customer_360` RPC.
+ *
+ * Caller provides the authenticated user's active `orgId`; the RPC enforces
+ * org scoping and returns a single JSON document with the related lists
+ * needed for the Week 3 customer detail page.
+ */
+export async function getCustomer360(
+  client: DbClient,
+  args: { customerId: string; orgId: string }
+): Promise<Result<Customer360>> {
+  const { data, error } = await client.rpc('get_customer_360', {
+    search_customer_id: args.customerId,
+    search_org_id: args.orgId,
+  });
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  if (!isRecord(data)) {
+    return err(ErrorCode.NOT_FOUND, `Customer ${args.customerId} not found`);
+  }
+
+  const payload = data as Customer360RpcPayload;
+
+  if (!payload.customer || !isRecord(payload.customer)) {
+    return err(ErrorCode.NOT_FOUND, `Customer ${args.customerId} not found`);
+  }
+
+  return ok({
+    customer: payload.customer,
+    openQuotes: normalizeArray(payload.open_quotes),
+    properties: normalizeArray(payload.properties),
+    recentJobs: normalizeArray(payload.recent_jobs),
+    stats: isRecord(payload.stats) ? payload.stats : EMPTY_CUSTOMER_360_STATS,
+    unpaidInvoices: normalizeArray(payload.unpaid_invoices),
+  });
 }
