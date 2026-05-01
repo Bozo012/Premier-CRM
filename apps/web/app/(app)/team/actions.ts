@@ -26,6 +26,14 @@ export type InviteTeamMemberActionState = Result<{
   message: string;
 }>;
 
+function mapOrgMembersWriteError(message: string) {
+  if (message.includes('permission denied for table org_members')) {
+    return 'Could not write team access in Supabase. Verify `SUPABASE_SERVICE_ROLE_KEY` is configured in Vercel and is the service-role key, not the anon key.';
+  }
+
+  return message;
+}
+
 export async function updateTeamMemberStatusAction(
   _previousState: UpdateTeamMemberActionState | null,
   formData: FormData
@@ -321,7 +329,7 @@ async function provisionMembershipForInvitedUser(args: {
     .maybeSingle();
 
   if (existingMemberError) {
-    return err(ErrorCode.DB_ERROR, existingMemberError.message);
+    return err(ErrorCode.DB_ERROR, mapOrgMembersWriteError(existingMemberError.message));
   }
 
   if (existingMember) {
@@ -334,7 +342,7 @@ async function provisionMembershipForInvitedUser(args: {
       .eq('id', existingMember.id);
 
     if (updateError) {
-      return err(ErrorCode.DB_ERROR, updateError.message);
+      return err(ErrorCode.DB_ERROR, mapOrgMembersWriteError(updateError.message));
     }
 
     return ok({
@@ -356,7 +364,7 @@ async function provisionMembershipForInvitedUser(args: {
     .single();
 
   if (insertError) {
-    return err(ErrorCode.DB_ERROR, insertError.message);
+    return err(ErrorCode.DB_ERROR, mapOrgMembersWriteError(insertError.message));
   }
 
   return ok({

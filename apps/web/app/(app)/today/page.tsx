@@ -33,6 +33,22 @@ const quickActions: QuickAction[] = [
   { id: 'new-estimate', label: 'New estimate' },
 ] as const;
 
+function normalizePropertyAddressKey(property: {
+  address_line_1: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+}) {
+  return [property.address_line_1, property.city, property.state, property.zip]
+    .map((value) =>
+      String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+    )
+    .join('|');
+}
+
 export default function TodayPage() {
   const [data, setData] = useState<TodayState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +111,7 @@ export default function TodayPage() {
             .eq('org_id', membership.org_id),
           supabase
             .from('properties')
-            .select('*', { count: 'exact', head: true })
+            .select('address_line_1, city, state, zip')
             .eq('org_id', membership.org_id),
           supabase
             .from('jobs')
@@ -137,6 +153,12 @@ export default function TodayPage() {
         return;
       }
 
+      const uniquePropertyCount = new Set(
+        (propertiesResult.data || []).map((property) =>
+          normalizePropertyAddressKey(property)
+        )
+      ).size;
+
       const fullName = profileResult.data?.full_name ?? null;
       const firstNameFromProfile = fullName ? fullName.split(' ')[0] : null;
       const firstNameFromEmail = user.email ? user.email.split('@')[0] : null;
@@ -150,7 +172,7 @@ export default function TodayPage() {
         orgName: orgNameValue,
         orgRole: membership.role,
         pendingApprovalCount,
-        propertyCount: propertiesResult.count || 0,
+        propertyCount: uniquePropertyCount,
         userEmail: user.email || 'No email found',
       });
       setIsLoading(false);

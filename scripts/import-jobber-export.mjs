@@ -238,13 +238,23 @@ function normalizeProperty(row, rowNumber) {
   const city = pickField(row, ['city']);
   const state = pickField(row, ['state', 'province']);
   const zip = pickField(row, ['zip', 'zip code', 'postal code']);
+  const sourceClientId = pickField(row, ['client id', 'customer id']) || null;
+  const sourceClientRef =
+    sourceClientId ||
+    pickLinkField(
+      row,
+      ['client name', 'customer name', 'customer/client', 'client', 'customer', 'email', 'phone'],
+      ['id', 'note', 'address'],
+    ) ||
+    null;
   if (!street1 && fullAddress) street1 = fullAddress.split(',')[0]?.trim();
 
   return {
     sourceRowNumber: rowNumber,
     raw: row,
     jobber_id: pickField(row, ['jobber id', 'property id', 'id']) || null,
-    source_client_id: pickField(row, ['client id', 'customer id']) || null,
+    source_client_id: sourceClientId,
+    source_client_ref: sourceClientRef,
     address_line_1: street1 || '',
     address_line_2: street2,
     city: city || '',
@@ -469,6 +479,46 @@ function validateJobs(records) {
   return { valid, errors, warnings };
 }
 
+function customerNaturalKey(record) {
+  if (record.jobber_id) return `jobber:${record.jobber_id}`;
+  const email = normalizeEmail(record.email);
+  if (email) return `email:${email}`;
+  const phone = normalizePhone(record.phone_primary);
+  if (phone) return `phone:${phone}`;
+  const fullName = normalizeKey(
+    `${record.first_name || ''} ${record.last_name || ''}`.trim() || record.company_name,
+  );
+  if (fullName) return `name:${fullName}`;
+  return `row:${record.sourceRowNumber ?? crypto.randomUUID?.() ?? Math.random()}`;
+}
+
+function propertyNaturalKey(record) {
+  if (record.jobber_id) return `jobber:${record.jobber_id}`;
+  const addressKey = normalizeAddressKey(
+    record.address_line_1,
+    record.city,
+    record.state,
+    record.zip,
+  );
+  if (addressKey) return `address:${addressKey}`;
+  return `row:${record.sourceRowNumber ?? crypto.randomUUID?.() ?? Math.random()}`;
+}
+
+function dedupeRecords(records, getKey) {
+  const seen = new Map();
+  for (const record of records) {
+    const key = getKey(record);
+    if (!seen.has(key)) seen.set(key, record);
+  }
+  return Array.from(seen.values());
+}
+
+function removeNullishValues(record) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== null && value !== undefined && value !== '')
+  );
+}
+
 function createClient(url, serviceRoleKey, _options = {}) {
   const base = `${url.replace(/\/$/, '')}/rest/v1`;
   const headers = {
@@ -497,6 +547,17 @@ function createClient(url, serviceRoleKey, _options = {}) {
       const query = `select=${encodeURIComponent(selectClause)}${filterQuery ? `&${filterQuery}` : ''}`;
       return request(`${table}?${query}`, { method: 'GET' });
     },
+    async insert(table, rows, returning = 'id') {
+      return request(table, {
+        method: 'POST',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify(rows),
+      }).then((res) => {
+        if (res.error) return res;
+        if (!returning) return res;
+        return { data: (res.data || []).map((row) => ({ [returning]: row[returning] })), error: null };
+      });
+    },
     async upsert(table, rows, onConflict, returning = 'id') {
       const query = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : '';
       return request(`${table}${query}`, {
@@ -507,6 +568,18 @@ function createClient(url, serviceRoleKey, _options = {}) {
         if (res.error) return res;
         if (!returning) return res;
         return { data: (res.data || []).map((row) => ({ [returning]: row[returning] })), error: null };
+      });
+    },
+    async update(table, filters, row, returning = 'id') {
+      const query = filters ? `?${filters}` : '';
+      return request(`${table}${query}`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify(row),
+      }).then((res) => {
+        if (res.error) return res;
+        if (!returning) return res;
+        return { data: (res.data || []).map((updated) => ({ [returning]: updated[returning] })), error: null };
       });
     },
   };
@@ -526,6 +599,39 @@ async function upsertBatches(supabase, table, rows, onConflict) {
     }
   }
   return { imported, failed };
+}
+
+async function insertBatches(supabase, table, rows) {
+  let imported = 0;
+  let failed = 0;
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase.insert(table, batch, 'id');
+    if (error) {
+      failed += batch.length;
+      console.error(`[${table}] insert batch failed (${i}-${i + batch.length - 1}): ${error.message}`);
+    } else {
+      imported += data?.length || batch.length;
+    }
+  }
+  return { imported, failed };
+}
+
+async function updateBatchesById(supabase, table, rows) {
+  let updated = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const { id, ...rest } = row;
+    const payload = removeNullishValues(rest);
+    const { data, error } = await supabase.update(table, `id=eq.${id}`, payload, 'id');
+    if (error) {
+      failed += 1;
+      console.error(`[${table}] update failed for ${id}: ${error.message}`);
+    } else {
+      updated += data?.length || 1;
+    }
+  }
+  return { imported: updated, failed };
 }
 
 async function main() {
@@ -689,68 +795,6 @@ async function main() {
     console.log(`\nTarget organization id (unverified): ${DEFAULT_ORG_ID}`);
   }
 
-  const customerRows = entityRows.customers
-    .filter((r) => !customerValidation.errors.some((e) => e.includes(`row ${r.sourceRowNumber}:`)))
-    .map((r) => ({
-      org_id: DEFAULT_ORG_ID,
-      jobber_id: r.jobber_id,
-      first_name: r.first_name,
-      last_name: r.last_name,
-      company_name: r.company_name,
-      email: r.email,
-      phone_primary: r.phone_primary,
-      notes: r.notes,
-      source: 'jobber_import',
-      type: 'residential',
-    }));
-
-  const propertyRows = entityRows.properties
-    .filter((r) => !propertyValidation.errors.some((e) => e.includes(`row ${r.sourceRowNumber}:`)))
-    .map((r) => ({
-      org_id: DEFAULT_ORG_ID,
-      jobber_id: r.jobber_id,
-      address_line_1: r.address_line_1,
-      address_line_2: r.address_line_2,
-      city: r.city,
-      state: r.state,
-      zip: r.zip,
-      notes: r.notes,
-      country: 'US',
-    }));
-
-  const customerResult = jobsOnlyMode
-    ? { imported: 0, failed: 0 }
-    : await upsertBatches(supabase, 'customers', customerRows, 'jobber_id');
-  const propertyResult = jobsOnlyMode
-    ? { imported: 0, failed: 0 }
-    : await upsertBatches(supabase, 'properties', propertyRows, 'jobber_id');
-
-  const { data: customersDb, error: customerMapError } = await supabase.select(
-    'customers',
-    'id,jobber_id',
-    `org_id=eq.${DEFAULT_ORG_ID}&jobber_id=not.is.null`,
-  );
-  if (customerMapError) {
-    console.error(`Failed to read customer map: ${customerMapError.message}`);
-    process.exitCode = 1;
-    return;
-  }
-
-  const { data: propertiesDb, error: propertyMapError } = await supabase.select(
-    'properties',
-    'id,jobber_id',
-    `org_id=eq.${DEFAULT_ORG_ID}&jobber_id=not.is.null`,
-  );
-  if (propertyMapError) {
-    console.error(`Failed to read property map: ${propertyMapError.message}`);
-    process.exitCode = 1;
-    return;
-  }
-
-  const customerIdByJobber = new Map(customersDb.map((x) => [x.jobber_id, x.id]));
-  const propertyIdByJobber = new Map(propertiesDb.map((x) => [x.jobber_id, x.id]));
-  printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJobber);
-
   const { data: customersForFallback, error: customerFallbackError } = await supabase.select(
     'customers',
     'id,jobber_id,first_name,last_name,company_name,email,phone_primary',
@@ -772,10 +816,187 @@ async function main() {
     return;
   }
 
+  const customerRows = dedupeRecords(
+    entityRows.customers
+      .filter((r) => !customerValidation.errors.some((e) => e.includes(`row ${r.sourceRowNumber}:`)))
+      .map((r) => ({
+        ...r,
+        org_id: DEFAULT_ORG_ID,
+        source: 'jobber_import',
+        type: 'residential',
+      })),
+    customerNaturalKey,
+  );
+
+  const propertyRows = dedupeRecords(
+    entityRows.properties
+      .filter((r) => !propertyValidation.errors.some((e) => e.includes(`row ${r.sourceRowNumber}:`)))
+      .map((r) => ({
+        ...r,
+        org_id: DEFAULT_ORG_ID,
+        country: 'US',
+      })),
+    propertyNaturalKey,
+  );
+
+  const existingCustomerIdByNaturalKey = new Map(
+    customersForFallback.map((customer) => [customerNaturalKey(customer), customer.id]),
+  );
+  const existingPropertyIdByNaturalKey = new Map(
+    propertiesForFallback.map((property) => [propertyNaturalKey(property), property.id]),
+  );
+
+  const customerRowsWithJobber = customerRows.filter((row) => row.jobber_id).map((row) => ({
+    org_id: row.org_id,
+    jobber_id: row.jobber_id,
+    first_name: row.first_name,
+    last_name: row.last_name,
+    company_name: row.company_name,
+    email: row.email,
+    phone_primary: row.phone_primary,
+    notes: row.notes,
+    source: row.source,
+    type: row.type,
+  }));
+  const customerUpdatesByNaturalKey = customerRows
+    .filter((row) => !row.jobber_id && existingCustomerIdByNaturalKey.has(customerNaturalKey(row)))
+    .map((row) => ({
+      id: existingCustomerIdByNaturalKey.get(customerNaturalKey(row)),
+      first_name: row.first_name,
+      last_name: row.last_name,
+      company_name: row.company_name,
+      email: row.email,
+      phone_primary: row.phone_primary,
+      notes: row.notes,
+      source: row.source,
+      type: row.type,
+    }));
+  const customerInsertsByNaturalKey = customerRows
+    .filter((row) => !row.jobber_id && !existingCustomerIdByNaturalKey.has(customerNaturalKey(row)))
+    .map((row) => ({
+      org_id: row.org_id,
+      first_name: row.first_name,
+      last_name: row.last_name,
+      company_name: row.company_name,
+      email: row.email,
+      phone_primary: row.phone_primary,
+      notes: row.notes,
+      source: row.source,
+      type: row.type,
+    }));
+
+  const propertyRowsWithJobber = propertyRows.filter((row) => row.jobber_id).map((row) => ({
+    org_id: row.org_id,
+    jobber_id: row.jobber_id,
+    address_line_1: row.address_line_1,
+    address_line_2: row.address_line_2,
+    city: row.city,
+    state: row.state,
+    zip: row.zip,
+    notes: row.notes,
+    country: row.country,
+  }));
+  const propertyUpdatesByNaturalKey = propertyRows
+    .filter((row) => !row.jobber_id && existingPropertyIdByNaturalKey.has(propertyNaturalKey(row)))
+    .map((row) => ({
+      id: existingPropertyIdByNaturalKey.get(propertyNaturalKey(row)),
+      address_line_1: row.address_line_1,
+      address_line_2: row.address_line_2,
+      city: row.city,
+      state: row.state,
+      zip: row.zip,
+      notes: row.notes,
+      country: row.country,
+    }));
+  const propertyInsertsByNaturalKey = propertyRows
+    .filter((row) => !row.jobber_id && !existingPropertyIdByNaturalKey.has(propertyNaturalKey(row)))
+    .map((row) => ({
+      org_id: row.org_id,
+      address_line_1: row.address_line_1,
+      address_line_2: row.address_line_2,
+      city: row.city,
+      state: row.state,
+      zip: row.zip,
+      notes: row.notes,
+      country: row.country,
+    }));
+
+  const customerUpsertResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await upsertBatches(supabase, 'customers', customerRowsWithJobber, 'jobber_id');
+  const customerUpdateResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await updateBatchesById(supabase, 'customers', customerUpdatesByNaturalKey);
+  const customerInsertResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await insertBatches(supabase, 'customers', customerInsertsByNaturalKey);
+
+  const propertyUpsertResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await upsertBatches(supabase, 'properties', propertyRowsWithJobber, 'jobber_id');
+  const propertyUpdateResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await updateBatchesById(supabase, 'properties', propertyUpdatesByNaturalKey);
+  const propertyInsertResult = jobsOnlyMode
+    ? { imported: 0, failed: 0 }
+    : await insertBatches(supabase, 'properties', propertyInsertsByNaturalKey);
+
+  const customerResult = {
+    imported:
+      customerUpsertResult.imported +
+      customerUpdateResult.imported +
+      customerInsertResult.imported,
+    failed:
+      customerUpsertResult.failed +
+      customerUpdateResult.failed +
+      customerInsertResult.failed,
+  };
+
+  const propertyResult = {
+    imported:
+      propertyUpsertResult.imported +
+      propertyUpdateResult.imported +
+      propertyInsertResult.imported,
+    failed:
+      propertyUpsertResult.failed +
+      propertyUpdateResult.failed +
+      propertyInsertResult.failed,
+  };
+
+  const { data: customersDb, error: customerMapError } = await supabase.select(
+    'customers',
+    'id,jobber_id,first_name,last_name,company_name,email,phone_primary',
+    `org_id=eq.${DEFAULT_ORG_ID}`,
+  );
+  if (customerMapError) {
+    console.error(`Failed to read customer map: ${customerMapError.message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const { data: propertiesDb, error: propertyMapError } = await supabase.select(
+    'properties',
+    'id,jobber_id,address_line_1,city,state,zip',
+    `org_id=eq.${DEFAULT_ORG_ID}`,
+  );
+  if (propertyMapError) {
+    console.error(`Failed to read property map: ${propertyMapError.message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const customerIdByJobber = new Map(
+    customersDb.filter((x) => x.jobber_id).map((x) => [x.jobber_id, x.id])
+  );
+  const propertyIdByJobber = new Map(
+    propertiesDb.filter((x) => x.jobber_id).map((x) => [x.jobber_id, x.id])
+  );
+  printJobLinkDiagnostics(entityRows, customerIdByJobber, propertyIdByJobber);
+
   const customerIdByName = new Map();
   const customerIdByEmail = new Map();
   const customerIdByPhone = new Map();
-  for (const c of customersForFallback) {
+  for (const c of customersDb) {
     const fullName = normalizeKey(`${c.first_name || ''} ${c.last_name || ''}`.trim());
     const companyName = normalizeKey(c.company_name);
     if (fullName && !customerIdByName.has(fullName)) customerIdByName.set(fullName, c.id);
@@ -790,7 +1011,7 @@ async function main() {
   const propertyIdByAddress = new Map();
   const propertyIdByStreet = new Map();
   const propertyIdByCompactAddress = new Map();
-  for (const p of propertiesForFallback) {
+  for (const p of propertiesDb) {
     const key = normalizeAddressKey(p.address_line_1, p.city, p.state, p.zip);
     if (key && !propertyIdByAddress.has(key)) propertyIdByAddress.set(key, p.id);
     const streetKey = normalizeKey(p.address_line_1);
@@ -805,11 +1026,36 @@ async function main() {
 
   if (!jobsOnlyMode) {
     for (const p of entityRows.properties) {
-      if (!p.source_client_id) continue;
-      const customerId = customerIdByJobber.get(p.source_client_id);
-      const propertyId = p.jobber_id ? propertyIdByJobber.get(p.jobber_id) : null;
+      let customerId = p.source_client_id ? customerIdByJobber.get(p.source_client_id) : null;
+      let propertyId = p.jobber_id ? propertyIdByJobber.get(p.jobber_id) : null;
+
+      if (!customerId && p.source_client_ref) {
+        const byName = customerIdByName.get(normalizeKey(p.source_client_ref));
+        const byEmail = customerIdByEmail.get(normalizeEmail(p.source_client_ref));
+        const byPhone = customerIdByPhone.get(normalizePhone(p.source_client_ref));
+        customerId = byName || byEmail || byPhone || null;
+      }
+
+      if (!propertyId) {
+        const fullAddressKey = normalizeAddressKey(
+          p.address_line_1,
+          p.city,
+          p.state,
+          p.zip,
+        );
+        propertyId =
+          propertyIdByAddress.get(fullAddressKey) ||
+          propertyIdByStreet.get(normalizeKey(p.address_line_1)) ||
+          propertyIdByCompactAddress.get(
+            compactText(`${p.address_line_1 || ''} ${p.city || ''} ${p.state || ''} ${p.zip || ''}`)
+          ) ||
+          null;
+      }
+
       if (!customerId || !propertyId) {
-        customerPropertyFailures.push(`property row ${p.sourceRowNumber}: missing link customer_id(${p.source_client_id}) or property_id(${p.jobber_id})`);
+        customerPropertyFailures.push(
+          `property row ${p.sourceRowNumber}: missing link customer_id(${p.source_client_id || p.source_client_ref || ''}) or property_id(${p.jobber_id || p.address_line_1 || ''})`
+        );
         continue;
       }
       customerPropertyRows.push({
