@@ -165,6 +165,7 @@ export default async function CustomerDetailPage({
           title="Properties"
           emptyMessage="No linked properties yet."
           items={properties.map((property) => ({
+            href: `/properties/${property.id}`,
             id: property.id,
             title: formatAddress(property),
             subtitle: [
@@ -263,7 +264,7 @@ function ListCard({
   title,
 }: {
   emptyMessage: string;
-  items: Array<{ id: string; subtitle: string; title: string }>;
+  items: Array<{ href?: string; id: string; subtitle: string; title: string }>;
   title: string;
 }) {
   return (
@@ -278,7 +279,16 @@ function ListCard({
           <ul className="space-y-3">
             {items.map((item) => (
               <li key={item.id} className="rounded-md border p-3">
-                <p className="font-medium text-foreground">{item.title}</p>
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    className="font-medium text-foreground underline-offset-4 hover:underline"
+                  >
+                    {item.title}
+                  </Link>
+                ) : (
+                  <p className="font-medium text-foreground">{item.title}</p>
+                )}
                 <p className="text-sm text-muted-foreground">
                   {item.subtitle || 'No additional details'}
                 </p>
