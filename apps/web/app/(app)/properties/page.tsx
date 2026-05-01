@@ -91,6 +91,11 @@ export default async function PropertiesPage({
                   <p className="text-base font-medium text-foreground">
                     {formatAddress(item.property)}
                   </p>
+                  {item.duplicateCount > 1 ? (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+                      {item.duplicateCount} imported rows
+                    </span>
+                  ) : null}
                   {item.property.jobber_id ? (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                       Imported from Jobber

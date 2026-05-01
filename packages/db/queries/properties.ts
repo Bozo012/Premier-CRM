@@ -17,6 +17,7 @@ export interface PropertyListCustomerSummary {
 export interface PropertyListItem {
   customerCount: number;
   customers: PropertyListCustomerSummary[];
+  duplicateCount: number;
   property: Property;
 }
 
@@ -94,6 +95,24 @@ function normalizeArray<T>(value: T[] | null | undefined): T[] {
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function normalizeText(value: string | null | undefined): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function normalizePropertyAddressKey(
+  property: Pick<Property, 'address_line_1' | 'city' | 'state' | 'zip'>
+): string {
+  return [
+    normalizeText(property.address_line_1),
+    normalizeText(property.city),
+    normalizeText(property.state),
+    normalizeText(property.zip),
+  ].join('|');
 }
 
 function resolveCustomerDisplayName(
@@ -189,28 +208,74 @@ export async function listProperties(
     linksByPropertyId.set(link.property_id, propertyLinks);
   }
 
-  return ok({
-    properties: properties.map((property) => {
-      const customerLinks = (linksByPropertyId.get(property.id) ?? [])
-        .filter((link) => link.customers)
-        .sort(
-          (left, right) =>
-            Number(Boolean(right.is_primary)) - Number(Boolean(left.is_primary))
-        )
-        .map((link) => ({
-          displayName: resolveCustomerDisplayName(link.customers!),
-          id: link.customer_id,
-          isPrimary: link.is_primary,
-          relationship: link.relationship,
-        }));
+  const groupedProperties = new Map<
+    string,
+    { customerLinks: PropertyCustomerLink[]; properties: Property[] }
+  >();
 
-      return {
-        customerCount: customerLinks.length,
-        customers: customerLinks,
-        property,
-      };
-    }),
-    total: count ?? 0,
+  for (const property of properties) {
+    const key = normalizePropertyAddressKey(property);
+    const group = groupedProperties.get(key) ?? {
+      customerLinks: [],
+      properties: [],
+    };
+
+    group.properties.push(property);
+    group.customerLinks.push(...(linksByPropertyId.get(property.id) ?? []));
+    groupedProperties.set(key, group);
+  }
+
+  const items: PropertyListItem[] = Array.from(groupedProperties.values()).flatMap(
+    (group) => {
+      const canonicalProperty =
+        group.properties.find((property) => Boolean(property.jobber_id)) ??
+        group.properties[0] ??
+        null;
+
+      if (!canonicalProperty) {
+        return [];
+      }
+
+      const customersById = new Map<string, PropertyListCustomerSummary>();
+
+      for (const link of group.customerLinks) {
+        if (!link.customers) continue;
+
+        const existing = customersById.get(link.customer_id);
+        const nextValue: PropertyListCustomerSummary = {
+          displayName: resolveCustomerDisplayName(link.customers),
+          id: link.customer_id,
+          isPrimary: existing?.isPrimary ?? link.is_primary,
+          relationship: existing?.relationship ?? link.relationship,
+        };
+
+        if (existing) {
+          nextValue.isPrimary = existing.isPrimary || link.is_primary;
+          nextValue.relationship = existing.relationship ?? link.relationship;
+        }
+
+        customersById.set(link.customer_id, nextValue);
+      }
+
+      const customerLinks = Array.from(customersById.values()).sort(
+        (left, right) =>
+          Number(Boolean(right.isPrimary)) - Number(Boolean(left.isPrimary))
+      );
+
+      return [
+        {
+          customerCount: customerLinks.length,
+          customers: customerLinks,
+          duplicateCount: group.properties.length,
+          property: canonicalProperty,
+        },
+      ];
+    }
+  );
+
+  return ok({
+    properties: items,
+    total: items.length,
   });
 }
 
