@@ -20,10 +20,24 @@ interface TodayState {
   userEmail: string;
 }
 
+interface QuickAction {
+  href?: string;
+  id: string;
+  label: string;
+}
+
+const quickActions: QuickAction[] = [
+  { id: 'capture-note', label: 'Capture note' },
+  { id: 'new-customer', label: 'New customer', href: '/customers' },
+  { id: 'new-job', label: 'New job' },
+  { id: 'new-estimate', label: 'New estimate' },
+] as const;
+
 export default function TodayPage() {
   const [data, setData] = useState<TodayState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [statusText, setStatusText] = useState<string | null>(null);
 
   const supabase = useMemo(
     () => getBrowserSupabase() as unknown as SupabaseClient,
@@ -150,6 +164,10 @@ export default function TodayPage() {
     window.location.href = '/login';
   };
 
+  const handlePlaceholderAction = (label: string) => {
+    setStatusText(`${label} is unavailable in this preview.`);
+  };
+
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
 
@@ -220,6 +238,39 @@ export default function TodayPage() {
 
         <p className="text-xs text-muted-foreground">Signed in as {data?.userEmail}</p>
       </header>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          Quick actions
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          {quickActions.map((action) =>
+            action.href ? (
+              <Button
+                key={action.id}
+                asChild
+                variant="outline"
+                className="h-16 justify-start px-4 text-left text-sm sm:text-base"
+              >
+                <Link href={action.href}>{action.label}</Link>
+              </Button>
+            ) : (
+              <Button
+                key={action.id}
+                type="button"
+                variant="outline"
+                className="h-16 justify-start px-4 text-left text-sm sm:text-base"
+                onClick={() => handlePlaceholderAction(action.label)}
+              >
+                {action.label}
+              </Button>
+            )
+          )}
+        </div>
+        <p aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
+          {statusText ?? 'Actions are placeholders for this foundation pass.'}
+        </p>
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
@@ -315,6 +366,52 @@ export default function TodayPage() {
           </Card>
         </section>
       ) : null}
+
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Today&apos;s work</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              No jobs scheduled for today yet.
+            </p>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => handlePlaceholderAction('Import jobs')}
+            >
+              Import jobs or create your first job
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Next Best Step</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Import your Jobber data or capture your first field note to start
+              building your business memory.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild type="button" variant="outline">
+                <Link href="/customers">Import customers</Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handlePlaceholderAction('Capture field note')}
+              >
+                Capture field note
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
 
       <section>
         <Card>
