@@ -10,7 +10,7 @@ Format: each decision is dated. Most recent at the top.
 
 **Context:** Magic links were acceptable for early scaffolding, but they add friction for Kevin's day-to-day contractor workflow in the field. The app now needs a faster contractor sign-in path without giving up customer-facing magic-link flows later.
 
-**Decision:** Use Supabase Auth email + password for contractor/staff login on the main app. Keep customer-facing magic links as a separate capability for quote, invoice, and portal access. Existing contractor accounts created during the magic-link phase transition to passwords through the password reset flow.
+**Decision:** Use Supabase Auth email + password for contractor/staff login on the main app. Keep customer-facing magic links as a separate capability for quote, invoice, and portal access. Existing contractor accounts created during the magic-link phase transition to passwords through the password reset flow. New staff can self-sign up with email + password; the existing `handle_new_user()` trigger places non-owner signups into `pending` until an owner approves them.
 
 **Alternatives considered:**
 - Keep magic links for everyone (too much friction on repeated contractor sign-ins)

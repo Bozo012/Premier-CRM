@@ -140,6 +140,7 @@ pnpm dev
 
 Visit http://localhost:3000 and sign in with email + password.
 If your account was created during the earlier magic-link phase, use "Forgot password" once to set your password.
+If you're creating a new contractor/staff account, use `/sign-up`. Non-owner accounts may land on a pending-approval screen until an owner activates them.
 
 ### After signing in for the first time
 
