@@ -4,7 +4,26 @@ import type { DbClient } from '../client';
 import type { Database } from '../types';
 
 type Customer = Database['public']['Tables']['customers']['Row'];
+type CustomerProperty = Database['public']['Tables']['customer_properties']['Row'];
 type Property = Database['public']['Tables']['properties']['Row'];
+
+export interface PropertyListCustomerSummary {
+  displayName: string;
+  id: string;
+  isPrimary: boolean | null;
+  relationship: string | null;
+}
+
+export interface PropertyListItem {
+  customerCount: number;
+  customers: PropertyListCustomerSummary[];
+  property: Property;
+}
+
+export interface PropertyListPage {
+  properties: PropertyListItem[];
+  total: number;
+}
 
 export interface PropertyMemoryOwner {
   customer: Customer;
@@ -71,6 +90,128 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function resolveCustomerDisplayName(
+  customer: Pick<
+    Customer,
+    'company_name' | 'display_name' | 'first_name' | 'last_name'
+  >
+): string {
+  if (customer.display_name) return customer.display_name;
+  if (customer.company_name) return customer.company_name;
+
+  const fullName = [customer.first_name, customer.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  return fullName || 'Unnamed customer';
+}
+
+interface PropertyCustomerLink
+  extends Pick<
+    CustomerProperty,
+    'customer_id' | 'is_primary' | 'property_id' | 'relationship'
+  > {
+  customers:
+    | Pick<
+        Customer,
+        'company_name' | 'display_name' | 'first_name' | 'id' | 'last_name'
+      >
+    | null;
+}
+
+export async function listProperties(
+  client: DbClient,
+  args: { limit: number; offset: number; orgId: string; search?: string }
+): Promise<Result<PropertyListPage>> {
+  const { limit, offset, orgId, search } = args;
+
+  let query = client
+    .from('properties')
+    .select('*', { count: 'exact' })
+    .eq('org_id', orgId)
+    .order('address_line_1', { ascending: true })
+    .order('city', { ascending: true })
+    .range(offset, offset + limit - 1);
+
+  if (search) {
+    const escaped = escapeLikePattern(search);
+    query = query.or(
+      [
+        `address_line_1.ilike.%${escaped}%`,
+        `address_line_2.ilike.%${escaped}%`,
+        `city.ilike.%${escaped}%`,
+        `state.ilike.%${escaped}%`,
+        `zip.ilike.%${escaped}%`,
+      ].join(',')
+    );
+  }
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  const properties = data ?? [];
+
+  if (properties.length === 0) {
+    return ok({
+      properties: [],
+      total: count ?? 0,
+    });
+  }
+
+  const propertyIds = properties.map((property) => property.id);
+  const { data: linksRaw, error: linksError } = await client
+    .from('customer_properties')
+    .select(
+      'property_id, customer_id, is_primary, relationship, customers(id, display_name, company_name, first_name, last_name)'
+    )
+    .in('property_id', propertyIds);
+
+  if (linksError) {
+    return err(ErrorCode.DB_ERROR, linksError.message);
+  }
+
+  const links = (linksRaw ?? []) as PropertyCustomerLink[];
+  const linksByPropertyId = new Map<string, PropertyCustomerLink[]>();
+
+  for (const link of links) {
+    const propertyLinks = linksByPropertyId.get(link.property_id) ?? [];
+    propertyLinks.push(link);
+    linksByPropertyId.set(link.property_id, propertyLinks);
+  }
+
+  return ok({
+    properties: properties.map((property) => {
+      const customerLinks = (linksByPropertyId.get(property.id) ?? [])
+        .filter((link) => link.customers)
+        .sort(
+          (left, right) =>
+            Number(Boolean(right.is_primary)) - Number(Boolean(left.is_primary))
+        )
+        .map((link) => ({
+          displayName: resolveCustomerDisplayName(link.customers!),
+          id: link.customer_id,
+          isPrimary: link.is_primary,
+          relationship: link.relationship,
+        }));
+
+      return {
+        customerCount: customerLinks.length,
+        customers: customerLinks,
+        property,
+      };
+    }),
+    total: count ?? 0,
+  });
 }
 
 export async function getPropertyMemory(
