@@ -14,3 +14,7 @@ export {
   type TeamMemberApprovalRole,
   type TeamMemberApprovalStatus,
 } from './team-member-approval';
+export {
+  TeamMemberInviteSchema,
+  type TeamMemberInvite,
+} from './team-member-invite';

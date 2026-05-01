@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { getPostAuthRedirectPath } from '@/lib/auth-routing';
 import { getBrowserSupabase } from '@/lib/supabase';
 
 export default function UpdatePasswordPage() {
@@ -87,14 +88,25 @@ export default function UpdatePasswordPage() {
       return;
     }
 
-    router.replace('/today');
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setStatus('Password saved, but your session was lost. Sign in again.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const destination = await getPostAuthRedirectPath(supabase, user.id);
+    router.replace(destination);
   };
 
   if (!isReady) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 p-8">
         <p className="text-sm text-muted-foreground">
-          Verifying your password reset link...
+          Verifying your invite or password reset link...
         </p>
       </main>
     );
@@ -105,11 +117,11 @@ export default function UpdatePasswordPage() {
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 p-8">
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight">
-            Reset link unavailable
+            Invite or reset link unavailable
           </h1>
           <p className="text-sm text-muted-foreground">
-            This password reset link is missing, expired, or has already been
-            used.
+            This invite or password reset link is missing, expired, or has
+            already been used.
           </p>
         </div>
 
@@ -127,7 +139,7 @@ export default function UpdatePasswordPage() {
           Set your password
         </h1>
         <p className="text-sm text-muted-foreground">
-          Enter a new password for your contractor or staff account.
+          Enter a password for your contractor or staff account.
         </p>
       </div>
 

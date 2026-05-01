@@ -90,8 +90,9 @@ function LoginForm() {
           Contractor and staff accounts use email and password.
         </p>
         <p className="text-sm text-muted-foreground">
-          If your account was created during the magic-link phase, use password
-          reset once to set your password.
+          If your account was created during the magic-link phase, or you were
+          invited by an owner, use password reset or your invite email once to
+          set your password.
         </p>
       </div>
 
@@ -137,12 +138,10 @@ function LoginForm() {
         </Button>
       </form>
 
-      <div className="text-sm text-muted-foreground">
-        New to Premier?{' '}
-        <Link className="underline-offset-4 hover:underline" href="/sign-up">
-          Create your account
-        </Link>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Need a contractor or staff account? Ask an owner or admin to invite you
+        from the team access screen.
+      </p>
 
       {status ? <p className="text-sm text-red-600">{status}</p> : null}
     </main>

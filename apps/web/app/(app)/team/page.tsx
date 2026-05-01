@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { InviteTeamMemberForm } from './_components/invite-team-member-form';
 import {
   TeamApprovalList,
   type PendingTeamMember,
@@ -148,11 +149,29 @@ export default async function TeamPage() {
       <section className="space-y-3">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">
+            Invite team member
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Send an owner-created invite email. Invited users set their password
+            from the email link and become active immediately.
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            <InviteTeamMemberForm />
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight">
             Pending approvals
           </h2>
           <p className="text-sm text-muted-foreground">
-            New contractor or staff accounts land here until an owner or admin
-            approves them.
+            Legacy self-signups or manually held memberships still appear here
+            until an owner or admin approves them.
           </p>
         </div>
 

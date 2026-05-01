@@ -140,7 +140,8 @@ pnpm dev
 
 Visit http://localhost:3000 and sign in with email + password.
 If your account was created during the earlier magic-link phase, use "Forgot password" once to set your password.
-If you're creating a new contractor/staff account, use `/sign-up`. Non-owner accounts may land on a pending-approval screen until an owner activates them.
+If you need a new contractor/staff account, ask an owner/admin to invite you from `/team`. The invite email takes you to password setup.
+For a fully invite-only production flow, disable **Allow new users to sign up** in Supabase Auth after the owner account is established.
 
 ### After signing in for the first time
 
