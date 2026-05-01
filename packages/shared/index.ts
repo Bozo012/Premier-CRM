@@ -12,4 +12,6 @@ export {
   type TeamMemberApproval,
   type TeamMemberApprovalRole,
   type TeamMemberApprovalStatus,
+  TeamMemberInviteSchema,
+  type TeamMemberInvite,
 } from './schemas';

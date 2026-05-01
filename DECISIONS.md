@@ -6,18 +6,19 @@ Format: each decision is dated. Most recent at the top.
 
 ---
 
-## 2026-04-30: Contractor/staff auth moves to email + password; customer magic links stay separate
+## 2026-04-30: Contractor/staff auth uses email + password with owner-created invites; customer magic links stay separate
 
 **Context:** Magic links were acceptable for early scaffolding, but they add friction for Kevin's day-to-day contractor workflow in the field. The app now needs a faster contractor sign-in path without giving up customer-facing magic-link flows later.
 
-**Decision:** Use Supabase Auth email + password for contractor/staff login on the main app. Keep customer-facing magic links as a separate capability for quote, invoice, and portal access. Existing contractor accounts created during the magic-link phase transition to passwords through the password reset flow. New staff can self-sign up with email + password; the existing `handle_new_user()` trigger places non-owner signups into `pending` until an owner approves them.
+**Decision:** Use Supabase Auth email + password for contractor/staff login on the main app. Keep customer-facing magic links as a separate capability for quote, invoice, and portal access. Existing contractor accounts created during the magic-link phase transition to passwords through the password reset flow. New staff accounts are now created by owner/admin invite from the app, with the invite email taking the user into password setup. The older pending-approval flow remains only as a compatibility path for legacy self-signups or manually held memberships.
 
 **Alternatives considered:**
 - Keep magic links for everyone (too much friction on repeated contractor sign-ins)
+- Let any staff self-sign up and wait for approval (works, but creates unnecessary friction and weakens control over who gets contractor access)
 - Google-only login (good UX, but adds provider coupling and should remain optional later)
 - Passkeys-first (promising, but still too new for this project's primary auth path)
 
-**Reasoning:** Email + password is the most stable low-friction contractor flow Supabase supports today. It works cleanly with the current SSR cookie session setup, doesn't require schema changes, and keeps customer portal magic links available for the public side where passwordless links are the better fit.
+**Reasoning:** Email + password is the most stable low-friction contractor flow Supabase supports today. Owner-created invites fit contractor/staff access better than open self-signup because Kevin controls who gets an account, invited users still land in a simple password-setup flow, and the existing auth trigger plus org membership model can support it without schema changes.
 
 ---
 

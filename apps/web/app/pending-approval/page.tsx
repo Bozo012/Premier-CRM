@@ -120,8 +120,9 @@ export default function PendingApprovalPage() {
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Your account exists, but an owner still needs to approve your
-            organization membership before you can access Premier CRM.
+            Your account exists, but access is still being held. This usually
+            means the membership came from an older self-signup flow or was
+            intentionally left pending by an owner/admin.
           </p>
         )}
       </div>
