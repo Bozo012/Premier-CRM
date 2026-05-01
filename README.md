@@ -138,11 +138,12 @@ pnpm db:types
 pnpm dev
 ```
 
-Visit http://localhost:3000 and sign in with magic link (use a real email).
+Visit http://localhost:3000 and sign in with email + password.
+If your account was created during the earlier magic-link phase, use "Forgot password" once to set your password.
 
 ### After signing in for the first time
 
-You'll be associated with the Premier org (created by migration 0008). Then:
+If your account was provisioned through the existing Supabase auth trigger flow, you'll be associated with the Premier org (created by migration 0008). Then:
 
 1. Run the Jobber import wizard at `/setup/import` (Phase 0.5 deliverable)
 2. Verify your customers/properties/jobs imported correctly
