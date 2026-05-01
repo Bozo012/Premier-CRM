@@ -16,21 +16,14 @@ interface TodayState {
   orgName: string;
   orgRole: string;
   pendingApprovalCount: number;
+  propertyCount: number;
   userEmail: string;
 }
-
-const quickActions = [
-  { id: 'capture-note', label: 'Capture note' },
-  { id: 'new-customer', label: 'New customer' },
-  { id: 'new-job', label: 'New job' },
-  { id: 'new-estimate', label: 'New estimate' },
-] as const;
 
 export default function TodayPage() {
   const [data, setData] = useState<TodayState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [statusText, setStatusText] = useState<string | null>(null);
 
   const supabase = useMemo(
     () => getBrowserSupabase() as unknown as SupabaseClient,
@@ -80,11 +73,26 @@ export default function TodayPage() {
       const canManageTeam =
         membership.role === 'owner' || membership.role === 'admin';
 
-      const [customersResult, jobsResult, profileResult] = await Promise.all([
-        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('org_id', membership.org_id),
-        supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('org_id', membership.org_id),
-        supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle(),
-      ]);
+      const [customersResult, propertiesResult, jobsResult, profileResult] =
+        await Promise.all([
+          supabase
+            .from('customers')
+            .select('*', { count: 'exact', head: true })
+            .eq('org_id', membership.org_id),
+          supabase
+            .from('properties')
+            .select('*', { count: 'exact', head: true })
+            .eq('org_id', membership.org_id),
+          supabase
+            .from('jobs')
+            .select('*', { count: 'exact', head: true })
+            .eq('org_id', membership.org_id),
+          supabase
+            .from('user_profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .maybeSingle(),
+        ]);
 
       let pendingApprovalCount = 0;
 
@@ -104,8 +112,13 @@ export default function TodayPage() {
         pendingApprovalCount = pendingMembersResult.count || 0;
       }
 
-      if (customersResult.error || jobsResult.error) {
-        setError(customersResult.error?.message || jobsResult.error?.message || 'Failed to load counts.');
+      if (customersResult.error || propertiesResult.error || jobsResult.error) {
+        setError(
+          customersResult.error?.message ||
+            propertiesResult.error?.message ||
+            jobsResult.error?.message ||
+            'Failed to load dashboard counts.'
+        );
         setIsLoading(false);
         return;
       }
@@ -117,13 +130,14 @@ export default function TodayPage() {
 
       setData({
         canManageTeam,
-        userEmail: user.email || 'No email found',
+        customerCount: customersResult.count || 0,
         firstName: resolvedFirstName,
+        jobCount: jobsResult.count || 0,
         orgName: orgNameValue,
         orgRole: membership.role,
-        customerCount: customersResult.count || 0,
-        jobCount: jobsResult.count || 0,
         pendingApprovalCount,
+        propertyCount: propertiesResult.count || 0,
+        userEmail: user.email || 'No email found',
       });
       setIsLoading(false);
     };
@@ -136,21 +150,11 @@ export default function TodayPage() {
     window.location.href = '/login';
   };
 
-  const handlePlaceholderAction = (label: string) => {
-    setStatusText(`${label} is unavailable in this preview.`);
-  };
-
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
 
-    if (hour < 12) {
-      return 'Good morning';
-    }
-
-    if (hour < 18) {
-      return 'Good afternoon';
-    }
-
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
     return 'Good evening';
   }, []);
 
@@ -179,6 +183,10 @@ export default function TodayPage() {
         <Button onClick={() => window.location.reload()}>Retry</Button>
       </main>
     );
+  }
+
+  if (!data) {
+    return null;
   }
 
   return (
@@ -214,61 +222,73 @@ export default function TodayPage() {
       </header>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Quick actions</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {quickActions.map((action) => (
-            <Button
-              key={action.id}
-              type="button"
-              variant="outline"
-              className="h-16 justify-start px-4 text-left text-sm sm:text-base"
-              onClick={() => handlePlaceholderAction(action.label)}
-            >
-              {action.label}
-            </Button>
-          ))}
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          Business snapshot
+        </h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <SnapshotCard
+            helper="Review imported records"
+            href="/customers"
+            label="Customers"
+            value={String(data?.customerCount ?? 0)}
+          />
+          <SnapshotCard
+            helper="Browse addresses and owners"
+            href="/properties"
+            label="Properties"
+            value={String(data?.propertyCount ?? 0)}
+          />
+          <SnapshotCard
+            helper="Jobs imported or created"
+            label="Jobs"
+            value={String(data?.jobCount ?? 0)}
+          />
+          <SnapshotCard
+            helper={
+              data?.canManageTeam
+                ? 'Team accounts waiting for approval'
+                : 'Imported customer + property records'
+            }
+            label={data?.canManageTeam ? 'Approvals' : 'Imported records'}
+            value={String(
+              data?.canManageTeam
+                ? data.pendingApprovalCount
+                : (data?.customerCount ?? 0) + (data?.propertyCount ?? 0)
+            )}
+          />
         </div>
-        <p aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
-          {statusText ?? 'Actions are placeholders for this foundation pass.'}
-        </p>
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Business snapshot</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          Browse imported data
+        </h2>
+        <div className="grid gap-3 md:grid-cols-2">
           <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customers</CardTitle>
+            <CardHeader>
+              <CardTitle>Customers</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">{data?.customerCount}</p>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                See the imported customer list, contact info, notes, quotes, and jobs.
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/customers">Open customers</Link>
+              </Button>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Jobs</CardTitle>
+            <CardHeader>
+              <CardTitle>Properties</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">{data?.jobCount}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Open tasks</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">0</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Follow-ups</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">0</p>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Inspect imported addresses, linked owners, access notes, and property memory.
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/properties">Open properties</Link>
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -278,7 +298,7 @@ export default function TodayPage() {
         <section>
           <Card>
             <CardHeader>
-              <CardTitle>Team approvals</CardTitle>
+              <CardTitle>Team access</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
@@ -299,63 +319,63 @@ export default function TodayPage() {
       <section>
         <Card>
           <CardHeader>
-            <CardTitle>Today&apos;s work</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">No jobs scheduled for today yet.</p>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => handlePlaceholderAction('Import jobs')}
-            >
-              Import jobs or create your first job
-            </Button>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section>
-        <Card>
-          <CardHeader>
-            <CardTitle>Next Best Step</CardTitle>
+            <CardTitle>Current phase</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Import your Jobber data or capture your first field note to start building your business memory.
+              Week 3 is focused on customer and property UI. The next useful step is validating the Jobber import by browsing those records in-app.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => handlePlaceholderAction('Import customers')}>
-                Import customers
+              <Button asChild variant="outline">
+                <Link href="/customers">Review customers</Link>
               </Button>
-              <Button type="button" variant="outline" onClick={() => handlePlaceholderAction('Capture field note')}>
-                Capture field note
+              <Button asChild variant="outline">
+                <Link href="/properties">Review properties</Link>
               </Button>
             </div>
           </CardContent>
         </Card>
       </section>
-
-      <nav className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <ul className="mx-auto grid w-full max-w-5xl grid-cols-5 text-xs">
-          {['Today', 'Capture', 'Jobs', 'Customers', 'More'].map((item) => (
-            <li key={item} className="flex">
-              <button
-                type="button"
-                className={`min-h-14 w-full px-2 py-3 text-center ${
-                  item === 'Today' ? 'font-semibold text-foreground' : 'text-muted-foreground'
-                }`}
-                onClick={() => {
-                  if (item !== 'Today') {
-                    handlePlaceholderAction(`${item} navigation`);
-                  }
-                }}
-              >
-                {item}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
     </main>
+  );
+}
+
+function SnapshotCard({
+  helper,
+  href,
+  label,
+  value,
+}: {
+  helper: string;
+  href?: string;
+  label: string;
+  value: string;
+}) {
+  const content = (
+    <>
+      <CardHeader className="pb-1">
+        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1">
+        <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">
+          {value}
+        </p>
+        <p className="text-sm text-muted-foreground">{helper}</p>
+      </CardContent>
+    </>
+  );
+
+  if (!href) {
+    return <Card>{content}</Card>;
+  }
+
+  return (
+    <Card className="transition-colors hover:bg-muted/30">
+      <Link href={href} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+        {content}
+      </Link>
+    </Card>
   );
 }

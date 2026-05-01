@@ -12,7 +12,11 @@ export {
   type Property,
 } from './customers';
 export {
+  listProperties,
   getPropertyMemory,
+  type PropertyListCustomerSummary,
+  type PropertyListItem,
+  type PropertyListPage,
   type PropertyGeofence,
   type PropertyMemory,
   type PropertyMemoryJob,
