@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
+import { getMembershipStatus } from '@/lib/auth-routing';
 import { getBrowserSupabase } from '@/lib/supabase';
 
 interface AuthGuardProps {
@@ -20,9 +21,19 @@ export function AuthGuard({ children }: AuthGuardProps) {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
 
-      if (!data.session) {
+      if (!data.session?.user) {
         const redirectPath = encodeURIComponent(pathname || '/today');
         router.replace(`/login?redirectTo=${redirectPath}`);
+        return;
+      }
+
+      const membershipStatus = await getMembershipStatus(
+        supabase,
+        data.session.user.id
+      );
+
+      if (membershipStatus !== 'active') {
+        router.replace('/pending-approval');
         return;
       }
 
@@ -31,12 +42,24 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
     void checkSession();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        const redirectPath = encodeURIComponent(pathname || '/today');
-        router.replace(`/login?redirectTo=${redirectPath}`);
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (!session?.user) {
+          const redirectPath = encodeURIComponent(pathname || '/today');
+          router.replace(`/login?redirectTo=${redirectPath}`);
+          return;
+        }
+
+        const membershipStatus = await getMembershipStatus(
+          supabase,
+          session.user.id
+        );
+
+        if (membershipStatus !== 'active') {
+          router.replace('/pending-approval');
+        }
       }
-    });
+    );
 
     return () => {
       subscription.subscription.unsubscribe();

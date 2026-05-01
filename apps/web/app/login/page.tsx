@@ -7,6 +7,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  getPostAuthRedirectPath,
+  normalizeRedirectPath,
+} from '@/lib/auth-routing';
 import { getBrowserSupabase } from '@/lib/supabase';
 
 function LoginForm() {
@@ -18,7 +22,7 @@ function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
-  const redirectTo = searchParams.get('redirectTo') || '/today';
+  const redirectTo = normalizeRedirectPath(searchParams.get('redirectTo'));
 
   useEffect(() => {
     const supabase = getBrowserSupabase();
@@ -27,7 +31,12 @@ function LoginForm() {
       const { data } = await supabase.auth.getSession();
 
       if (data.session) {
-        router.replace(redirectTo);
+        const destination = await getPostAuthRedirectPath(
+          supabase,
+          data.session.user.id,
+          redirectTo
+        );
+        router.replace(destination);
         return;
       }
 
@@ -44,7 +53,7 @@ function LoginForm() {
     setStatus(null);
 
     const supabase = getBrowserSupabase();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -55,7 +64,12 @@ function LoginForm() {
       return;
     }
 
-    router.replace(redirectTo);
+    const destination = await getPostAuthRedirectPath(
+      supabase,
+      data.user.id,
+      redirectTo
+    );
+    router.replace(destination);
   };
 
   if (isCheckingSession) {
@@ -122,6 +136,13 @@ function LoginForm() {
           {isSubmitting ? 'Signing in...' : 'Sign in'}
         </Button>
       </form>
+
+      <div className="text-sm text-muted-foreground">
+        New to Premier?{' '}
+        <Link className="underline-offset-4 hover:underline" href="/sign-up">
+          Create your account
+        </Link>
+      </div>
 
       {status ? <p className="text-sm text-red-600">{status}</p> : null}
     </main>
