@@ -1,5 +1,6 @@
 'use client'; // Client component required for session-aware Supabase reads and sign-out interactions.
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -8,12 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getBrowserSupabase } from '@/lib/supabase';
 
 interface TodayState {
-  userEmail: string;
+  canManageTeam: boolean;
+  customerCount: number;
   firstName: string;
+  jobCount: number;
   orgName: string;
   orgRole: string;
-  customerCount: number;
-  jobCount: number;
+  pendingApprovalCount: number;
+  userEmail: string;
 }
 
 const quickActions = [
@@ -74,12 +77,32 @@ export default function TodayPage() {
         'name' in membership.organizations
           ? String(membership.organizations.name)
           : 'Unknown org';
+      const canManageTeam =
+        membership.role === 'owner' || membership.role === 'admin';
 
       const [customersResult, jobsResult, profileResult] = await Promise.all([
         supabase.from('customers').select('*', { count: 'exact', head: true }).eq('org_id', membership.org_id),
         supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('org_id', membership.org_id),
         supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle(),
       ]);
+
+      let pendingApprovalCount = 0;
+
+      if (canManageTeam) {
+        const pendingMembersResult = await supabase
+          .from('org_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('org_id', membership.org_id)
+          .eq('status', 'pending');
+
+        if (pendingMembersResult.error) {
+          setError(pendingMembersResult.error.message);
+          setIsLoading(false);
+          return;
+        }
+
+        pendingApprovalCount = pendingMembersResult.count || 0;
+      }
 
       if (customersResult.error || jobsResult.error) {
         setError(customersResult.error?.message || jobsResult.error?.message || 'Failed to load counts.');
@@ -93,12 +116,14 @@ export default function TodayPage() {
       const resolvedFirstName = firstNameFromProfile ?? firstNameFromEmail ?? 'there';
 
       setData({
+        canManageTeam,
         userEmail: user.email || 'No email found',
         firstName: resolvedFirstName,
         orgName: orgNameValue,
         orgRole: membership.role,
         customerCount: customersResult.count || 0,
         jobCount: jobsResult.count || 0,
+        pendingApprovalCount,
       });
       setIsLoading(false);
     };
@@ -248,6 +273,28 @@ export default function TodayPage() {
           </Card>
         </div>
       </section>
+
+      {data?.canManageTeam ? (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Team approvals</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {data.pendingApprovalCount === 0
+                  ? 'No staff accounts are waiting for approval.'
+                  : `${data.pendingApprovalCount} staff account${
+                      data.pendingApprovalCount === 1 ? '' : 's'
+                    } waiting for approval.`}
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/team">Manage team access</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
 
       <section>
         <Card>
