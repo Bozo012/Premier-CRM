@@ -6,6 +6,21 @@ Format: each decision is dated. Most recent at the top.
 
 ---
 
+## 2026-04-30: Contractor/staff auth moves to email + password; customer magic links stay separate
+
+**Context:** Magic links were acceptable for early scaffolding, but they add friction for Kevin's day-to-day contractor workflow in the field. The app now needs a faster contractor sign-in path without giving up customer-facing magic-link flows later.
+
+**Decision:** Use Supabase Auth email + password for contractor/staff login on the main app. Keep customer-facing magic links as a separate capability for quote, invoice, and portal access. Existing contractor accounts created during the magic-link phase transition to passwords through the password reset flow.
+
+**Alternatives considered:**
+- Keep magic links for everyone (too much friction on repeated contractor sign-ins)
+- Google-only login (good UX, but adds provider coupling and should remain optional later)
+- Passkeys-first (promising, but still too new for this project's primary auth path)
+
+**Reasoning:** Email + password is the most stable low-friction contractor flow Supabase supports today. It works cleanly with the current SSR cookie session setup, doesn't require schema changes, and keeps customer portal magic links available for the public side where passwordless links are the better fit.
+
+---
+
 ## 2026-04-25: Tailwind CSS 3.4.x (v3-lts) over 4.x
 
 **Context:** Phase 0 Step 2 required Tailwind CSS. Tailwind 4 is the current `latest` on npm (4.2.4 as of this writing). shadcn/ui is in the process of migrating to Tailwind 4 but the migration removes `tailwind.config.ts` in favour of CSS-only configuration, and the shadcn component generation path for v4 is still shifting.

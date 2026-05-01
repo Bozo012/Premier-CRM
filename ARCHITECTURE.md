@@ -188,7 +188,7 @@ premier-crm/
 
 ## Authentication
 
-- **Web:** Supabase Auth with magic link. Email-only, no passwords.
+- **Web (contractor/staff):** Supabase Auth with email + password, stored in SSR cookies for shared browser/server sessions.
 - **Customer portal:** Magic link tokens stored in `magic_link_tokens` table, scoped to specific quote/invoice/job. Single-use, 30-day default expiry.
 - **Mobile:** Supabase Auth, persistent token in secure storage.
 - **API:** Bearer token from Supabase Auth session.

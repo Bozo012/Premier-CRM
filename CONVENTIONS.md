@@ -11,7 +11,7 @@
 - **State:** Server components by default. Client components only when interactivity demands it (`"use client"` directive must include a comment explaining why).
 - **Forms:** React Hook Form + Zod schemas (shared across client validation and server validation).
 - **Validation:** Every server action validates input with Zod. Always.
-- **Auth:** Supabase Auth with magic links. RLS enforced at database level on every table.
+- **Auth:** Supabase Auth with email + password for contractor/staff flows. Customer-facing magic links are allowed only for portal-style access. RLS enforced at database level on every table.
 - **Package manager:** `pnpm` only. `npm install` and `yarn add` are forbidden.
 - **Testing:** Vitest for unit/integration. Playwright for e2e. Tests live next to code (`foo.ts` + `foo.test.ts`).
 - **Mobile:** PWA first. Native React Native (Expo) deferred to Phase 4. See `MOBILE-STRATEGY.md`.
