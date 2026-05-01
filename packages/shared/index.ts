@@ -6,4 +6,10 @@ export {
   type CustomerArchetype,
   ListCustomersArgsSchema,
   type ListCustomersArgs,
+  TeamMemberApprovalSchema,
+  TeamMemberApprovalRoleSchema,
+  TeamMemberApprovalStatusSchema,
+  type TeamMemberApproval,
+  type TeamMemberApprovalRole,
+  type TeamMemberApprovalStatus,
 } from './schemas';
