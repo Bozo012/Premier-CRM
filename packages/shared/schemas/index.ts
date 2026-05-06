@@ -18,3 +18,7 @@ export {
   TeamMemberInviteSchema,
   type TeamMemberInvite,
 } from './team-member-invite';
+export {
+  QuoteRequestPayloadSchema,
+  type QuoteRequestPayload,
+} from './quote-request-payload';
