@@ -6,6 +6,101 @@ Format: each decision is dated. Most recent at the top.
 
 ---
 
+## 2026-05-03: Invite tokens expire 30 days, regenerable; self-signup is removed entirely
+
+**Context:** The 2026-04-30 decision established owner-created invites as the new account-creation path, but kept self-signup-plus-approval as "a compatibility path for legacy self-signups." That compatibility path now needs to disappear: keeping a public signup endpoint open invites scraper accounts and there is no actual use case for it. With the invite flow about to ship in Phase 1.5, we need explicit rules for invite lifetime and acceptance.
+
+**Decision:** Invite tokens expire 30 days after issue. Owner can regenerate an unaccepted invite to extend expiration; regeneration produces a new token and invalidates the old one. The `/sign-up` route, the `/pending-approval` waiting room, and the `handle_new_user()` self-association trigger are removed in a follow-up PR. Supabase Auth's "Allow new user signups" flag is also disabled at the dashboard level as belt-and-suspenders.
+
+**Alternatives considered:**
+- 7-day expiry (tighter security but more "expired, please re-request" friction)
+- Open-ended expiry (simpler but tokens become long-lived secrets sitting in inboxes forever)
+- Keep self-signup but lock it behind an org-level allowlist (more code than the use case warrants)
+
+**Reasoning:** 30 days matches typical invite lifetimes at established SaaS tools and gives a busy contractor a realistic window to act after seeing the email, while keeping tokens short enough that a forgotten invite isn't a permanent attack surface. Regeneration handles edge cases cleanly. Removing self-signup tightens the trust model to "only people Kevin invited can have an account," which is the right model for a small contractor business.
+
+**Trade-off accepted:** Owner has to be reachable to issue invites; no self-service onboarding. This is a feature, not a regression.
+
+---
+
+## 2026-05-03: Internal team roles are owner / contractor / employee
+
+**Context:** With contractor email/password login + owner-created invites landing, the role list inside `org_members` needs to be explicit so invite UI, RLS policies, and permission checks can be coherent. The schema's `user_role` enum had been left open during early scaffolding.
+
+**Decision:** Three internal roles. `owner` (full admin: invite/remove members, configure org settings, billing). `contractor` (Kevin or any subcontractor doing field work; read/write on customers/jobs/quotes). `employee` (technician or office staff; same as contractor today, with future room for finer permissions). Customer-facing access is NOT a role — see the separate `magic_link_tokens` decision below.
+
+**Alternatives considered:**
+- Two roles (`owner` and `staff`) — simpler but loses the contractor/employee distinction that becomes meaningful when subcontractors join
+- Five roles, separating `subcontractor` from `office_admin` — overshoot for current scale; can split later
+
+**Reasoning:** Three roles match the actual organizational shape Kevin is planning toward (owner, field crew, office help). Each maps to a distinguishable RLS policy boundary. Customer is correctly excluded — it's a different auth path entirely.
+
+**Trade-off accepted:** `contractor` and `employee` have nearly-identical permissions today. The distinction becomes load-bearing later (e.g., if employees see internal time-tracking that subcontractors shouldn't). Easier to start distinguished than migrate apart later.
+
+---
+
+## 2026-05-03: Customer-facing authentication uses magic_link_tokens, not org_members
+
+**Context:** With contractor login standardizing on email/password and customer-facing surfaces requiring passwordless access (one-time quote review, invoice payment, portal viewing), there was a question about whether to model customers as a fourth `org_members` role or to keep customer auth in a separate path.
+
+**Decision:** Customers are NOT members of `org_members`. Customer-facing auth goes through the existing `magic_link_tokens` table (introduced in migration 0003), scoped per-resource (per-quote, per-invoice, per-portal-account). Internal team roles in `org_members` stay strictly internal: owner, contractor, employee.
+
+**Alternatives considered:**
+- Customer as a fourth `org_members` role. Single auth flow for everyone, but RLS gets complex (customers must see only their own data; employees see all customers; etc.) and the conceptual model muddies — customers aren't team members.
+
+**Reasoning:** Customers are external stakeholders with scoped resource access, not team members with broad org access. The schema already models them this way (`magic_link_tokens` has been there since migration 0003). Conflating both into `org_members` would force RLS policies to do a job better handled by token scoping, with no offsetting UX gain.
+
+**Trade-off accepted:** Two auth surfaces to maintain (cookie sessions for staff, token URLs for customers). The two are fully independent so they evolve separately without coupling.
+
+---
+
+## 2026-05-03: Resend transactional email uses `mail.ppmnky.com` subdomain, not the apex
+
+**Context:** Resend domain verification needs SPF, DKIM, and DMARC TXT records. The apex `ppmnky.com` already has Google Workspace's SPF for `kevinsommers@ppmnky.com` (`v=spf1 include:_spf.google.com ...`). Only one SPF record is allowed per host, so adding Resend on the apex would mean editing the existing record to also include Resend — which risks breaking inbound mail to the Workspace inbox if anything is fat-fingered.
+
+**Decision:** Verify Resend on `mail.ppmnky.com`. Resend's SPF/DKIM/DMARC live on the subdomain; the apex SPF is left untouched. Outbound transactional email sends from addresses like `quotes@mail.ppmnky.com`, `noreply@mail.ppmnky.com`, and the planned `agent@mail.ppmnky.com`. Reply-to on customer emails points to `kevin@ppmnky.com` so replies still land in the Google Workspace inbox.
+
+**Alternatives considered:**
+- Use the apex `ppmnky.com` directly. Cleaner sender addresses (`quotes@ppmnky.com`) but requires merging Google's SPF include with Resend's into a single TXT record — any error there breaks Workspace email.
+
+**Reasoning:** Subdomain delegation is the industry-standard pattern for transactional mail (Stripe, GitHub, Linear, etc. all use `*.<domain>`-style sender domains). Reputation isolation: damage on one subdomain doesn't affect the other. Cleaner mental model: personal/business mail on apex, system mail on `mail.`.
+
+**Trade-off accepted:** Customer-visible sender addresses contain `mail.ppmnky.com` rather than `ppmnky.com`. A friendly From-name and a reply-to at the apex mostly conceals this.
+
+---
+
+## 2026-05-03: Marketing site lives as a separate Vercel project under ppmnky.com
+
+**Context:** The Wix-hosted marketing site at ppmnky.com had multiple long-standing issues (broad service scope, weak SEO, awkward intake flow) that Wix's templates couldn't resolve. With the CRM already deployed as a Next.js app on Vercel, the question was whether to extend the CRM project to host marketing pages or to stand up the marketing site as its own deployable.
+
+**Decision:** Marketing lives as its own Vercel project (Vite + React + react-router-dom), separate repo, deployed independently. Three subdomains share the apex once DNS settles at Porkbun: `ppmnky.com` and `www.ppmnky.com` → marketing site, `app.ppmnky.com` → CRM (`@premier/web`), `portal.ppmnky.com` → reserved for the Phase 2 customer portal. The marketing form integrates with the CRM via a public POST endpoint at `app.ppmnky.com/api/v1/quote-requests` (planned Phase 1.5).
+
+**Alternatives considered:**
+- Bundle marketing pages into the CRM Next.js app at the apex. Saves a Vercel project but mixes content lifecycles, deploy cadences, and audience-specific concerns; SEO and marketing iteration would always be hostage to CRM deploys.
+- Keep Wix indefinitely. The Wix DNS panel and HTML embed sandbox proved too restrictive for the integrations the CRM needs (custom POST endpoints, native form styling).
+
+**Reasoning:** Marketing and CRM serve different audiences (prospects vs operators), have different content lifecycles (site copy iterates monthly; CRM iterates daily), and have different SEO concerns. Two projects sharing one Vercel account and one domain registrar is the lowest-friction split.
+
+**Trade-off accepted:** Two repos to maintain. The marketing form integration with the CRM happens via the public quote-request endpoint, which is also work we'd need anyway for the Jobber-widget replacement, so it's not net-new cost.
+
+---
+
+## 2026-05-03: Domain registrar moved from Wix to Porkbun
+
+**Context:** ppmnky.com was previously registered through Wix, with DNS managed in Wix Studio's DNS panel. The panel was awkward for adding the records needed for Vercel custom domains and Resend domain verification, and Wix's pointing-method options conflicted with using the apex for marketing while pointing subdomains elsewhere.
+
+**Decision:** Transfer the domain registration to Porkbun and use Porkbun's DNS panel as the single source of truth for all DNS records.
+
+**Alternatives considered:**
+- Stay on Wix as the registrar but change DNS pointing method. Workable for some patterns but Wix's UI made it hard to mix CNAMEs for subdomains with apex pointing to Wix's hosting. Future flexibility was poor.
+- Cloudflare. Excellent DNS panel and free WHOIS privacy, but adds another vendor relationship; Porkbun is sufficient at this scale and has comparable UX.
+
+**Reasoning:** Porkbun has a clean DNS UI, free WHOIS privacy, fast propagation, and broad record-type support. Single panel for all DNS work simplifies the Vercel + Resend + future-portal subdomain plan.
+
+**Trade-off accepted:** Transfer takes 5–7 days during which DNS work is paused. All foundational subdomain setup (Vercel `app.`, Resend `mail.`) waits on completion.
+
+---
+
 ## 2026-04-30: Contractor/staff auth uses email + password with owner-created invites; customer magic links stay separate
 
 **Context:** Magic links were acceptable for early scaffolding, but they add friction for Kevin's day-to-day contractor workflow in the field. The app now needs a faster contractor sign-in path without giving up customer-facing magic-link flows later.
