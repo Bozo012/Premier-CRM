@@ -1843,7 +1843,6 @@ export type Database = {
           joined_at: string
           org_id: string
           role: Database["public"]["Enums"]["user_role"]
-          status: string
           user_id: string
         }
         Insert: {
@@ -1851,7 +1850,6 @@ export type Database = {
           joined_at?: string
           org_id: string
           role?: Database["public"]["Enums"]["user_role"]
-          status?: string
           user_id: string
         }
         Update: {
@@ -1859,7 +1857,6 @@ export type Database = {
           joined_at?: string
           org_id?: string
           role?: Database["public"]["Enums"]["user_role"]
-          status?: string
           user_id?: string
         }
         Relationships: [

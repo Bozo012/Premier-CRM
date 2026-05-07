@@ -7,12 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
-import { InviteTeamMemberForm } from './_components/invite-team-member-form';
-import {
-  TeamApprovalList,
-  type PendingTeamMember,
-} from './_components/team-approval-list';
-
 type OrgMember = Database['public']['Tables']['org_members']['Row'];
 type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 
@@ -23,7 +17,6 @@ interface TeamMemberView {
   joinedLabel: string;
   phone: string | null;
   role: OrgMember['role'];
-  status: string;
 }
 
 export default async function TeamPage() {
@@ -41,7 +34,7 @@ export default async function TeamPage() {
   const { data: currentMembership, error: currentMembershipError } =
     await supabase
       .from('org_members')
-      .select('org_id, role, status')
+      .select('org_id, role')
       .eq('user_id', user.id)
       .limit(1)
       .maybeSingle();
@@ -62,10 +55,6 @@ export default async function TeamPage() {
     );
   }
 
-  if (currentMembership.status !== 'active') {
-    redirect('/pending-approval');
-  }
-
   if (!canManageTeam(currentMembership.role)) {
     return (
       <TeamPageShell>
@@ -75,7 +64,7 @@ export default async function TeamPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Only owners and admins can approve new team members.
+              Only owners and admins can view team access.
             </p>
             <Button asChild variant="outline">
               <Link href="/today">Back to dashboard</Link>
@@ -88,7 +77,7 @@ export default async function TeamPage() {
 
   const { data: members, error: membersError } = await supabase
     .from('org_members')
-    .select('id, user_id, role, status, joined_at, org_id')
+    .select('id, user_id, role, joined_at, org_id')
     .eq('org_id', currentMembership.org_id)
     .order('joined_at', { ascending: false });
 
@@ -129,75 +118,31 @@ export default async function TeamPage() {
     buildTeamMemberView(member, profileById.get(member.user_id), emailByUserId)
   );
 
-  const pendingMembers = teamMembers.filter(
-    (member): member is PendingTeamMember & TeamMemberView =>
-      member.status === 'pending'
-  );
-  const activeMembers = teamMembers.filter((member) => member.status === 'active');
-  const rejectedMembers = teamMembers.filter(
-    (member) => member.status === 'rejected'
-  );
-
   return (
     <TeamPageShell>
-      <section className="grid gap-3 md:grid-cols-3">
-        <SummaryCard label="Pending" value={pendingMembers.length} />
-        <SummaryCard label="Active" value={activeMembers.length} />
-        <SummaryCard label="Rejected" value={rejectedMembers.length} />
+      <section className="grid gap-3 md:grid-cols-2">
+        <SummaryCard label="Team members" value={teamMembers.length} />
+        <SummaryCard
+          label="Admins + owners"
+          value={
+            teamMembers.filter(
+              (member) => member.role === 'owner' || member.role === 'admin'
+            ).length
+          }
+        />
       </section>
 
       <section className="space-y-3">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Invite team member
-          </h2>
+          <h2 className="text-lg font-semibold tracking-tight">Current team</h2>
           <p className="text-sm text-muted-foreground">
-            Send an owner-created invite email. Invited users set their password
-            from the email link and become active immediately.
-          </p>
-        </div>
-
-        <Card>
-          <CardContent className="pt-6">
-            <InviteTeamMemberForm />
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="space-y-3">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Pending approvals
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Legacy self-signups or manually held memberships still appear here
-            until an owner or admin approves them.
-          </p>
-        </div>
-
-        {pendingMembers.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">
-                No team members are waiting for approval.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <TeamApprovalList members={pendingMembers} />
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">Active team</h2>
-          <p className="text-sm text-muted-foreground">
-            Current contractor and staff accounts with app access.
+            Accounts listed here already have access through their organization
+            membership. New accounts are created manually until owner invites land.
           </p>
         </div>
 
         <div className="space-y-3">
-          {activeMembers.map((member) => (
+          {teamMembers.map((member) => (
             <Card key={member.id}>
               <CardContent className="flex flex-col gap-1 pt-6 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
@@ -218,41 +163,6 @@ export default async function TeamPage() {
           ))}
         </div>
       </section>
-
-      {rejectedMembers.length > 0 ? (
-        <section className="space-y-3">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold tracking-tight">
-              Rejected requests
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Rejected users cannot enter the app until their membership is
-              changed manually.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {rejectedMembers.map((member) => (
-              <Card key={member.id}>
-                <CardContent className="flex flex-col gap-1 pt-6 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground">{member.fullName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {member.email ?? 'Email unavailable'}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Requested {member.joinedLabel}
-                    </p>
-                  </div>
-                  <p className="text-sm capitalize text-muted-foreground">
-                    {member.role}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-      ) : null}
     </TeamPageShell>
   );
 }
@@ -267,8 +177,7 @@ function TeamPageShell({ children }: { children: React.ReactNode }) {
               Team access
             </h1>
             <p className="text-sm text-muted-foreground">
-              Approve contractor and staff accounts before they can access the
-              app.
+              Review the manually-created accounts that can access the app.
             </p>
           </div>
           <Button asChild variant="outline">
@@ -319,7 +228,7 @@ function canManageTeam(role: OrgMember['role']): boolean {
 }
 
 function buildTeamMemberView(
-  member: Pick<OrgMember, 'id' | 'joined_at' | 'role' | 'status' | 'user_id'>,
+  member: Pick<OrgMember, 'id' | 'joined_at' | 'role' | 'user_id'>,
   profile: Pick<UserProfile, 'full_name' | 'phone'> | undefined,
   emailByUserId: Map<string, string>
 ): TeamMemberView {
@@ -330,7 +239,6 @@ function buildTeamMemberView(
     joinedLabel: formatDate(member.joined_at),
     phone: profile?.phone ?? null,
     role: member.role,
-    status: member.status,
   };
 }
 
