@@ -90,9 +90,8 @@ function LoginForm() {
           Contractor and staff accounts use email and password.
         </p>
         <p className="text-sm text-muted-foreground">
-          If your account was created during the magic-link phase, or you were
-          invited by an owner, use password reset or your invite email once to
-          set your password.
+          If your account was created during the magic-link phase, use password
+          reset once to set your password.
         </p>
       </div>
 
@@ -139,8 +138,8 @@ function LoginForm() {
       </form>
 
       <p className="text-sm text-muted-foreground">
-        Need a contractor or staff account? Ask an owner or admin to invite you
-        from the team access screen.
+        Need a contractor or staff account? Ask an owner or admin to create one
+        manually while invites are being rebuilt.
       </p>
 
       {status ? <p className="text-sm text-red-600">{status}</p> : null}

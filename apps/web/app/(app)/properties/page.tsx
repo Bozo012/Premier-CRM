@@ -31,7 +31,6 @@ export default async function PropertiesPage({
     .from('org_members')
     .select('org_id')
     .eq('user_id', user.id)
-    .eq('status', 'active')
     .limit(1)
     .maybeSingle();
 
