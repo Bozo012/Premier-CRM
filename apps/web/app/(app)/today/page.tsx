@@ -15,7 +15,6 @@ interface TodayState {
   jobCount: number;
   orgName: string;
   orgRole: string;
-  pendingApprovalCount: number;
   propertyCount: number;
   userEmail: string;
 }
@@ -76,9 +75,8 @@ export default function TodayPage() {
 
       const { data: membership, error: membershipError } = await supabase
         .from('org_members')
-        .select('org_id, role, status, organizations(name)')
+        .select('org_id, role, organizations(name)')
         .eq('user_id', user.id)
-        .eq('status', 'active')
         .limit(1)
         .maybeSingle();
 
@@ -89,7 +87,7 @@ export default function TodayPage() {
       }
 
       if (!membership?.org_id) {
-        setError('No active organization membership found for this user.');
+        setError('No organization membership found for this user.');
         setIsLoading(false);
         return;
       }
@@ -124,24 +122,6 @@ export default function TodayPage() {
             .maybeSingle(),
         ]);
 
-      let pendingApprovalCount = 0;
-
-      if (canManageTeam) {
-        const pendingMembersResult = await supabase
-          .from('org_members')
-          .select('*', { count: 'exact', head: true })
-          .eq('org_id', membership.org_id)
-          .eq('status', 'pending');
-
-        if (pendingMembersResult.error) {
-          setError(pendingMembersResult.error.message);
-          setIsLoading(false);
-          return;
-        }
-
-        pendingApprovalCount = pendingMembersResult.count || 0;
-      }
-
       if (customersResult.error || propertiesResult.error || jobsResult.error) {
         setError(
           customersResult.error?.message ||
@@ -171,7 +151,6 @@ export default function TodayPage() {
         jobCount: jobsResult.count || 0,
         orgName: orgNameValue,
         orgRole: membership.role,
-        pendingApprovalCount,
         propertyCount: uniquePropertyCount,
         userEmail: user.email || 'No email found',
       });
@@ -319,14 +298,12 @@ export default function TodayPage() {
           <SnapshotCard
             helper={
               data?.canManageTeam
-                ? 'Team accounts waiting for approval'
+                ? 'Review app access'
                 : 'Imported customer + property records'
             }
-            label={data?.canManageTeam ? 'Approvals' : 'Imported records'}
+            label={data?.canManageTeam ? 'Team access' : 'Imported records'}
             value={String(
-              data?.canManageTeam
-                ? data.pendingApprovalCount
-                : (data?.customerCount ?? 0) + (data?.propertyCount ?? 0)
+              (data?.customerCount ?? 0) + (data?.propertyCount ?? 0)
             )}
           />
         </div>
@@ -375,14 +352,10 @@ export default function TodayPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                {data.pendingApprovalCount === 0
-                  ? 'No staff accounts are waiting for approval.'
-                  : `${data.pendingApprovalCount} staff account${
-                      data.pendingApprovalCount === 1 ? '' : 's'
-                    } waiting for approval.`}
+                Review manually-created team accounts with app access.
               </p>
               <Button asChild variant="outline">
-                <Link href="/team">Manage team access</Link>
+                <Link href="/team">View team access</Link>
               </Button>
             </CardContent>
           </Card>
