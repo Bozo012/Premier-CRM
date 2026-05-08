@@ -22,3 +22,8 @@ export {
   QuoteRequestPayloadSchema,
   type QuoteRequestPayload,
 } from './quote-request-payload';
+
+export {
+  ServiceRequestPayloadSchema,
+  type ServiceRequestPayload,
+} from './service-request-payload';

@@ -28,3 +28,8 @@ export {
   createQuoteRequest,
   type CreateQuoteRequestResult,
 } from './quote-requests';
+
+export {
+  createServiceRequest,
+  type CreateServiceRequestResult,
+} from './service-requests';

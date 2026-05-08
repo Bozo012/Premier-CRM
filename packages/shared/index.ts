@@ -16,4 +16,6 @@ export {
   type TeamMemberInvite,
   QuoteRequestPayloadSchema,
   type QuoteRequestPayload,
+  ServiceRequestPayloadSchema,
+  type ServiceRequestPayload,
 } from './schemas';
