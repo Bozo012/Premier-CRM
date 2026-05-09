@@ -12,8 +12,7 @@ The first CRM-controlled website content is limited to public-safe, low-risk con
 
 - Global public contact and hero settings:
   - display phone number
-  - phone URI
-  - public email address
+  - normalized E.164 phone number
   - hero headline and subheadline
   - primary CTA label and path
   - public availability text
@@ -78,13 +77,13 @@ The first migration creates three tables and enables RLS on each:
 - `website_promotions`
 - `website_service_highlights`
 
-Public policies are select-only:
+Anon policies are select-only:
 
 - settings are readable only when `is_published = true`
 - promotions are readable only when `is_active = true` and the current time is within the optional `starts_at`/`ends_at` window
 - service highlights are readable only when `is_active = true`
 
-The migration grants `SELECT` to `anon` and `authenticated` for these website tables only. It does not grant public access to any existing CRM tables and does not add write policies. Supabase's service role can still perform operational maintenance, while authenticated admin CRUD policies are intentionally deferred until the CRM admin UI is designed.
+The migration grants `SELECT` to `anon` for these website tables only, and the select policies are scoped to the `anon` role. This foundation slice does not add a separate authenticated grant or any write policies. It does not grant public access to any existing CRM tables. Supabase's service role can still perform operational maintenance, while authenticated admin CRUD policies are intentionally deferred until the CRM admin UI is designed.
 
 ## Fallback strategy
 
@@ -95,7 +94,7 @@ The website integration should treat CRM-backed settings as an enhancement, not 
 3. If Supabase is unavailable, returns an empty result, or returns invalid content, render the website repo's existing static fallback constants.
 4. Log or surface fetch failures in the website's normal observability path without blocking public page rendering.
 
-The fallback constants should stay in the website repo until the CRM admin editing flow and production content are stable.
+The fallback constants should stay in the website repo until the CRM admin editing flow and production content are stable. Phone links should be derived in the website from `phone_e164` (for example, `tel:` and `sms:` URLs) rather than stored as URI strings in the CRM schema.
 
 ## Admin UI scope
 
@@ -104,7 +103,7 @@ The future CRM admin UI should be structured, not visual:
 - A single website settings form for the singleton public settings row.
 - A promotions list with create/edit/archive controls, placement keys, active windows, and priority.
 - A service highlights list with active toggles and drag-free numeric ordering.
-- Field-level validation for URLs, CTA paths, phone URI format, SEO length guidance, and allowed icon keys/placement keys.
+- Field-level validation for URLs, CTA paths, E.164 phone format, SEO length guidance, and allowed icon keys/placement keys.
 - Preview links to the public website when practical.
 
 The admin UI should not include freeform page layout editing, custom HTML, arbitrary scripts, blog authoring, FAQ management, customer portal settings, or private CRM data embedding.

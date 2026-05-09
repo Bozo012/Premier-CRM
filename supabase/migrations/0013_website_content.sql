@@ -14,8 +14,7 @@ CREATE TABLE public.website_settings (
   org_id              UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   singleton_key       TEXT NOT NULL DEFAULT 'default',
   phone_display       TEXT,
-  phone_uri           TEXT,
-  email               CITEXT,
+  phone_e164          TEXT,
   hero_headline       TEXT,
   hero_subheadline    TEXT,
   primary_cta_label   TEXT,
@@ -30,8 +29,8 @@ CREATE TABLE public.website_settings (
 
   CONSTRAINT website_settings_org_singleton_unique UNIQUE (org_id, singleton_key),
   CONSTRAINT website_settings_singleton_key_check CHECK (singleton_key <> ''),
-  CONSTRAINT website_settings_phone_uri_check CHECK (
-    phone_uri IS NULL OR phone_uri ~ '^tel:[+0-9(). -]+$'
+  CONSTRAINT website_settings_phone_e164_check CHECK (
+    phone_e164 IS NULL OR phone_e164 ~ '^\+[1-9][0-9]{1,14}$'
   ),
   CONSTRAINT website_settings_primary_cta_path_check CHECK (
     primary_cta_path IS NULL
@@ -147,11 +146,13 @@ ALTER TABLE public.website_service_highlights ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "public_select_published_website_settings"
   ON public.website_settings
   FOR SELECT
+  TO anon
   USING (is_published = true);
 
 CREATE POLICY "public_select_active_website_promotions"
   ON public.website_promotions
   FOR SELECT
+  TO anon
   USING (
     is_active = true
     AND (starts_at IS NULL OR starts_at <= now())
@@ -161,11 +162,12 @@ CREATE POLICY "public_select_active_website_promotions"
 CREATE POLICY "public_select_active_website_service_highlights"
   ON public.website_service_highlights
   FOR SELECT
+  TO anon
   USING (is_active = true);
 
 -- Public website content is safe for anonymous reads only through the explicit
 -- policies above. No INSERT/UPDATE/DELETE grants or internal admin write
 -- policies are added in this foundation slice.
-GRANT SELECT ON public.website_settings TO anon, authenticated;
-GRANT SELECT ON public.website_promotions TO anon, authenticated;
-GRANT SELECT ON public.website_service_highlights TO anon, authenticated;
+GRANT SELECT ON public.website_settings TO anon;
+GRANT SELECT ON public.website_promotions TO anon;
+GRANT SELECT ON public.website_service_highlights TO anon;
