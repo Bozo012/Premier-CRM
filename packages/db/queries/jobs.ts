@@ -13,18 +13,38 @@ export type Job = Database['public']['Tables']['jobs']['Row'];
 
 type CustomerRow = Pick<
   Database['public']['Tables']['customers']['Row'],
-  'company_name' | 'display_name' | 'first_name' | 'id' | 'last_name'
+  | 'company_name'
+  | 'display_name'
+  | 'email'
+  | 'first_name'
+  | 'id'
+  | 'last_name'
+  | 'notes'
+  | 'phone_primary'
+  | 'preferred_channel'
 >;
 
 type PropertyRow = Pick<
   Database['public']['Tables']['properties']['Row'],
-  'address_line_1' | 'address_line_2' | 'city' | 'id' | 'state' | 'zip'
+  | 'access_notes'
+  | 'address_line_1'
+  | 'address_line_2'
+  | 'city'
+  | 'gate_code'
+  | 'id'
+  | 'notes'
+  | 'parking_notes'
+  | 'property_type'
+  | 'state'
+  | 'zip'
 >;
 
 type ServiceCategoryRow = Pick<
   Database['public']['Tables']['service_categories']['Row'],
   'id' | 'name'
 >;
+
+type JobPhase = Database['public']['Tables']['job_phases']['Row'];
 
 export interface JobListCustomerSummary {
   displayName: string;
@@ -58,16 +78,42 @@ export interface JobListPage {
   total: number;
 }
 
-export interface JobDetailCustomerSummary extends JobListCustomerSummary {}
+export interface JobDetailCustomerSummary extends JobListCustomerSummary {
+  email: string | null;
+  notes: string | null;
+  phonePrimary: string | null;
+  preferredChannel: Database['public']['Enums']['preferred_channel'] | null;
+}
 
-export interface JobDetailPropertySummary extends JobListPropertySummary {}
+export interface JobDetailPropertySummary extends JobListPropertySummary {
+  accessNotes: string | null;
+  gateCode: string | null;
+  notes: string | null;
+  parkingNotes: string | null;
+  propertyType: string | null;
+}
 
 export interface JobDetailCategorySummary extends JobListCategorySummary {}
+
+export interface JobPhaseSummary {
+  actualCost: number | null;
+  actualEnd: string | null;
+  actualStart: string | null;
+  description: string | null;
+  estimatedTotal: number | null;
+  id: string;
+  name: string;
+  scheduledEnd: string | null;
+  scheduledStart: string | null;
+  sortOrder: number | null;
+  status: Database['public']['Enums']['job_status'];
+}
 
 export interface JobDetail {
   category: JobDetailCategorySummary | null;
   customer: JobDetailCustomerSummary | null;
   job: Job;
+  phases: JobPhaseSummary[];
   property: JobDetailPropertySummary | null;
 }
 
@@ -100,6 +146,23 @@ function toCustomerSummary(
   };
 }
 
+function toJobDetailCustomerSummary(
+  customer: CustomerRow | null | undefined
+): JobDetailCustomerSummary | null {
+  if (!customer) {
+    return null;
+  }
+
+  return {
+    displayName: resolveCustomerDisplayName(customer),
+    email: customer.email,
+    id: customer.id,
+    notes: customer.notes,
+    phonePrimary: customer.phone_primary,
+    preferredChannel: customer.preferred_channel,
+  };
+}
+
 function toPropertySummary(
   property: PropertyRow | null | undefined
 ): JobListPropertySummary | null {
@@ -117,6 +180,28 @@ function toPropertySummary(
   };
 }
 
+function toJobDetailPropertySummary(
+  property: PropertyRow | null | undefined
+): JobDetailPropertySummary | null {
+  if (!property) {
+    return null;
+  }
+
+  return {
+    accessNotes: property.access_notes,
+    addressLine1: property.address_line_1,
+    addressLine2: property.address_line_2,
+    city: property.city,
+    gateCode: property.gate_code,
+    id: property.id,
+    notes: property.notes,
+    parkingNotes: property.parking_notes,
+    propertyType: property.property_type,
+    state: property.state,
+    zip: property.zip,
+  };
+}
+
 function toCategorySummary(
   category: ServiceCategoryRow | null | undefined
 ): JobListCategorySummary | null {
@@ -127,6 +212,22 @@ function toCategorySummary(
   return {
     id: category.id,
     name: category.name,
+  };
+}
+
+function toJobPhaseSummary(phase: JobPhase): JobPhaseSummary {
+  return {
+    actualCost: phase.actual_cost,
+    actualEnd: phase.actual_end,
+    actualStart: phase.actual_start,
+    description: phase.description,
+    estimatedTotal: phase.estimated_total,
+    id: phase.id,
+    name: phase.name,
+    scheduledEnd: phase.scheduled_end,
+    scheduledStart: phase.scheduled_start,
+    sortOrder: phase.sort_order,
+    status: phase.status,
   };
 }
 
@@ -262,16 +363,20 @@ export async function getJobById(
     return err(ErrorCode.NOT_FOUND, `Job ${args.jobId} not found`);
   }
 
-  const [customerResult, propertyResult, categoryResult] = await Promise.all([
+  const [customerResult, propertyResult, categoryResult, phasesResult] = await Promise.all([
     client
       .from('customers')
-      .select('id, display_name, company_name, first_name, last_name')
+      .select(
+        'id, display_name, company_name, first_name, last_name, phone_primary, email, preferred_channel, notes'
+      )
       .eq('org_id', args.orgId)
       .eq('id', job.customer_id)
       .maybeSingle(),
     client
       .from('properties')
-      .select('id, address_line_1, address_line_2, city, state, zip')
+      .select(
+        'id, address_line_1, address_line_2, city, state, zip, property_type, access_notes, gate_code, parking_notes, notes'
+      )
       .eq('org_id', args.orgId)
       .eq('id', job.property_id)
       .maybeSingle(),
@@ -283,6 +388,15 @@ export async function getJobById(
           .eq('id', job.category_id)
           .maybeSingle()
       : Promise.resolve({ data: null as ServiceCategoryRow | null, error: null }),
+    client
+      .from('job_phases')
+      .select(
+        'id, name, description, status, scheduled_start, scheduled_end, actual_start, actual_end, estimated_total, actual_cost, sort_order'
+      )
+      .eq('job_id', job.id)
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('scheduled_start', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true }),
   ]);
 
   if (customerResult.error) {
@@ -297,10 +411,17 @@ export async function getJobById(
     return err(ErrorCode.DB_ERROR, categoryResult.error.message);
   }
 
+  if (phasesResult.error) {
+    return err(ErrorCode.DB_ERROR, phasesResult.error.message);
+  }
+
   return ok({
     category: toCategorySummary(categoryResult.data as ServiceCategoryRow | null),
-    customer: toCustomerSummary(customerResult.data as CustomerRow | null),
+    customer: toJobDetailCustomerSummary(customerResult.data as CustomerRow | null),
     job,
-    property: toPropertySummary(propertyResult.data as PropertyRow | null),
+    phases: (phasesResult.data ?? []).map((phase) =>
+      toJobPhaseSummary(phase as JobPhase)
+    ),
+    property: toJobDetailPropertySummary(propertyResult.data as PropertyRow | null),
   });
 }

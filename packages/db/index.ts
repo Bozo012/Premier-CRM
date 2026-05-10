@@ -37,6 +37,7 @@ export {
   type JobDetailCategorySummary,
   type JobDetailCustomerSummary,
   type JobDetailPropertySummary,
+  type JobPhaseSummary,
   type JobListCategorySummary,
   type JobListCustomerSummary,
   type JobListItem,
