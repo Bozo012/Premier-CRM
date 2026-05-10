@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
-import { getJobById } from '@premier/db';
+import { getJobById, type JobPhaseSummary } from '@premier/db';
 import { ErrorCode } from '@premier/shared';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,11 +73,11 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     );
   }
 
-  const { category, customer, job, property } = result.data;
+  const { category, customer, job, phases, property } = result.data;
 
   return (
     <PageShell>
-      <header className="space-y-3">
+      <header className="space-y-4">
         <Link
           href="/jobs"
           className="inline-flex text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -123,18 +123,19 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
           href={property ? `/properties/${property.id}` : undefined}
         />
         <InfoCard
-          label="Financial snapshot"
-          value={formatMoney(job.quoted_total)}
-          helper={`Invoiced ${formatMoney(job.invoiced_total)} · Paid ${formatMoney(job.paid_total)}`}
+          label="Phases"
+          value={String(phases.length)}
+          helper={summarizePhaseState(phases)}
         />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+      <section className="grid gap-4 xl:grid-cols-[1.05fr,0.95fr]">
         <Card>
           <CardHeader>
             <CardTitle>Core job info</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <DetailRow label="Service category" value={category?.name || 'Not set'} />
             <DetailRow label="Status" value={formatEnumLabel(job.status)} />
             <DetailRow label="Priority" value={formatEnumLabel(job.priority)} />
             <DetailRow
@@ -149,19 +150,175 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
               label="Description"
               value={job.description?.trim() || 'No description yet'}
             />
+            <DetailRow
+              label="AI summary"
+              value={job.ai_summary?.trim() || 'No AI summary yet'}
+            />
             <DetailRow label="Closed reason" value={job.closed_reason || 'Not closed'} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Reserved for next phases</CardTitle>
+            <CardTitle>Schedule & financial snapshot</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>Quote, invoice, time tracking, and capture attachments will land here next.</p>
-            <p>This pass keeps the job detail page read-only and focused on core job context.</p>
+          <CardContent className="space-y-3">
+            <DetailRow
+              label="Estimated duration"
+              value={formatDuration(job.estimated_duration_minutes)}
+            />
+            <DetailRow label="Quoted total" value={formatMoney(job.quoted_total)} />
+            <DetailRow label="Invoiced total" value={formatMoney(job.invoiced_total)} />
+            <DetailRow label="Paid total" value={formatMoney(job.paid_total)} />
+            <DetailRow label="Cost total" value={formatMoney(job.cost_total)} />
+            <DetailRow
+              label="Closed at"
+              value={job.closed_at ? formatScheduledAt(job.closed_at) : 'Not closed'}
+            />
           </CardContent>
         </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Linked customer</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {customer ? (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Link
+                    href={`/customers/${customer.id}`}
+                    className="font-medium text-foreground underline-offset-4 hover:underline"
+                  >
+                    {customer.displayName}
+                  </Link>
+                  <p className="text-sm text-muted-foreground">
+                    {formatPreferredChannel(customer.preferredChannel)}
+                  </p>
+                </div>
+                <DetailRow label="Primary phone" value={customer.phonePrimary || 'Not set'} />
+                <DetailRow label="Email" value={customer.email || 'Not set'} />
+                <DetailRow label="Notes" value={customer.notes?.trim() || 'No customer notes'} />
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                This job is missing a visible customer link.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Linked property</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {property ? (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Link
+                    href={`/properties/${property.id}`}
+                    className="font-medium text-foreground underline-offset-4 hover:underline"
+                  >
+                    {formatPropertyAddress(property)}
+                  </Link>
+                  <p className="text-sm text-muted-foreground">
+                    {property.propertyType || 'Property type not set'}
+                  </p>
+                </div>
+                <DetailRow label="Gate code" value={property.gateCode || 'Not set'} />
+                <DetailRow
+                  label="Access notes"
+                  value={property.accessNotes?.trim() || 'No access notes'}
+                />
+                <DetailRow
+                  label="Parking notes"
+                  value={property.parkingNotes?.trim() || 'No parking notes'}
+                />
+                <DetailRow label="Property notes" value={property.notes?.trim() || 'No property notes'} />
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                This job is missing a visible property link.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Phase summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {phases.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No phases are attached to this job yet.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {phases.map((phase) => (
+                  <li key={phase.id} className="rounded-md border p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-foreground">{phase.name}</p>
+                      <StatusBadge status={phase.status} />
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {[
+                        phase.sortOrder !== null ? `Order ${phase.sortOrder}` : null,
+                        formatScheduledWindow(
+                          phase.scheduledStart,
+                          phase.scheduledEnd
+                        ),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                    {phase.description?.trim() ? (
+                      <p className="mt-2 text-sm text-foreground">{phase.description.trim()}</p>
+                    ) : null}
+                    <div className="mt-2 grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
+                      <p>
+                        <span className="font-medium text-foreground">Actual:</span>{' '}
+                        {formatScheduledWindow(phase.actualStart, phase.actualEnd)}
+                      </p>
+                      <p>
+                        <span className="font-medium text-foreground">Estimate:</span>{' '}
+                        {formatMoney(phase.estimatedTotal)}
+                      </p>
+                      <p>
+                        <span className="font-medium text-foreground">Actual cost:</span>{' '}
+                        {formatMoney(phase.actualCost)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <FutureSectionCard
+          title="Quotes"
+          description="Quote creation and sent/approved history will land here next."
+        />
+        <FutureSectionCard
+          title="Invoices"
+          description="Invoice generation and payment status will live here."
+        />
+        <FutureSectionCard
+          title="Time entries"
+          description="Tracked labor and drive time will attach to this job here."
+        />
+        <FutureSectionCard
+          title="Captures"
+          description="Photos, notes, recordings, and vault items will surface here."
+        />
       </section>
     </PageShell>
   );
@@ -233,6 +390,25 @@ function DetailRow({
   );
 }
 
+function FutureSectionCard({
+  description,
+  title,
+}: {
+  description: string;
+  title: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
@@ -301,6 +477,25 @@ function formatMoney(value: number | null) {
   }).format(value);
 }
 
+function formatDuration(value: number | null) {
+  if (value === null) {
+    return 'Not estimated';
+  }
+
+  if (value < 60) {
+    return `${value} minutes`;
+  }
+
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+
+  if (minutes === 0) {
+    return hours === 1 ? '1 hour' : `${hours} hours`;
+  }
+
+  return `${hours}h ${minutes}m`;
+}
+
 function formatScheduledAt(value: string | null) {
   if (!value) {
     return 'Unscheduled';
@@ -332,6 +527,36 @@ function formatEnumLabel(value: string) {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function formatPreferredChannel(value: string | null) {
+  if (!value) {
+    return 'No preferred contact channel';
+  }
+
+  return `${formatEnumLabel(value)} preferred`;
+}
+
+function summarizePhaseState(phases: JobPhaseSummary[]) {
+  if (phases.length === 0) {
+    return 'No phases yet';
+  }
+
+  const inProgressCount = phases.filter((phase) => phase.status === 'in_progress').length;
+  if (inProgressCount > 0) {
+    return inProgressCount === 1
+      ? '1 phase in progress'
+      : `${inProgressCount} phases in progress`;
+  }
+
+  const nextScheduledPhase =
+    phases.find((phase) => Boolean(phase.scheduledStart || phase.scheduledEnd)) ?? null;
+
+  if (nextScheduledPhase) {
+    return `Next: ${nextScheduledPhase.name}`;
+  }
+
+  return 'Phases attached';
 }
 
 function isUuid(value: string): boolean {
