@@ -1,11 +1,19 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
-import { getJobById, type JobPhaseSummary } from '@premier/db';
+import {
+  getJobById,
+  listQuotesForJob,
+  type JobPhaseSummary,
+  type JobQuoteSummary,
+} from '@premier/db';
 import { ErrorCode } from '@premier/shared';
 
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+import { CreateDraftQuoteButton } from '../_components/create-draft-quote-button';
 
 interface JobDetailPageProps {
   params: Promise<{ jobId: string }>;
@@ -56,10 +64,16 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     );
   }
 
-  const result = await getJobById(supabase, {
-    jobId,
-    orgId: membership.org_id,
-  });
+  const [result, quotesResult] = await Promise.all([
+    getJobById(supabase, {
+      jobId,
+      orgId: membership.org_id,
+    }),
+    listQuotesForJob(supabase, {
+      jobId,
+      orgId: membership.org_id,
+    }),
+  ]);
 
   if (!result.success) {
     if (result.code === ErrorCode.NOT_FOUND) {
@@ -73,7 +87,16 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     );
   }
 
+  if (!quotesResult.success) {
+    return (
+      <PageShell>
+        <ErrorPanel>Failed to load job quotes: {quotesResult.error}</ErrorPanel>
+      </PageShell>
+    );
+  }
+
   const { category, customer, job, phases, property } = result.data;
+  const quotes = quotesResult.data;
 
   return (
     <PageShell>
@@ -303,10 +326,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <FutureSectionCard
-          title="Quotes"
-          description="Quote creation and sent/approved history will land here next."
-        />
+        <JobQuotesCard jobId={job.id} quotes={quotes} />
         <FutureSectionCard
           title="Invoices"
           description="Invoice generation and payment status will live here."
@@ -321,6 +341,72 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         />
       </section>
     </PageShell>
+  );
+}
+
+function JobQuotesCard({
+  jobId,
+  quotes,
+}: {
+  jobId: string;
+  quotes: JobQuoteSummary[];
+}) {
+  return (
+    <Card className="md:col-span-2 xl:col-span-1">
+      <CardHeader>
+        <CardTitle>Quotes</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {quotes.length === 0 ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              No quotes are attached to this job yet. Start with a draft quote, then
+              line items and send flow can layer on next.
+            </p>
+            <CreateDraftQuoteButton jobId={jobId} />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <ul className="space-y-3">
+              {quotes.map((quoteSummary) => (
+                <li key={quoteSummary.quote.id} className="rounded-md border p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/quotes/${quoteSummary.quote.id}`}
+                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      {quoteSummary.quote.title?.trim() ||
+                        quoteSummary.quote.quote_number ||
+                        'Untitled quote'}
+                    </Link>
+                    <QuoteStatusBadge status={quoteSummary.quote.status} />
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {[
+                      formatQuoteType(quoteSummary.quote.type),
+                      formatMoney(quoteSummary.quote.total),
+                      `${quoteSummary.lineItemCount} ${
+                        quoteSummary.lineItemCount === 1 ? 'line item' : 'line items'
+                      }`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Updated {formatScheduledAt(quoteSummary.quote.updated_at)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+
+            <Button asChild variant="outline">
+              <Link href={`/quotes/${quotes[0]?.quote.id}`}>Open latest quote</Link>
+            </Button>
+            <CreateDraftQuoteButton jobId={jobId} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -409,6 +495,14 @@ function FutureSectionCard({
   );
 }
 
+function QuoteStatusBadge({ status }: { status: string }) {
+  return (
+    <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+      {formatEnumLabel(status)}
+    </span>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
@@ -475,6 +569,10 @@ function formatMoney(value: number | null) {
     currency: 'USD',
     style: 'currency',
   }).format(value);
+}
+
+function formatQuoteType(value: string) {
+  return formatEnumLabel(value);
 }
 
 function formatDuration(value: number | null) {
