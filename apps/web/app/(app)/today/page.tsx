@@ -356,6 +356,20 @@ export default function TodayPage() {
               </Button>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Service catalog</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Review seeded services, pricing confidence, and current rate ranges.
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/services">Open service catalog</Link>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </section>
 

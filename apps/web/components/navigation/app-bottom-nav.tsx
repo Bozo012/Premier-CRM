@@ -17,6 +17,11 @@ const navItems = [
     label: 'Jobs',
   },
   {
+    href: '/services',
+    isActive: (pathname: string) => pathname.startsWith('/services'),
+    label: 'Services',
+  },
+  {
     href: '/customers',
     isActive: (pathname: string) => pathname.startsWith('/customers'),
     label: 'Customers',
@@ -33,7 +38,7 @@ export function AppBottomNav() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <ul className="mx-auto grid w-full max-w-5xl grid-cols-4 text-xs">
+      <ul className="mx-auto grid w-full max-w-5xl grid-cols-5 text-xs">
         {navItems.map((item) => {
           const active = item.isActive(pathname);
 

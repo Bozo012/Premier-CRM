@@ -14,6 +14,15 @@ export {
   type JobListPropertySummary,
 } from './jobs';
 export {
+  listServiceCatalogItems,
+  listServiceCategories,
+  type ServiceCatalogCategorySummary,
+  type ServiceCatalogItemSummary,
+  type ServiceCatalogPage,
+  type ServiceCategory,
+  type ServiceItem,
+} from './service-catalog';
+export {
   getCustomer360,
   getCustomerById,
   listCustomers,
@@ -60,9 +69,12 @@ export {
 } from './website-content';
 export type {
   JobStatus,
+  ListServiceCatalogItemsArgs,
   PublicWebsitePromotion,
   PublicWebsiteServiceHighlight,
   PublicWebsiteSettings,
+  ServiceCatalogActivity,
+  ServiceCatalogConfidence,
   ListJobsArgs,
   WebsitePromotionInput,
   WebsiteServiceHighlightInput,
