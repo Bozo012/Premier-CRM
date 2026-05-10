@@ -16,6 +16,8 @@ export {
 export {
   listServiceCatalogItems,
   listServiceCategories,
+  saveServiceCategory,
+  saveServiceItem,
   type ServiceCatalogCategorySummary,
   type ServiceCatalogItemSummary,
   type ServiceCatalogPage,
