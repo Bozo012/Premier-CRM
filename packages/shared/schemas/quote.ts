@@ -21,11 +21,19 @@ export const CreateQuoteFromJobInputSchema = z.object({
   jobId: z.string().uuid(),
 });
 
+export const ListQuotesArgsSchema = z.object({
+  limit: z.number().int().positive().max(200).default(100),
+  offset: z.number().int().min(0).default(0),
+  search: z.string().optional(),
+  status: QuoteStatusSchema.optional(),
+});
+
 export type QuoteStatus = z.infer<typeof QuoteStatusSchema>;
 export type QuoteType = z.infer<typeof QuoteTypeSchema>;
 export type CreateQuoteFromJobInput = z.infer<
   typeof CreateQuoteFromJobInputSchema
 >;
+export type ListQuotesArgs = z.infer<typeof ListQuotesArgsSchema>;
 
 // ---------------------------------------------------------------------------
 // Line item mutations
