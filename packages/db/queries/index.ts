@@ -1,4 +1,18 @@
 export {
+  getJobById,
+  listJobs,
+  type Job,
+  type JobDetail,
+  type JobDetailCategorySummary,
+  type JobDetailCustomerSummary,
+  type JobDetailPropertySummary,
+  type JobListCategorySummary,
+  type JobListCustomerSummary,
+  type JobListItem,
+  type JobListPage,
+  type JobListPropertySummary,
+} from './jobs';
+export {
   getCustomer360,
   getCustomerById,
   listCustomers,
@@ -44,9 +58,11 @@ export {
   upsertWebsiteSettings,
 } from './website-content';
 export type {
+  JobStatus,
   PublicWebsitePromotion,
   PublicWebsiteServiceHighlight,
   PublicWebsiteSettings,
+  ListJobsArgs,
   WebsitePromotionInput,
   WebsiteServiceHighlightInput,
   WebsiteSettingsInput,

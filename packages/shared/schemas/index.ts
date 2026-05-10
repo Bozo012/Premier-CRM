@@ -1,6 +1,12 @@
 export { CustomerArchetypeSchema, type CustomerArchetype } from './customer-archetype';
 export { ListCustomersArgsSchema, type ListCustomersArgs } from './list-customers-args';
 export {
+  JobStatusSchema,
+  ListJobsArgsSchema,
+  type JobStatus,
+  type ListJobsArgs,
+} from './list-jobs-args';
+export {
   TeamMemberApprovalSchema,
   TeamMemberApprovalRoleSchema,
   TeamMemberApprovalStatusSchema,

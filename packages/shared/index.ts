@@ -3,7 +3,10 @@ export { ok, err } from './result';
 export type { Result } from './result';
 export {
   CustomerArchetypeSchema,
+  JobStatusSchema,
   type CustomerArchetype,
+  type JobStatus,
+  ListJobsArgsSchema,
   ListCustomersArgsSchema,
   QuoteRequestPayloadSchema,
   ServiceRequestPayloadSchema,
@@ -24,6 +27,7 @@ export {
   WebsiteServiceRequestPayloadSchema,
   WebsiteSettingsInputSchema,
   type ListCustomersArgs,
+  type ListJobsArgs,
   type PublicWebsiteContentSnapshot,
   type PublicWebsitePromotion,
   type PublicWebsiteServiceHighlight,
