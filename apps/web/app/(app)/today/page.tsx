@@ -292,6 +292,7 @@ export default function TodayPage() {
           />
           <SnapshotCard
             helper="Jobs imported or created"
+            href="/jobs"
             label="Jobs"
             value={String(data?.jobCount ?? 0)}
           />
@@ -338,6 +339,20 @@ export default function TodayPage() {
               </p>
               <Button asChild variant="outline">
                 <Link href="/properties">Open properties</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Jobs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Review imported or created jobs with status, priority, and scheduling context.
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/jobs">Open jobs</Link>
               </Button>
             </CardContent>
           </Card>
@@ -389,12 +404,8 @@ export default function TodayPage() {
             <p className="text-sm text-muted-foreground">
               No jobs scheduled for today yet.
             </p>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => handlePlaceholderAction('Import jobs')}
-            >
-              Import jobs or create your first job
+            <Button asChild variant="outline">
+              <Link href="/jobs">Review jobs</Link>
             </Button>
           </CardContent>
         </Card>
