@@ -20,6 +20,8 @@ export {
   listProperties,
   listServiceCatalogItems,
   listServiceCategories,
+  saveServiceCategory,
+  saveServiceItem,
   listWebsitePromotionsForOrg,
   listWebsiteServiceHighlightsForOrg,
   saveWebsitePromotion,

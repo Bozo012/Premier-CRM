@@ -2,6 +2,8 @@ import {
   ErrorCode,
   err,
   ok,
+  type ServiceCategoryInput,
+  type ServiceItemInput,
   type ListServiceCatalogItemsArgs,
   type Result,
 } from '@premier/shared';
@@ -12,6 +14,9 @@ import type { Database } from '../types';
 export type ServiceCategory =
   Database['public']['Tables']['service_categories']['Row'];
 export type ServiceItem = Database['public']['Tables']['service_items']['Row'];
+type ServiceCategoryInsert =
+  Database['public']['Tables']['service_categories']['Insert'];
+type ServiceItemInsert = Database['public']['Tables']['service_items']['Insert'];
 
 export interface ServiceCatalogCategorySummary {
   id: string;
@@ -162,4 +167,135 @@ export async function listServiceCatalogItems(
     })),
     total: count ?? 0,
   });
+}
+
+export async function saveServiceCategory(
+  client: DbClient,
+  args: { input: ServiceCategoryInput; orgId: string }
+): Promise<Result<ServiceCategory>> {
+  const payload = {
+    name: args.input.name,
+    org_id: args.orgId,
+    parent_id: args.input.parentId,
+    sort_order: args.input.sortOrder,
+  } satisfies ServiceCategoryInsert;
+
+  if (args.input.id) {
+    const { data, error } = await client
+      .from('service_categories')
+      .update({
+        name: payload.name,
+        parent_id: payload.parent_id,
+        sort_order: payload.sort_order,
+      })
+      .eq('id', args.input.id)
+      .eq('org_id', args.orgId)
+      .select('*')
+      .maybeSingle();
+
+    if (error) {
+      return err(ErrorCode.DB_ERROR, error.message);
+    }
+
+    if (!data) {
+      return err(
+        ErrorCode.NOT_FOUND,
+        `Service category ${args.input.id} not found`
+      );
+    }
+
+    return ok(data);
+  }
+
+  const { data, error } = await client
+    .from('service_categories')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  return ok(data);
+}
+
+export async function saveServiceItem(
+  client: DbClient,
+  args: { input: ServiceItemInput; orgId: string }
+): Promise<Result<ServiceItem>> {
+  const payload = {
+    category_id: args.input.categoryId,
+    common_addons: args.input.commonAddons,
+    confidence: args.input.confidence,
+    default_labor_minutes: args.input.defaultLaborMinutes,
+    default_markup_pct: args.input.defaultMarkupPct,
+    default_unit_price: args.input.defaultUnitPrice,
+    description: args.input.description,
+    exclusion_note: args.input.exclusionNote,
+    is_active: args.input.isActive,
+    is_custom_only: args.input.isCustomOnly,
+    name: args.input.name,
+    org_id: args.orgId,
+    pricing_metric: args.input.pricingMetric,
+    rate_confirmed: args.input.rateConfirmed,
+    rate_high: args.input.rateHigh,
+    rate_low: args.input.rateLow,
+    scope_excludes: args.input.scopeExcludes,
+    scope_includes: args.input.scopeIncludes,
+    unit: args.input.unit,
+    unit_label: args.input.unitLabel,
+  } satisfies ServiceItemInsert;
+
+  if (args.input.id) {
+    const { data, error } = await client
+      .from('service_items')
+      .update({
+        category_id: payload.category_id,
+        common_addons: payload.common_addons,
+        confidence: payload.confidence,
+        default_labor_minutes: payload.default_labor_minutes,
+        default_markup_pct: payload.default_markup_pct,
+        default_unit_price: payload.default_unit_price,
+        description: payload.description,
+        exclusion_note: payload.exclusion_note,
+        is_active: payload.is_active,
+        is_custom_only: payload.is_custom_only,
+        name: payload.name,
+        pricing_metric: payload.pricing_metric,
+        rate_confirmed: payload.rate_confirmed,
+        rate_high: payload.rate_high,
+        rate_low: payload.rate_low,
+        scope_excludes: payload.scope_excludes,
+        scope_includes: payload.scope_includes,
+        unit: payload.unit,
+        unit_label: payload.unit_label,
+      })
+      .eq('id', args.input.id)
+      .eq('org_id', args.orgId)
+      .select('*')
+      .maybeSingle();
+
+    if (error) {
+      return err(ErrorCode.DB_ERROR, error.message);
+    }
+
+    if (!data) {
+      return err(ErrorCode.NOT_FOUND, `Service item ${args.input.id} not found`);
+    }
+
+    return ok(data);
+  }
+
+  const { data, error } = await client
+    .from('service_items')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  return ok(data);
 }
