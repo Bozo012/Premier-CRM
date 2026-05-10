@@ -299,3 +299,77 @@ export async function saveServiceItem(
 
   return ok(data);
 }
+
+// ---------------------------------------------------------------------------
+// Picker projection — lightweight list used by the quote line-item add form.
+// Returns only the fields the form needs to pre-fill a new line item.
+// ---------------------------------------------------------------------------
+
+export interface CatalogItemForPicker {
+  categoryId: string | null;
+  categoryName: string | null;
+  defaultUnitPrice: number | null;
+  id: string;
+  name: string;
+  rateConfirmed: number | null;
+  unit: string;
+}
+
+export async function listCatalogItemsForPicker(
+  client: DbClient,
+  args: { orgId: string }
+): Promise<Result<CatalogItemForPicker[]>> {
+  const { data: items, error: itemsError } = await client
+    .from('service_items')
+    .select('id, name, unit, default_unit_price, rate_confirmed, category_id')
+    .eq('org_id', args.orgId)
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+
+  if (itemsError) {
+    return err(ErrorCode.DB_ERROR, itemsError.message);
+  }
+
+  if (!items || items.length === 0) {
+    return ok([]);
+  }
+
+  const categoryIds = Array.from(
+    new Set(
+      items
+        .map((item) => item.category_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  const { data: categories, error: categoriesError } =
+    categoryIds.length > 0
+      ? await client
+          .from('service_categories')
+          .select('id, name')
+          .eq('org_id', args.orgId)
+          .in('id', categoryIds)
+      : { data: [] as { id: string; name: string }[], error: null };
+
+  if (categoriesError) {
+    return err(ErrorCode.DB_ERROR, categoriesError.message);
+  }
+
+  const categoryNamesById = new Map(
+    (categories ?? []).map((c) => [c.id, c.name])
+  );
+
+  return ok(
+    items.map((item) => ({
+      categoryId: item.category_id,
+      categoryName: item.category_id
+        ? (categoryNamesById.get(item.category_id) ?? null)
+        : null,
+      defaultUnitPrice: item.default_unit_price,
+      id: item.id,
+      name: item.name,
+      rateConfirmed: item.rate_confirmed,
+      unit: item.unit,
+    }))
+  );
+}

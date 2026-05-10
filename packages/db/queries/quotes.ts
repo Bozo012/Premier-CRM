@@ -2,10 +2,13 @@ import {
   ErrorCode,
   err,
   ok,
+  type AddLineItemInput,
   type CreateQuoteFromJobInput,
   type QuoteStatus,
   type QuoteType,
+  type RemoveLineItemInput,
   type Result,
+  type UpdateLineItemInput,
 } from '@premier/shared';
 
 import type { DbClient } from '../client';
@@ -431,4 +434,205 @@ export async function createDraftQuote(
   }
 
   return ok(quote);
+}
+
+// ---------------------------------------------------------------------------
+// Line item mutations
+// After each mutation we recalculate the quote totals since the DB has no
+// trigger for this (the schema comment says "via trigger" but none exists).
+// ---------------------------------------------------------------------------
+
+type QuoteLineItemInsert =
+  Database['public']['Tables']['quote_line_items']['Insert'];
+
+/**
+ * Recomputes and writes subtotal/tax_amount/total on the quotes row.
+ * Reads the current tax_pct and discount_amount from the quote so the
+ * caller doesn't have to pass them.
+ */
+async function recalcQuoteTotals(
+  client: DbClient,
+  args: { orgId: string; quoteId: string }
+): Promise<void> {
+  // Fetch the quote's current tax and discount settings.
+  const { data: quote } = await client
+    .from('quotes')
+    .select('tax_pct, discount_amount')
+    .eq('id', args.quoteId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+
+  const taxPct = quote?.tax_pct ?? 0;
+  const discountAmount = quote?.discount_amount ?? 0;
+
+  // Sum all line totals for this quote (total_quoted is a generated column).
+  const { data: agg } = await client
+    .from('quote_line_items')
+    .select('total_quoted')
+    .eq('quote_id', args.quoteId)
+    .eq('org_id', args.orgId);
+
+  const subtotal = (agg ?? []).reduce(
+    (sum, row) => sum + (row.total_quoted ?? 0),
+    0
+  );
+
+  const taxAmount = Math.round(subtotal * (taxPct / 100) * 100) / 100;
+  const total = subtotal + taxAmount - discountAmount;
+
+  await client
+    .from('quotes')
+    .update({ subtotal, tax_amount: taxAmount, total })
+    .eq('id', args.quoteId)
+    .eq('org_id', args.orgId);
+}
+
+export async function addQuoteLineItem(
+  client: DbClient,
+  args: { input: AddLineItemInput; orgId: string }
+): Promise<Result<QuoteLineItem>> {
+  // Verify the quote exists and belongs to this org.
+  const { data: quote, error: quoteError } = await client
+    .from('quotes')
+    .select('id, job_id, status')
+    .eq('id', args.input.quoteId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+
+  if (quoteError) {
+    return err(ErrorCode.DB_ERROR, quoteError.message);
+  }
+
+  if (!quote) {
+    return err(ErrorCode.NOT_FOUND, `Quote ${args.input.quoteId} not found`);
+  }
+
+  if (quote.status !== 'draft') {
+    return err(
+      ErrorCode.FORBIDDEN,
+      'Line items can only be added to draft quotes.'
+    );
+  }
+
+  // Denormalize property_id and zip_code from the job so pricing intelligence
+  // queries can filter by location without joining all the way back to jobs.
+  const { data: job } = await client
+    .from('jobs')
+    .select('property_id')
+    .eq('id', quote.job_id)
+    .maybeSingle();
+
+  const propertyId = job?.property_id ?? null;
+
+  const { data: property } =
+    propertyId
+      ? await client
+          .from('properties')
+          .select('zip')
+          .eq('id', propertyId)
+          .maybeSingle()
+      : { data: null };
+
+  const payload: QuoteLineItemInsert = {
+    description: args.input.description ?? null,
+    job_id: quote.job_id,
+    markup_pct: args.input.markupPct ?? null,
+    name: args.input.name,
+    org_id: args.orgId,
+    property_id: propertyId,
+    quantity: args.input.quantity,
+    quote_id: args.input.quoteId,
+    service_id: args.input.serviceId ?? null,
+    unit: args.input.unit,
+    unit_price: args.input.unitPrice,
+    zip_code: property?.zip ?? null,
+  };
+
+  const { data: lineItem, error } = await client
+    .from('quote_line_items')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  await recalcQuoteTotals(client, {
+    orgId: args.orgId,
+    quoteId: args.input.quoteId,
+  });
+
+  return ok(lineItem);
+}
+
+export async function updateQuoteLineItem(
+  client: DbClient,
+  args: { input: UpdateLineItemInput; orgId: string }
+): Promise<Result<QuoteLineItem>> {
+  // Verify the line item exists and belongs to this org + quote.
+  const { data: existing, error: existingError } = await client
+    .from('quote_line_items')
+    .select('id, quote_id')
+    .eq('id', args.input.lineItemId)
+    .eq('org_id', args.orgId)
+    .eq('quote_id', args.input.quoteId)
+    .maybeSingle();
+
+  if (existingError) {
+    return err(ErrorCode.DB_ERROR, existingError.message);
+  }
+
+  if (!existing) {
+    return err(ErrorCode.NOT_FOUND, `Line item ${args.input.lineItemId} not found`);
+  }
+
+  const { data: lineItem, error } = await client
+    .from('quote_line_items')
+    .update({
+      description: args.input.description ?? null,
+      markup_pct: args.input.markupPct ?? null,
+      name: args.input.name,
+      quantity: args.input.quantity,
+      unit: args.input.unit,
+      unit_price: args.input.unitPrice,
+    })
+    .eq('id', args.input.lineItemId)
+    .eq('org_id', args.orgId)
+    .select('*')
+    .single();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  await recalcQuoteTotals(client, {
+    orgId: args.orgId,
+    quoteId: args.input.quoteId,
+  });
+
+  return ok(lineItem);
+}
+
+export async function removeQuoteLineItem(
+  client: DbClient,
+  args: { input: RemoveLineItemInput; orgId: string }
+): Promise<Result<{ lineItemId: string }>> {
+  const { error } = await client
+    .from('quote_line_items')
+    .delete()
+    .eq('id', args.input.lineItemId)
+    .eq('quote_id', args.input.quoteId)
+    .eq('org_id', args.orgId);
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  await recalcQuoteTotals(client, {
+    orgId: args.orgId,
+    quoteId: args.input.quoteId,
+  });
+
+  return ok({ lineItemId: args.input.lineItemId });
 }

@@ -2,6 +2,7 @@ export { createBrowserClient, createServerClient, createServiceClient } from './
 export type { DbClient } from './client';
 export type { Database, Json } from './types';
 export {
+  addQuoteLineItem,
   createQuoteRequest,
   createDraftQuote,
   createServiceRequest,
@@ -21,6 +22,9 @@ export {
   listJobs,
   listProperties,
   listQuotesForJob,
+  removeQuoteLineItem,
+  updateQuoteLineItem,
+  listCatalogItemsForPicker,
   listServiceCatalogItems,
   listServiceCategories,
   saveServiceCategory,
@@ -30,6 +34,7 @@ export {
   saveWebsitePromotion,
   saveWebsiteServiceHighlight,
   upsertWebsiteSettings,
+  type CatalogItemForPicker,
   type CreateQuoteRequestResult,
   type CreateServiceRequestResult,
   type Customer,
