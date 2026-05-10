@@ -1,7 +1,10 @@
 export {
+  addQuoteLineItem,
   createDraftQuote,
   getQuoteById,
   listQuotesForJob,
+  removeQuoteLineItem,
+  updateQuoteLineItem,
   type JobQuoteSummary,
   type Quote,
   type QuoteCategorySummary,
@@ -28,10 +31,12 @@ export {
   type JobListPropertySummary,
 } from './jobs';
 export {
+  listCatalogItemsForPicker,
   listServiceCatalogItems,
   listServiceCategories,
   saveServiceCategory,
   saveServiceItem,
+  type CatalogItemForPicker,
   type ServiceCatalogCategorySummary,
   type ServiceCatalogItemSummary,
   type ServiceCatalogPage,

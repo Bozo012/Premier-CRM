@@ -1,11 +1,18 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
-import { getQuoteById, type QuoteLineItemSummary } from '@premier/db';
+import {
+  getQuoteById,
+  listCatalogItemsForPicker,
+  createServiceClient,
+  type QuoteLineItemSummary,
+} from '@premier/db';
 import { ErrorCode } from '@premier/shared';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+import { LineItemEditor } from '../_components/line-item-editor';
 
 interface QuoteDetailPageProps {
   params: Promise<{ quoteId: string }>;
@@ -56,10 +63,15 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
     );
   }
 
-  const result = await getQuoteById(supabase, {
-    orgId: membership.org_id,
-    quoteId,
-  });
+  const serviceClient = createServiceClient();
+
+  const [result, catalogResult] = await Promise.all([
+    getQuoteById(supabase, {
+      orgId: membership.org_id,
+      quoteId,
+    }),
+    listCatalogItemsForPicker(serviceClient, { orgId: membership.org_id }),
+  ]);
 
   if (!result.success) {
     if (result.code === ErrorCode.NOT_FOUND) {
@@ -74,6 +86,9 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
   }
 
   const { customer, job, lineItems, property, quote } = result.data;
+  // Catalog items are non-critical — fall back to empty list on error so the
+  // page still loads; manual entry remains available.
+  const catalogItems = catalogResult.success ? catalogResult.data : [];
 
   return (
     <PageShell>
@@ -113,11 +128,7 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
         <InfoCard
           label="Line items"
           value={String(lineItems.length)}
-          helper={
-            lineItems.length === 0
-              ? 'Add line items in the next builder slice'
-              : 'Ready for quote builder expansion'
-          }
+          helper={lineItems.length === 0 ? 'Use the editor below to add' : `Total ${formatMoney(quote.subtotal)}`}
         />
         <InfoCard
           label="Valid until"
@@ -234,17 +245,24 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
             <CardTitle>Line items</CardTitle>
           </CardHeader>
           <CardContent>
-            {lineItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No line items yet. The next quote-builder slice will add the line-item
-                editor and service-catalog picker here.
-              </p>
+            {quote.status === 'draft' ? (
+              <LineItemEditor
+                catalogItems={catalogItems}
+                lineItems={lineItems}
+                quoteId={quote.id}
+              />
             ) : (
-              <ul className="space-y-3">
-                {lineItems.map((lineItem) => (
-                  <LineItemCard key={lineItem.item.id} lineItem={lineItem} />
-                ))}
-              </ul>
+              <>
+                {lineItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No line items.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {lineItems.map((lineItem) => (
+                      <LineItemCard key={lineItem.item.id} lineItem={lineItem} />
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

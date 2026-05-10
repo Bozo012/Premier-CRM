@@ -2,6 +2,7 @@ export { ErrorCode, AppError } from './errors';
 export { ok, err } from './result';
 export type { Result } from './result';
 export {
+  AddLineItemInputSchema,
   CustomerArchetypeSchema,
   CreateQuoteFromJobInputSchema,
   JobStatusSchema,
@@ -15,6 +16,8 @@ export {
   QuoteStatusSchema,
   QuoteRequestPayloadSchema,
   QuoteTypeSchema,
+  RemoveLineItemInputSchema,
+  UpdateLineItemInputSchema,
   type QuoteStatus,
   ServiceCatalogActivitySchema,
   ServiceCatalogConfidenceSchema,
@@ -44,8 +47,11 @@ export {
   type PublicWebsitePromotion,
   type PublicWebsiteServiceHighlight,
   type PublicWebsiteSettings,
+  type AddLineItemInput,
   type QuoteType,
   type QuoteRequestPayload,
+  type RemoveLineItemInput,
+  type UpdateLineItemInput,
   type ServiceCategoryInput,
   type ServiceCatalogActivity,
   type ServiceCatalogConfidence,

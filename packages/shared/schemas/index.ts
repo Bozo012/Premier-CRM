@@ -7,12 +7,18 @@ export {
   type ListJobsArgs,
 } from './list-jobs-args';
 export {
+  AddLineItemInputSchema,
   CreateQuoteFromJobInputSchema,
   QuoteStatusSchema,
   QuoteTypeSchema,
+  RemoveLineItemInputSchema,
+  UpdateLineItemInputSchema,
+  type AddLineItemInput,
   type CreateQuoteFromJobInput,
   type QuoteStatus,
   type QuoteType,
+  type RemoveLineItemInput,
+  type UpdateLineItemInput,
 } from './quote';
 export {
   ListServiceCatalogItemsArgsSchema,
