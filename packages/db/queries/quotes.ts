@@ -4,6 +4,7 @@ import {
   ok,
   type AddLineItemInput,
   type CreateQuoteFromJobInput,
+  type ListQuotesArgs,
   type QuoteStatus,
   type QuoteType,
   type RemoveLineItemInput,
@@ -226,6 +227,149 @@ export async function listQuotesForJob(
       quote,
     }))
   );
+}
+
+// ---------------------------------------------------------------------------
+// Org-wide quote list (used by /quotes index page)
+// ---------------------------------------------------------------------------
+
+type QuoteListJobRow = Pick<
+  Database['public']['Tables']['jobs']['Row'],
+  'customer_id' | 'id' | 'job_number' | 'title'
+>;
+
+export interface QuoteListCustomerSummary {
+  displayName: string;
+  id: string;
+}
+
+export interface QuoteListJobSummary {
+  id: string;
+  jobNumber: string | null;
+  title: string;
+}
+
+export interface QuoteListItem {
+  customer: QuoteListCustomerSummary | null;
+  job: QuoteListJobSummary;
+  lineItemCount: number;
+  quote: Quote;
+}
+
+export interface QuoteListPage {
+  quotes: QuoteListItem[];
+  total: number;
+}
+
+export async function listQuotes(
+  client: DbClient,
+  args: { orgId: string } & ListQuotesArgs
+): Promise<Result<QuoteListPage>> {
+  let query = client
+    .from('quotes')
+    .select('*', { count: 'exact' })
+    .eq('org_id', args.orgId);
+
+  if (args.status) {
+    query = query.eq('status', args.status);
+  }
+
+  if (args.search?.trim()) {
+    const term = `%${args.search.trim()}%`;
+    query = query.or(`title.ilike.${term},quote_number.ilike.${term}`);
+  }
+
+  const { data: quotes, error, count } = await query
+    .order('created_at', { ascending: false })
+    .range(args.offset, args.offset + args.limit - 1);
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  const quoteRows = quotes ?? [];
+
+  if (quoteRows.length === 0) {
+    return ok({ quotes: [], total: count ?? 0 });
+  }
+
+  const jobIds = Array.from(new Set(quoteRows.map((q) => q.job_id)));
+  const quoteIds = quoteRows.map((q) => q.id);
+
+  const [jobsResult, lineItemsResult] = await Promise.all([
+    client
+      .from('jobs')
+      .select('id, job_number, title, customer_id')
+      .eq('org_id', args.orgId)
+      .in('id', jobIds),
+    client
+      .from('quote_line_items')
+      .select('quote_id')
+      .eq('org_id', args.orgId)
+      .in('quote_id', quoteIds),
+  ]);
+
+  if (jobsResult.error) {
+    return err(ErrorCode.DB_ERROR, jobsResult.error.message);
+  }
+
+  const jobsById = new Map(
+    (jobsResult.data ?? []).map((j) => [j.id, j as QuoteListJobRow])
+  );
+
+  const lineItemCountsByQuoteId = new Map<string, number>();
+  for (const li of lineItemsResult.data ?? []) {
+    lineItemCountsByQuoteId.set(
+      li.quote_id,
+      (lineItemCountsByQuoteId.get(li.quote_id) ?? 0) + 1
+    );
+  }
+
+  // Fetch customers for the jobs we found.
+  const customerIds = Array.from(
+    new Set(
+      (jobsResult.data ?? [])
+        .map((j) => j.customer_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  const { data: customers, error: customersError } =
+    customerIds.length > 0
+      ? await client
+          .from('customers')
+          .select('id, display_name, company_name, first_name, last_name')
+          .eq('org_id', args.orgId)
+          .in('id', customerIds)
+      : { data: [] as CustomerRow[], error: null };
+
+  if (customersError) {
+    return err(ErrorCode.DB_ERROR, customersError.message);
+  }
+
+  const customersById = new Map(
+    (customers ?? []).map((c) => [c.id, c as CustomerRow])
+  );
+
+  const items: QuoteListItem[] = quoteRows.map((quote) => {
+    const job = jobsById.get(quote.job_id);
+    const customer = job?.customer_id
+      ? (customersById.get(job.customer_id) ?? null)
+      : null;
+
+    return {
+      customer: customer ? toCustomerSummary(customer) : null,
+      job: {
+        id: job?.id ?? quote.job_id,
+        jobNumber: job?.job_number ?? null,
+        title: job?.title ?? '',
+      },
+      lineItemCount: lineItemCountsByQuoteId.get(quote.id) ?? 0,
+      quote,
+    };
+  });
+
+  return ok({ quotes: items, total: count ?? 0 });
 }
 
 export async function getQuoteById(
