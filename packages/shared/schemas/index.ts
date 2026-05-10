@@ -7,6 +7,22 @@ export {
   type ListJobsArgs,
 } from './list-jobs-args';
 export {
+  ListServiceCatalogItemsArgsSchema,
+  ServiceCatalogActivitySchema,
+  ServiceCatalogConfidenceSchema,
+  type ListServiceCatalogItemsArgs,
+  type ServiceCatalogActivity,
+  type ServiceCatalogConfidence,
+} from './list-service-catalog-items-args';
+export {
+  ServiceCategoryInputSchema,
+  ServiceItemInputSchema,
+  ServicePricingMetricSchema,
+  type ServiceCategoryInput,
+  type ServiceItemInput,
+  type ServicePricingMetric,
+} from './service-catalog';
+export {
   TeamMemberApprovalSchema,
   TeamMemberApprovalRoleSchema,
   TeamMemberApprovalStatusSchema,
