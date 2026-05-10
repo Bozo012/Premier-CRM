@@ -362,6 +362,24 @@ export default function TodayPage() {
         </section>
       ) : null}
 
+      {data?.canManageTeam ? (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Website content</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Manage the CRM-backed marketing content that powers the public website.
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/settings/website">Open website content</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
+
       <section>
         <Card>
           <CardHeader>

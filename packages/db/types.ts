@@ -3400,6 +3400,183 @@ export type Database = {
           },
         ]
       }
+      website_promotions: {
+        Row: {
+          active: boolean
+          button_link: string | null
+          button_text: string | null
+          created_at: string
+          description: string | null
+          display_order: number
+          end_date: string | null
+          id: string
+          org_id: string
+          start_date: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          button_link?: string | null
+          button_text?: string | null
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          end_date?: string | null
+          id?: string
+          org_id: string
+          start_date?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          button_link?: string | null
+          button_text?: string | null
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          end_date?: string | null
+          id?: string
+          org_id?: string
+          start_date?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_promotions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_service_highlights: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          display_order: number
+          featured: boolean
+          id: string
+          org_id: string
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          featured?: boolean
+          id?: string
+          org_id: string
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          featured?: boolean
+          id?: string
+          org_id?: string
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_service_highlights_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_settings: {
+        Row: {
+          active: boolean
+          availability_text: string | null
+          call_cta_label: string | null
+          created_at: string
+          emergency_message: string | null
+          hero_headline: string | null
+          hero_subheadline: string | null
+          homepage_seo_description: string | null
+          homepage_seo_title: string | null
+          id: string
+          org_id: string
+          phone_display: string | null
+          phone_e164: string | null
+          portal_cta_label: string | null
+          portal_status_message: string | null
+          published: boolean
+          request_service_cta_label: string | null
+          service_area_summary: string | null
+          text_cta_label: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          availability_text?: string | null
+          call_cta_label?: string | null
+          created_at?: string
+          emergency_message?: string | null
+          hero_headline?: string | null
+          hero_subheadline?: string | null
+          homepage_seo_description?: string | null
+          homepage_seo_title?: string | null
+          id?: string
+          org_id: string
+          phone_display?: string | null
+          phone_e164?: string | null
+          portal_cta_label?: string | null
+          portal_status_message?: string | null
+          published?: boolean
+          request_service_cta_label?: string | null
+          service_area_summary?: string | null
+          text_cta_label?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          availability_text?: string | null
+          call_cta_label?: string | null
+          created_at?: string
+          emergency_message?: string | null
+          hero_headline?: string | null
+          hero_subheadline?: string | null
+          homepage_seo_description?: string | null
+          homepage_seo_title?: string | null
+          id?: string
+          org_id?: string
+          phone_display?: string | null
+          phone_e164?: string | null
+          portal_cta_label?: string | null
+          portal_status_message?: string | null
+          published?: boolean
+          request_service_cta_label?: string | null
+          service_area_summary?: string | null
+          text_cta_label?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       geography_columns: {

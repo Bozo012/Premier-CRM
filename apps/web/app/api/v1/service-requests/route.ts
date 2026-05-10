@@ -1,7 +1,20 @@
+/**
+ * POST /api/v1/service-requests
+ *
+ * Compatibility endpoint for the marketing site's existing RequestService form.
+ * Keeps the website payload contract stable while mapping into the CRM's
+ * internal quote-request workflow.
+ */
+
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { createServiceClient, createServiceRequest } from '@premier/db';
-import { ErrorCode, ServiceRequestPayloadSchema } from '@premier/shared';
+import {
+  ErrorCode,
+  WebsiteServiceRequestPayloadSchema,
+  type QuoteRequestPayload,
+  type WebsiteServiceRequestPayload,
+} from '@premier/shared';
+import { createQuoteRequest, createServiceClient } from '@premier/db';
 
 const PREMIER_ORG_ID =
   process.env.PREMIER_ORG_ID ?? 'a0000000-0000-0000-0000-000000000001';
@@ -9,6 +22,7 @@ const PREMIER_ORG_ID =
 const ALLOWED_ORIGINS_PROD = [
   'https://ppmnky.com',
   'https://www.ppmnky.com',
+  'https://premier-property-maintenance.vercel.app',
 ];
 
 const ALLOWED_ORIGINS_DEV = [
@@ -30,18 +44,23 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
 
 function resolveAllowedOrigin(requestOrigin: string | null): string | null {
   if (!requestOrigin) return null;
-  const allowed =
+
+  const allowedOrigins =
     process.env.NODE_ENV === 'development'
       ? [...ALLOWED_ORIGINS_PROD, ...ALLOWED_ORIGINS_DEV]
       : ALLOWED_ORIGINS_PROD;
-  return allowed.includes(requestOrigin) ? requestOrigin : null;
+
+  return allowedOrigins.includes(requestOrigin) ? requestOrigin : null;
 }
 
 function buildCorsHeaders(origin: string | null): HeadersInit {
-  const allowed = resolveAllowedOrigin(origin);
-  if (!allowed) return {};
+  const allowedOrigin = resolveAllowedOrigin(origin);
+  if (!allowedOrigin) {
+    return {};
+  }
+
   return {
-    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
@@ -55,8 +74,12 @@ function resolveClientIp(request: NextRequest): string {
     const first = forwarded.split(',')[0]?.trim();
     if (first) return first;
   }
+
   const real = request.headers.get('x-real-ip');
-  if (real) return real.trim();
+  if (real) {
+    return real.trim();
+  }
+
   return 'unknown';
 }
 
@@ -69,7 +92,9 @@ function checkAndIncrementRateLimit(ip: string): boolean {
     return true;
   }
 
-  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) return false;
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
 
   entry.count += 1;
   return true;
@@ -77,11 +102,72 @@ function checkAndIncrementRateLimit(ip: string): boolean {
 
 function cleanupExpiredRateLimits(): void {
   const now = Date.now();
+
   for (const [ip, entry] of rateLimitStore.entries()) {
     if (now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
       rateLimitStore.delete(ip);
     }
   }
+}
+
+function mapPropertyType(value: WebsiteServiceRequestPayload['propertyType']) {
+  switch (value) {
+    case 'single-family':
+      return 'single_family' as const;
+    case 'multi-family':
+      return 'multi_family' as const;
+    case 'commercial':
+      return 'commercial' as const;
+    default:
+      return 'other' as const;
+  }
+}
+
+function mapTimeline(value: WebsiteServiceRequestPayload['priorityLevel']) {
+  switch (value) {
+    case 'emergency':
+      return 'asap' as const;
+    case 'urgent':
+      return 'this_week' as const;
+    case 'normal':
+      return 'this_month' as const;
+    default:
+      return 'flexible' as const;
+  }
+}
+
+function toQuoteRequestPayload(
+  payload: WebsiteServiceRequestPayload
+): QuoteRequestPayload {
+  const customerName = `${payload.firstName} ${payload.lastName}`.trim();
+  const descriptionLines = [
+    `Preferred contact method: ${payload.preferredContactMethod}`,
+    `Customer type: ${payload.customerType}`,
+    `Property address: ${payload.addressLine1}, ${payload.city}, ${payload.state} ${payload.zipCode}`,
+    `Property type: ${payload.propertyType}`,
+    `Priority level: ${payload.priorityLevel}`,
+    payload.preferredDateTime
+      ? `Preferred date/time: ${payload.preferredDateTime}`
+      : null,
+    payload.accessInstructions
+      ? `Access instructions: ${payload.accessInstructions}`
+      : null,
+    '',
+    payload.problemDescription,
+    payload.additionalNotes
+      ? `Additional notes: ${payload.additionalNotes}`
+      : null,
+  ].filter(Boolean);
+
+  return {
+    name: customerName,
+    email: payload.emailAddress,
+    phone: payload.phoneNumber,
+    property_type: mapPropertyType(payload.propertyType),
+    timeline: mapTimeline(payload.priorityLevel),
+    service_needed: payload.serviceCategory,
+    description: descriptionLines.join('\n'),
+  };
 }
 
 export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
@@ -92,8 +178,7 @@ export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const origin = request.headers.get('Origin');
-  const corsHeaders = buildCorsHeaders(origin);
+  const corsHeaders = buildCorsHeaders(request.headers.get('Origin'));
 
   let rawBody: unknown;
   try {
@@ -117,12 +202,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     (rawBody as { _hp: string })._hp.length > 0
   ) {
     return NextResponse.json(
-      { success: true, serviceRequestId: null },
+      {
+        success: true,
+        data: {
+          ticket_id: null,
+          message: "Got it. We'll follow up within one business day.",
+        },
+      },
       { status: 200, headers: corsHeaders }
     );
   }
 
-  const parsed = ServiceRequestPayloadSchema.safeParse(rawBody);
+  const parsed = WebsiteServiceRequestPayloadSchema.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -150,24 +241,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  if (rateLimitStore.size > 1000) cleanupExpiredRateLimits();
+  if (rateLimitStore.size > 1000) {
+    cleanupExpiredRateLimits();
+  }
 
-  const result = await createServiceRequest(createServiceClient(), {
+  const supabase = createServiceClient();
+  const result = await createQuoteRequest(supabase, {
     orgId: PREMIER_ORG_ID,
-    payload: parsed.data,
+    payload: toQuoteRequestPayload(parsed.data),
   });
 
   if (!result.success) {
-    console.error('Failed to create public service request', {
-      code: result.code,
-      error: result.error,
-    });
-
     return NextResponse.json(
       {
         success: false,
-        code: ErrorCode.DB_ERROR,
-        error: 'Could not create the service request. Please try again.',
+        code: result.code,
+        error: result.error,
       },
       { status: 500, headers: corsHeaders }
     );
@@ -176,8 +265,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {
       success: true,
-      serviceRequestId: result.data.serviceRequestId,
+      data: {
+        ticket_id: result.data.taskId,
+        message: result.data.deduped
+          ? "Got it. We have your details on file already and will follow up within one business day."
+          : "Got it. We'll follow up within one business day.",
+      },
     },
-    { status: 201, headers: corsHeaders }
+    { status: 200, headers: corsHeaders }
   );
 }
