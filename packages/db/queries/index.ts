@@ -1,4 +1,18 @@
 export {
+  createDraftQuote,
+  getQuoteById,
+  listQuotesForJob,
+  type JobQuoteSummary,
+  type Quote,
+  type QuoteCategorySummary,
+  type QuoteCustomerSummary,
+  type QuoteDetail,
+  type QuoteJobSummary,
+  type QuoteLineItem,
+  type QuoteLineItemSummary,
+  type QuotePropertySummary,
+} from './quotes';
+export {
   getJobById,
   listJobs,
   type Job,

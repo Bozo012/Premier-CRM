@@ -7,6 +7,14 @@ export {
   type ListJobsArgs,
 } from './list-jobs-args';
 export {
+  CreateQuoteFromJobInputSchema,
+  QuoteStatusSchema,
+  QuoteTypeSchema,
+  type CreateQuoteFromJobInput,
+  type QuoteStatus,
+  type QuoteType,
+} from './quote';
+export {
   ListServiceCatalogItemsArgsSchema,
   ServiceCatalogActivitySchema,
   ServiceCatalogConfidenceSchema,
