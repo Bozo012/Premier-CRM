@@ -121,6 +121,70 @@ export async function updateQuoteMetadataAction(
 }
 
 // ---------------------------------------------------------------------------
+// Approve job (accepted quote → approved job)
+// ---------------------------------------------------------------------------
+
+export type ApproveJobActionState = Result<{ jobId: string }>;
+
+export async function approveJobAction(
+  _prevState: ApproveJobActionState | null,
+  formData: FormData
+): Promise<ApproveJobActionState> {
+  const contextResult = await getQuoteActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId } = contextResult.data;
+
+  const quoteId = readString(formData, 'quoteId');
+  const parsed = SendQuoteInputSchema.safeParse({ quoteId });
+  if (!parsed.success) {
+    const firstError = parsed.error.errors[0];
+    return err(ErrorCode.VALIDATION_ERROR, firstError?.message ?? 'Invalid quote ID.');
+  }
+
+  const client = createServiceClient();
+
+  const { data: quote, error: fetchError } = await client
+    .from('quotes')
+    .select('id, status, job_id, total')
+    .eq('id', parsed.data.quoteId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return err(ErrorCode.DB_ERROR, fetchError.message);
+  }
+
+  if (!quote) {
+    return err(ErrorCode.NOT_FOUND, 'Quote not found.');
+  }
+
+  if (quote.status !== 'accepted') {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      `Quote is ${quote.status} — only accepted quotes can trigger job approval.`
+    );
+  }
+
+  const { error: updateError } = await client
+    .from('jobs')
+    .update({ status: 'approved', quoted_total: quote.total })
+    .eq('id', quote.job_id)
+    .eq('org_id', orgId);
+
+  if (updateError) {
+    return err(ErrorCode.DB_ERROR, updateError.message);
+  }
+
+  revalidatePath(`/quotes/${parsed.data.quoteId}`);
+  revalidatePath(`/jobs/${quote.job_id}`);
+  revalidatePath('/jobs');
+
+  return ok({ jobId: quote.job_id });
+}
+
+// ---------------------------------------------------------------------------
 // Send quote
 // ---------------------------------------------------------------------------
 
