@@ -2,47 +2,46 @@
 
 ## Current branch
 
-`feature/quotes-workspace-creation`
-Ahead of `main` by 1 commit (`c46cd8d`). Branch is pushed to origin and up to date.
+`main`
+At commit `f2701e1`. Branch is up to date with origin. Working tree clean. No open PRs.
 
 ---
 
 ## Current PR status
 
-**PR #55 — OPEN**
-`feat(crm): quotes workspace — nav slot + new-quote creation flow`
-https://github.com/Bozo012/Premier-CRM/pull/55
-Branch: `feature/quotes-workspace-creation`
-Commit: `c46cd8d`
-Checks: tsc clean, Next.js build clean (21 pages, 0 errors).
+All PRs from this session are merged. No open PRs.
 
 ---
 
 ## What was completed this session
 
-### Navigation / UX audit
-- Read and mapped all current quote entry points
-- Identified that `/quotes` was unreachable from normal in-app navigation
-- Identified that Today → "New estimate" was a dead-end placeholder
-- Identified that Services occupied a bottom-nav slot better used by Quotes
+### Planning pass — Requests → Estimates → Quotes → Jobs
 
-### Product/workflow planning pass
-- Produced full Quotes workspace model (see Current product-direction decisions below)
-- Defined status lifecycle model: draft → sent → viewed → accepted/declined/expired
-- Defined accepted-quote → job handoff model (one action + navigate to existing job)
-- Defined 4-PR implementation sequence (PR #56–#59)
+Before implementing, a full planning pass was done covering:
 
-### PR #55 implementation (includes nav work + creation flow)
-Combined into one commit:
+- Inspected all routes, DB query files, API handlers, migrations, and types
+- Discovered that `service_requests` table is defined in migration `0012_service_requests_and_customer_accounts.sql` but **has never been applied** to the live DB (not present in `types.ts`; `0017` only grants on `tasks` and `customers`)
+- Discovered that both public intake routes (`/api/v1/quote-requests` and `/api/v1/service-requests`) currently write to `tasks`, not `service_requests`
+- Identified that `createServiceRequest` query function is dead code (never called from any route)
+- Identified that there are **two files with the `0012_` prefix** — a naming collision that needs resolution before any schema work
+- Defined the intended operational backbone: **Website Request → Requests → Estimate → Quote → Job**
+- Produced a full 6-PR sequence (#58–#63) covering requests inbox, request detail + convert-to-job, estimates view on jobs, migration fix, and inbox switch to `service_requests`
 
-1. **Bottom nav**: Quotes replaces Services as slot 3 of 5. `grid-cols-5` unchanged. Services still reachable at `/services`.
-2. **Today page**: "New estimate" quick action wired to `href: '/quotes'` instead of placeholder toast.
-3. **`quotes/actions.ts`**:
-   - `getQuoteActionContext` now returns `{ orgId, userId }` (was `{ orgId }` only)
-   - Added `searchJobsForPickerAction` — fetches up to 30 jobs by optional search term, returns `JobPickerItem[]`
-   - Added `createDraftQuoteAction` — validates jobId, calls `createDraftQuote` DB fn, returns `{ quoteId }`
-4. **`new-quote-dialog.tsx`** (new client component): Toggle panel with job search + select → create → redirect to `/quotes/[newId]`
-5. **`quotes/page.tsx`**: New quote button in header via `newQuoteSlot` prop; empty state copy updated.
+### PR #56 — Quote metadata editing (merged earlier)
+Already in main from a prior session.
+
+### PR #57 — Accepted quote → job handoff (merged earlier)
+Already in main from a prior session.
+
+### PR #58 — Requests inbox at `/requests` (merged this session)
+
+Delivered:
+- **`packages/db/queries/requests.ts`**: `listRequests` query — reads `tasks` filtered by `title ILIKE 'Quote request from%'`, joins customer summary (name, email, phone), supports `showDone` flag for open/reviewed/all views
+- **`apps/web/app/(app)/requests/page.tsx`**: Server-rendered Requests inbox with Open / Reviewed / All filter tabs, status + priority badges, customer contact summary, extracted service type line, "Job created" badge when `task.job_id` is set, empty state explaining the website form feeds this queue
+- **`apps/web/components/navigation/app-bottom-nav.tsx`**: Requests replaces Properties in the bottom nav
+
+Bottom nav is now: **Today | Jobs | Quotes | Customers | Requests**
+Properties remains accessible at `/properties` and from customer detail pages.
 
 ---
 
@@ -50,131 +49,113 @@ Combined into one commit:
 
 | PR | Title | Status |
 |---|---|---|
-| #54 | quote resend email action | MERGED |
-| #53 | quote email delivery via Resend | MERGED |
-| #52 | quote lifecycle visibility | MERGED |
-| #51 | quote customer response (viewed_at + accept/decline) | MERGED |
-| #50 | quote send foundation (draft→sent + public token view) | MERGED |
-| #49 | quotes list page at /quotes | MERGED |
-| #48 | quote line-item editor foundation | MERGED |
-| #47 | quote builder foundation | MERGED |
+| #58 | feat(requests): intake inbox at /requests | MERGED |
+| #57 | feat(quotes): accepted quote → approve job handoff | MERGED (prior session) |
+| #56 | feat(crm): quote metadata editing for draft quotes | MERGED (prior session) |
 
 ---
 
 ## What is open
 
-**PR #55** — quotes workspace nav slot + creation flow. OPEN, awaiting review/merge.
+Nothing. All branches pushed and merged. No open PRs.
 
 ---
 
 ## Repo sync state
 
-- `main`: at commit `8307aa8` (PR #54 merge)
-- `feature/quotes-workspace-creation`: 1 commit ahead of main (`c46cd8d`)
+- `main`: at commit `f2701e1` (PR #58 merge)
 - Working tree: clean
 - No uncommitted changes anywhere
-
-Next session: after PR #55 merges, pull main, create `feature/quote-metadata-editing` off main.
+- No open PRs
 
 ---
 
 ## Current product-direction decisions
 
-### Quotes workspace model
-The `/quotes` route is the **primary quotes workspace**, not just a list view. It should support:
-- View all quotes, browse by status
-- Create new quotes (job picker → draft)
-- Navigate to individual quote detail for editing, sending, and lifecycle management
+### Operational backbone
+**Website Request → Requests → Estimate → Quote → Job**
 
-### Navigation model (final)
-Bottom nav: **Today | Jobs | Quotes | Customers | Properties** (5 slots)
-- Quotes replaced Services in slot 3
-- Services is reachable via `/services` URL; not a daily-workflow nav item
-- A "Manage service catalog" link can be added from inside the Quotes area later
+This is the approved product direction. Each stage is operationally distinct.
 
-### Status lifecycle model
-- **draft** → needs line items + sending; fully editable
-- **sent** → waiting for customer; resend email available
-- **viewed** → customer opened it; resend email available
-- **accepted** → trigger job status handoff (job → `approved`, write `quoted_total`)
-- **declined** → show decline reason; future: create revised quote
-- **expired** → `valid_until` passed; surface reactively (no auto-expire cron yet)
-- **revised** → superseded by another quote
+### Stage definitions
+- **Requests**: Inbound intake queue. Currently backed by `tasks` table (website form → `/api/v1/service-requests` → `createQuoteRequest` → `tasks`). UI now exists at `/requests`.
+- **Estimates**: Internal scoping workspace. Currently no dedicated route. Pragmatic interim model: Jobs with `status='lead'` are the estimate stage. No new table needed yet.
+- **Quotes**: Customer-facing commercial document. Fully built (PRs #47–#57). Draft → sent → viewed → accepted/declined/expired/revised.
+- **Jobs**: Execution workspace. Fully built. Status enum includes `lead`, `site_visit_scheduled`, `quoted`, `approved`, `scheduled`, `in_progress`, `completed`, `invoiced`, `paid`, `cancelled`, `on_hold`.
 
-### Accepted quote → job handoff model
-Every quote already has a `job_id`. The handoff is:
-1. Accepted quote detail shows "Mark job as approved" CTA
-2. Action: `UPDATE jobs SET status='approved', quoted_total=quote.total WHERE id=job_id`
-3. Navigate to `/jobs/[jobId]` — scheduling, phases, and actuals live there
-No new tables or routes needed.
+### Estimates model (approved interim approach)
+Jobs with `status='lead'` serve as the Estimate stage. No new `estimates` table for now. Creating a draft Quote on a lead-status job = creating an estimate. The AI estimator, when it arrives, is the trigger to evaluate whether a dedicated `estimates` table is required.
 
-### Services placement
-Services (catalog management) is an admin/setup tool. It belongs out of the daily bottom nav. Its main value inside quoting is as a lookup when building line items — that's a picker embedded in the line item form (future PR #59).
+### `service_requests` table
+Migration `0012_service_requests_and_customer_accounts.sql` exists but was **never applied**. Current intake writes to `tasks`. Plan is to apply this migration in a dedicated PR (#61) after the requests UI is proven. Do not attempt to apply it as a side effect of other PRs.
 
-### Schema constraints that matter
-- `quotes.job_id` is NOT NULL — every quote requires an existing job (customer + property already on record)
-- Line item mutations are draft-only (enforced in DB query layer, not just UI)
-- `quoted_total` on jobs is a separate field — must be written explicitly on quote acceptance
-- `valid_until` is a DATE column (ISO string) — expiry check is date-only, not datetime
-- `recalcQuoteTotals` runs in application code, not a DB trigger (comment in code is misleading)
+### Navigation model (final for now)
+Bottom nav: **Today | Jobs | Quotes | Customers | Requests** (5 slots)
+- Properties: accessible at `/properties` and from customer detail
+- Services: accessible at `/services`
+- Requests: daily-workflow entry point, slot 5
 
 ---
 
 ## Exact next PR
 
-**PR #56 — Quote metadata editing**
+**PR #59 — Request detail page + "Convert to job" action**
 
-Goal: Make the draft quote detail page fully editable, not just line-items-only.
+Goal: Let Kevin open a single request, see all its details, and convert it into a lead-status Job in one click.
 
-Fields to expose as editable (draft status only):
-- `title` (currently auto-generated from job title, should be overridable)
-- `valid_until` (date picker or text input)
-- `discount_amount` (numeric, applied after subtotal)
-- `tax_pct` (numeric percentage, currently unset = 0%)
+Fields to show on `/requests/[taskId]`:
+- Full task title and structured description block (contact info, service, timeline, description, photos if any)
+- Customer context card: name, email, phone (linked to `/customers/[id]`)
+- Property context if `task.property_id` is set
+- Status + priority badges
+- "Convert to job" button (if not already converted — check `task.job_id`)
+- "Open job" link if `task.job_id` is set
+- Back link to `/requests`
 
-Optionally (same PR if small):
-- `intro_text` / `outro_text` — textarea fields
+"Convert to job" action:
+- Creates a `jobs` row: `status='lead'`, `customer_id` and `property_id` from the task, `title` derived from task title (strip "Quote request from " prefix, use service if available), `org_id` from session
+- Sets `tasks.job_id = new_job_id` (to mark as converted and link back)
+- Navigates to `/jobs/[newJobId]`
+- Revalidates `/requests/[taskId]` and `/requests`
 
-Implementation pattern:
-- New `UpdateQuoteMetadataInputSchema` in `packages/shared/schemas/quote.ts`
-- New `updateQuoteMetadataAction` in `apps/web/app/(app)/quotes/actions.ts`
-  - Guard: status must be `draft`
-  - After update, call `recalcQuoteTotals` if discount or tax changed
-- Inline edit form on `apps/web/app/(app)/quotes/[quoteId]/page.tsx`
-  - Show as read-only with an Edit button (toggles to editable inputs)
-  - Or: always-editable inputs on draft (simpler, fewer states)
-- Revalidate `/quotes/[quoteId]` and `/quotes` on success
-
-No schema changes needed — all fields exist in the DB.
+No schema changes needed. `tasks.job_id` and `jobs.status='lead'` already exist.
 
 Files expected:
-- `packages/shared/schemas/quote.ts`
-- `packages/shared/schemas/index.ts` (re-export)
-- `packages/shared/index.ts` (re-export)
-- `apps/web/app/(app)/quotes/actions.ts`
-- `apps/web/app/(app)/quotes/[quoteId]/page.tsx`
-- Possibly a new `_components/quote-metadata-form.tsx`
+- `apps/web/app/(app)/requests/[taskId]/page.tsx` (new)
+- `apps/web/app/(app)/requests/actions.ts` (new — `convertRequestToJobAction`)
+- `packages/db/queries/requests.ts` (add `getRequestById`)
+- `packages/db/queries/index.ts` (export `getRequestById`)
+- `packages/db/index.ts` (export `getRequestById`)
 
 ---
 
 ## Risks / blockers
 
-1. **PR #55 not yet merged** — next session must start by checking merge status. If merged, pull main before branching.
-2. **`recalcQuoteTotals` is application-side** — the DB schema comment says "via trigger" but no trigger exists. This is correct as-is but means totals are only accurate after line item mutations. Metadata edits (discount/tax) must also call `recalcQuoteTotals` or totals will be stale.
-3. **`valid_until` auto-expiry is not implemented** — quotes past their `valid_until` date do not automatically transition to `expired` status. This is a known gap. Plan is to surface it reactively (banner on page load) before adding any cron or background job.
-4. **Services is unreachable from the nav** — acceptable for now (accessible at `/services` URL). If the team finds it disorienting, the lowest-cost fix is a link from the quote detail line-item section.
-5. **`NewQuoteDialog` has no backdrop/overlay** — it's an inline toggle panel because no `Dialog` shadcn component is installed. If a modal UX is preferred later, install `@/components/ui/dialog` and swap it in.
-6. **Job picker loads `listJobs` ordering** — `scheduled_start asc, created_at desc`. For orgs with many unscheduled jobs, most-recently-created appear first. Reasonable, but could be optimized to "most recent by updated_at" for the picker context.
+### 1. `0012_` naming collision in migrations
+`0012_drop_pending_approval.sql` and `0012_service_requests_and_customer_accounts.sql` both use the same prefix. Supabase migration runners treat prefix as ordering key — this collision is a latent bug. Before PR #61 (schema fix), confirm which file was applied and rename the other. Do not attempt to resolve as a side effect of PR #59 or #60.
+
+### 2. `quotes.job_id NOT NULL` constraint
+Every quote requires an existing job. The PR #59 "convert to job" flow creates the job first (from a request) and then a quote can be attached. This satisfies the constraint without schema changes. But if a future flow needs "create estimate with no job at all" (e.g., rough phone quote), this constraint must be relaxed (migration needed). Flag and confirm before attempting.
+
+### 3. `createServiceRequest` is dead code
+The function in `packages/db/queries/service-requests.ts` writes to the non-existent `service_requests` table and is never called. The `/api/v1/service-requests` route calls `createQuoteRequest` instead. This will be resolved in PR #61 when the migration is applied. Until then, leave it as-is — do not delete or wire it up without the migration.
+
+### 4. `/requests` only shows tasks, not all request types
+Currently the `listRequests` query filters by `title ILIKE 'Quote request from%'`. This means manually-created tasks, SMS leads, and phone inquiries are not visible. That's correct for now — the scope is website leads only. When `service_requests` table goes live (PR #62), the inbox switches to the richer model.
+
+### 5. No mutation actions on `/requests` yet
+The inbox is read-only. Kevin can see requests but cannot mark them done, snooze, or convert from the list. That is intentional for PR #58 — those actions land in PR #59 (detail page + convert action).
 
 ---
 
 ## Resume instructions for next session
 
-1. Check PR #55 status: `gh pr view 55`
-2. If merged: `git checkout main && git pull && git checkout -b feature/quote-metadata-editing`
-3. If not merged: wait for merge, then follow step 2
-4. Re-read `apps/web/app/(app)/quotes/[quoteId]/page.tsx` (it was compacted from context — must re-read before editing)
-5. Re-read `apps/web/app/(app)/quotes/actions.ts` (to see current state after PR #55)
-6. Re-read `packages/shared/schemas/quote.ts` (to add `UpdateQuoteMetadataInputSchema`)
-7. Implement PR #56 per the "Exact next PR" spec above
-8. Required checks: `pnpm --filter web exec tsc --noEmit` + `pnpm --filter @premier/web build`
+1. Confirm repo state: `git status` should be clean on `main` at `f2701e1`
+2. Re-read this file: `docs/HANDOFF-current.md`
+3. Re-read `apps/web/app/(app)/requests/page.tsx` to understand what exists before adding the detail page
+4. Re-read `packages/db/queries/requests.ts` to understand the current query shape before extending it
+5. Re-read `packages/db/queries/jobs.ts` to understand job creation pattern before writing `convertRequestToJobAction`
+6. Create branch: `git checkout -b feature/request-detail-convert-to-job`
+7. Implement PR #59 per the "Exact next PR" spec above
+8. Required checks: `pnpm --filter web exec tsc --noEmit` + `pnpm --filter web build`
+9. Commit, push, open PR, evaluate merge rules, merge if qualified
