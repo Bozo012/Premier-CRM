@@ -98,12 +98,28 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
     <PageShell>
       <header className="space-y-4">
         <div className="space-y-2">
-          <Link
-            href={`/jobs/${job.job.id}`}
-            className="inline-flex text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Back to job
-          </Link>
+          {job ? (
+            <Link
+              href={`/jobs/${job.job.id}`}
+              className="inline-flex text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Back to job
+            </Link>
+          ) : quote.estimate_id ? (
+            <Link
+              href={`/estimates/${quote.estimate_id}`}
+              className="inline-flex text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Back to estimate
+            </Link>
+          ) : (
+            <Link
+              href="/quotes"
+              className="inline-flex text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Back to quotes
+            </Link>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
               {quote.title?.trim() || quote.quote_number || 'Untitled quote'}
@@ -115,7 +131,7 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
             {[
               quote.quote_number || 'Draft number not assigned',
               customer?.displayName || 'Unknown customer',
-              job.job.job_number || 'No job number',
+              job?.job.job_number || null,
             ]
               .filter(Boolean)
               .join(' · ')}
@@ -139,12 +155,21 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
           value={quote.valid_until ? formatDate(quote.valid_until) : 'Not set'}
           helper={`Created ${formatDateTime(quote.created_at)}`}
         />
-        <InfoCard
-          label="Linked job"
-          value={job.job.title.trim() || job.job.job_number || 'Untitled job'}
-          helper={formatEnumLabel(job.job.status)}
-          href={`/jobs/${job.job.id}`}
-        />
+        {job ? (
+          <InfoCard
+            label="Linked job"
+            value={job.job.title.trim() || job.job.job_number || 'Untitled job'}
+            helper={formatEnumLabel(job.job.status)}
+            href={`/jobs/${job.job.id}`}
+          />
+        ) : quote.estimate_id ? (
+          <InfoCard
+            label="Linked estimate"
+            value="View estimate"
+            helper="Quote created from estimate"
+            href={`/estimates/${quote.estimate_id}`}
+          />
+        ) : null}
       </section>
 
       {quote.status === 'draft' ? (
@@ -168,15 +193,19 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
             <CardContent className="space-y-3">
               <DetailRow label="Status" value={formatEnumLabel(quote.status)} />
               <DetailRow label="Type" value={formatEnumLabel(quote.type)} />
-              <DetailRow label="Service category" value={job.category?.name || 'Not set'} />
-              <DetailRow label="Job priority" value={formatEnumLabel(job.job.priority)} />
-              <DetailRow
-                label="Scheduled window"
-                value={formatScheduledWindow(
-                  job.job.scheduled_start,
-                  job.job.scheduled_end
-                )}
-              />
+              {job ? (
+                <>
+                  <DetailRow label="Service category" value={job.category?.name || 'Not set'} />
+                  <DetailRow label="Job priority" value={formatEnumLabel(job.job.priority)} />
+                  <DetailRow
+                    label="Scheduled window"
+                    value={formatScheduledWindow(
+                      job.job.scheduled_start,
+                      job.job.scheduled_end
+                    )}
+                  />
+                </>
+              ) : null}
               <DetailRow
                 label="Intro text"
                 value={quote.intro_text?.trim() || 'No intro text yet'}
@@ -315,7 +344,7 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
                     <ResendQuoteEmailButton quoteId={quote.id} />
                   </div>
                 ) : null}
-                {quote.status === 'accepted' ? (
+                {quote.status === 'accepted' && job ? (
                   <div className="border-t pt-3 space-y-3">
                     <p className="text-sm text-muted-foreground">
                       The customer accepted this quote. Mark the linked job as{' '}
@@ -329,6 +358,12 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
                     >
                       Open job →
                     </Link>
+                  </div>
+                ) : quote.status === 'accepted' && !job ? (
+                  <div className="border-t pt-3">
+                    <p className="text-sm text-muted-foreground">
+                      The customer accepted this quote. Job creation from estimate is coming soon.
+                    </p>
                   </div>
                 ) : null}
               </div>

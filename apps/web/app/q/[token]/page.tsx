@@ -78,12 +78,16 @@ export default async function PublicQuotePage({ params }: PublicQuotePageProps) 
         </div>
 
         <div className="space-y-1 sm:text-right">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Related job
-          </p>
-          <p className="font-medium text-foreground">
-            {job.job.title.trim() || job.job.job_number || 'Service job'}
-          </p>
+          {job ? (
+            <>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Related job
+              </p>
+              <p className="font-medium text-foreground">
+                {job.job.title.trim() || job.job.job_number || 'Service job'}
+              </p>
+            </>
+          ) : null}
           {quote.valid_until ? (
             <p className="text-sm text-muted-foreground">
               Valid until {formatDate(quote.valid_until)}

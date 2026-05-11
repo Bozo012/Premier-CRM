@@ -95,8 +95,10 @@ export {
 export {
   getEstimateById,
   listEstimates,
+  listQuotesForEstimate,
   type EstimateCustomerSummary,
   type EstimateDetail,
+  type EstimateLinkedQuote,
   type EstimateListItem,
   type EstimateListPage,
   type EstimatePropertySummary,

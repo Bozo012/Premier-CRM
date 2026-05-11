@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { getEstimateById } from '@premier/db';
+import { createServiceClient, getEstimateById, listQuotesForEstimate } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
+
+import { CreateQuoteButton } from '../_components/create-quote-button';
 
 interface EstimateDetailPageProps {
   params: Promise<{ estimateId: string }>;
@@ -33,10 +35,13 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
     redirect('/estimates');
   }
 
-  const result = await getEstimateById(supabase, {
-    estimateId,
-    orgId: membership.org_id,
-  });
+  const serviceClient = createServiceClient();
+  const orgId = membership.org_id;
+
+  const [result, quotesResult] = await Promise.all([
+    getEstimateById(supabase, { estimateId, orgId }),
+    listQuotesForEstimate(serviceClient, { estimateId, orgId }),
+  ]);
 
   if (!result.success) {
     return (
@@ -52,6 +57,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
   }
 
   const estimate = result.data;
+  const quotes = quotesResult.success ? quotesResult.data : [];
 
   const address = estimate.property
     ? `${estimate.property.addressLine1}, ${estimate.property.city}, ${estimate.property.state} ${estimate.property.zip}`
@@ -147,9 +153,53 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
         ) : null}
       </div>
 
-      <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-        Full estimate actions — quote creation, approval, scheduling — are coming in the next build.
-      </div>
+      {/* Quotes section */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Quotes</h2>
+          {estimate.status !== 'converted' && estimate.status !== 'declined' ? (
+            <CreateQuoteButton
+              estimateId={estimate.id}
+              estimateTitle={estimate.title}
+            />
+          ) : null}
+        </div>
+
+        {quotes.length === 0 ? (
+          <p className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            No quotes yet. Use &ldquo;Create quote&rdquo; above to build the first one.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-md border">
+            {quotes.map((q) => (
+              <li key={q.id}>
+                <Link
+                  href={`/quotes/${q.id}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/30"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-foreground">
+                      {q.title?.trim() || q.quoteNumber || 'Untitled quote'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {q.quoteNumber ? `${q.quoteNumber} · ` : ''}
+                      Created {formatDate(q.createdAt)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {q.total !== null ? (
+                      <span className="text-sm font-medium text-foreground">
+                        {formatMoney(q.total)}
+                      </span>
+                    ) : null}
+                    <QuoteStatusBadge status={q.status} />
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }
@@ -208,10 +258,39 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const QUOTE_STATUS_COLORS: Record<string, string> = {
+  draft: 'bg-slate-100 text-slate-700',
+  sent: 'bg-violet-50 text-violet-700',
+  viewed: 'bg-indigo-50 text-indigo-700',
+  accepted: 'bg-green-50 text-green-700',
+  declined: 'bg-red-50 text-red-700',
+  expired: 'bg-orange-50 text-orange-700',
+  revised: 'bg-blue-50 text-blue-700',
+};
+
+function QuoteStatusBadge({ status }: { status: string }) {
+  const colorClass = QUOTE_STATUS_COLORS[status] ?? 'bg-slate-100 text-slate-700';
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
+      {status
+        .split('_')
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join(' ')}
+    </span>
+  );
+}
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   }).format(new Date(value));
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    currency: 'USD',
+    style: 'currency',
+  }).format(value);
 }

@@ -246,6 +246,46 @@ export async function getEstimateById(
 }
 
 // ---------------------------------------------------------------------------
+// Quotes linked to an estimate
+// ---------------------------------------------------------------------------
+
+export interface EstimateLinkedQuote {
+  id: string;
+  quoteNumber: string | null;
+  title: string | null;
+  status: string;
+  total: number | null;
+  createdAt: string;
+}
+
+export async function listQuotesForEstimate(
+  client: DbClient,
+  args: { estimateId: string; orgId: string }
+): Promise<Result<EstimateLinkedQuote[]>> {
+  const { data, error } = await client
+    .from('quotes')
+    .select('id, quote_number, title, status, total, created_at')
+    .eq('org_id', args.orgId)
+    .eq('estimate_id', args.estimateId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  return ok(
+    (data ?? []).map((row) => ({
+      id: row.id,
+      quoteNumber: row.quote_number,
+      title: row.title,
+      status: row.status,
+      total: row.total,
+      createdAt: row.created_at,
+    }))
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

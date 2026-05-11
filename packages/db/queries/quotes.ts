@@ -103,7 +103,7 @@ export interface QuoteLineItemSummary {
 
 export interface QuoteDetail {
   customer: QuoteCustomerSummary | null;
-  job: QuoteJobSummary;
+  job: QuoteJobSummary | null;
   lineItems: QuoteLineItemSummary[];
   property: QuotePropertySummary | null;
   quote: Quote;
@@ -396,10 +396,113 @@ export async function getQuoteById(
     return err(ErrorCode.NOT_FOUND, `Quote ${args.quoteId} not found`);
   }
 
+  // Estimate-only path — no job linked yet.
   if (!quote.job_id) {
-    return err(ErrorCode.NOT_FOUND, 'Quote has no linked job.');
+    if (!quote.estimate_id) {
+      return err(ErrorCode.NOT_FOUND, 'Quote has no linked job or estimate.');
+    }
+
+    const { data: estimate, error: estimateError } = await client
+      .from('estimates')
+      .select('customer_id, property_id')
+      .eq('id', quote.estimate_id)
+      .eq('org_id', args.orgId)
+      .maybeSingle();
+
+    if (estimateError) {
+      return err(ErrorCode.DB_ERROR, estimateError.message);
+    }
+    if (!estimate) {
+      return err(ErrorCode.NOT_FOUND, 'Linked estimate not found.');
+    }
+
+    const [customerResult, propertyResult, lineItemsResult] = await Promise.all([
+      estimate.customer_id
+        ? client
+            .from('customers')
+            .select(
+              'id, display_name, company_name, first_name, last_name, phone_primary, email'
+            )
+            .eq('org_id', args.orgId)
+            .eq('id', estimate.customer_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null as CustomerRow | null, error: null }),
+      estimate.property_id
+        ? client
+            .from('properties')
+            .select(
+              'id, address_line_1, address_line_2, city, state, zip, property_type'
+            )
+            .eq('org_id', args.orgId)
+            .eq('id', estimate.property_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null as PropertyRow | null, error: null }),
+      client
+        .from('quote_line_items')
+        .select('*')
+        .eq('org_id', args.orgId)
+        .eq('quote_id', quote.id)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
+    ]);
+
+    if (customerResult.error) {
+      return err(ErrorCode.DB_ERROR, customerResult.error.message);
+    }
+    if (propertyResult.error) {
+      return err(ErrorCode.DB_ERROR, propertyResult.error.message);
+    }
+    if (lineItemsResult.error) {
+      return err(ErrorCode.DB_ERROR, lineItemsResult.error.message);
+    }
+
+    const estLineItems = lineItemsResult.data ?? [];
+    const estServiceIds = Array.from(
+      new Set(
+        estLineItems
+          .map((li) => li.service_id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    const { data: estServices, error: estServicesError } =
+      estServiceIds.length > 0
+        ? await client
+            .from('service_items')
+            .select('id, name, pricing_metric')
+            .eq('org_id', args.orgId)
+            .in('id', estServiceIds)
+        : { data: [] as ServiceItemRow[], error: null };
+
+    if (estServicesError) {
+      return err(ErrorCode.DB_ERROR, estServicesError.message);
+    }
+
+    const estServicesById = new Map(
+      (estServices ?? []).map((s) => [s.id, s as ServiceItemRow])
+    );
+
+    return ok({
+      customer: toCustomerSummary(customerResult.data as CustomerRow | null),
+      job: null,
+      lineItems: estLineItems.map((lineItem) => {
+        const service = lineItem.service_id
+          ? estServicesById.get(lineItem.service_id) ?? null
+          : null;
+        return {
+          item: lineItem,
+          phaseName: null,
+          service: service
+            ? { id: service.id, name: service.name, pricingMetric: service.pricing_metric }
+            : null,
+        };
+      }),
+      property: toPropertySummary(propertyResult.data as PropertyRow | null),
+      quote,
+    });
   }
 
+  // Job path.
   const { data: job, error: jobError } = await client
     .from('jobs')
     .select('*')
@@ -552,7 +655,7 @@ export async function getQuoteById(
 
 export interface QuoteTokenDetail {
   customer: QuoteCustomerSummary | null;
-  job: QuoteJobSummary;
+  job: QuoteJobSummary | null;
   lineItems: QuoteLineItemSummary[];
   property: QuotePropertySummary | null;
   quote: Quote;
@@ -576,10 +679,106 @@ export async function getQuoteByToken(
     return err(ErrorCode.NOT_FOUND, 'Quote not found');
   }
 
+  // Estimate-only path — no job linked yet.
   if (!quote.job_id) {
-    return err(ErrorCode.NOT_FOUND, 'Quote has no linked job.');
+    if (!quote.estimate_id) {
+      return err(ErrorCode.NOT_FOUND, 'Quote has no linked job or estimate.');
+    }
+
+    const { data: estimate, error: estimateError } = await client
+      .from('estimates')
+      .select('customer_id, property_id')
+      .eq('id', quote.estimate_id)
+      .maybeSingle();
+
+    if (estimateError) {
+      return err(ErrorCode.DB_ERROR, estimateError.message);
+    }
+    if (!estimate) {
+      return err(ErrorCode.NOT_FOUND, 'Linked estimate not found.');
+    }
+
+    const [customerResult, propertyResult, lineItemsResult] = await Promise.all([
+      estimate.customer_id
+        ? client
+            .from('customers')
+            .select(
+              'id, display_name, company_name, first_name, last_name, phone_primary, email'
+            )
+            .eq('id', estimate.customer_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null as CustomerRow | null, error: null }),
+      estimate.property_id
+        ? client
+            .from('properties')
+            .select(
+              'id, address_line_1, address_line_2, city, state, zip, property_type'
+            )
+            .eq('id', estimate.property_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null as PropertyRow | null, error: null }),
+      client
+        .from('quote_line_items')
+        .select('*')
+        .eq('quote_id', quote.id)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
+    ]);
+
+    if (customerResult.error) {
+      return err(ErrorCode.DB_ERROR, customerResult.error.message);
+    }
+    if (propertyResult.error) {
+      return err(ErrorCode.DB_ERROR, propertyResult.error.message);
+    }
+    if (lineItemsResult.error) {
+      return err(ErrorCode.DB_ERROR, lineItemsResult.error.message);
+    }
+
+    const estLineItems = lineItemsResult.data ?? [];
+    const estServiceIds = Array.from(
+      new Set(
+        estLineItems
+          .map((li) => li.service_id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    const { data: estServices, error: estServicesError } =
+      estServiceIds.length > 0
+        ? await client
+            .from('service_items')
+            .select('id, name, pricing_metric')
+            .in('id', estServiceIds)
+        : { data: [] as ServiceItemRow[], error: null };
+
+    if (estServicesError) {
+      return err(ErrorCode.DB_ERROR, estServicesError.message);
+    }
+
+    const estServicesById = new Map(
+      (estServices ?? []).map((s) => [s.id, s as ServiceItemRow])
+    );
+
+    return ok({
+      customer: toCustomerSummary(customerResult.data as CustomerRow | null),
+      job: null,
+      lineItems: estLineItems.map((li) => {
+        const service = li.service_id ? estServicesById.get(li.service_id) ?? null : null;
+        return {
+          item: li,
+          phaseName: null,
+          service: service
+            ? { id: service.id, name: service.name, pricingMetric: service.pricing_metric }
+            : null,
+        };
+      }),
+      property: toPropertySummary(propertyResult.data as PropertyRow | null),
+      quote,
+    });
   }
 
+  // Job path.
   const { data: job, error: jobError } = await client
     .from('jobs')
     .select('*')
