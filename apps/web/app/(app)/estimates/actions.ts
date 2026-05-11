@@ -7,6 +7,24 @@ import { createDraftQuote, createServiceClient } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
+// ---------------------------------------------------------------------------
+// Shared types for pickers
+// ---------------------------------------------------------------------------
+
+export interface CustomerPickerItem {
+  displayName: string;
+  email: string | null;
+  id: string;
+}
+
+export interface PropertyPickerItem {
+  addressLine1: string;
+  city: string;
+  id: string;
+  state: string;
+  zip: string;
+}
+
 async function getEstimateActionContext(): Promise<
   Result<{ orgId: string; userId: string }>
 > {
@@ -111,4 +129,225 @@ export async function createQuoteFromEstimateAction(
   revalidatePath('/quotes');
 
   return ok({ quoteId: quoteResult.data.id });
+}
+
+// ---------------------------------------------------------------------------
+// Customer picker search
+// ---------------------------------------------------------------------------
+
+export type SearchCustomersForPickerActionState = Result<CustomerPickerItem[]>;
+
+export async function searchCustomersForPickerAction(
+  _prevState: SearchCustomersForPickerActionState | null,
+  formData: FormData
+): Promise<SearchCustomersForPickerActionState> {
+  const contextResult = await getEstimateActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId } = contextResult.data;
+
+  const q =
+    typeof formData.get('q') === 'string'
+      ? (formData.get('q') as string).trim()
+      : '';
+
+  const client = createServiceClient();
+
+  let query = client
+    .from('customers')
+    .select('id, display_name, company_name, first_name, last_name, email')
+    .eq('org_id', orgId)
+    .eq('is_archived', false)
+    .order('last_contact_at', { ascending: false, nullsFirst: false })
+    .limit(30);
+
+  if (q) {
+    query = query.ilike('display_name', `%${q}%`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  return ok(
+    (data ?? []).map((c) => ({
+      id: c.id,
+      displayName:
+        c.display_name ??
+        ([c.first_name, c.last_name].filter(Boolean).join(' ') || 'Unnamed customer'),
+      email: c.email ?? null,
+    }))
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Property picker for a customer
+// ---------------------------------------------------------------------------
+
+export type ListPropertiesForCustomerActionState = Result<PropertyPickerItem[]>;
+
+export async function listPropertiesForCustomerAction(
+  _prevState: ListPropertiesForCustomerActionState | null,
+  formData: FormData
+): Promise<ListPropertiesForCustomerActionState> {
+  const contextResult = await getEstimateActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId } = contextResult.data;
+
+  const customerId =
+    typeof formData.get('customerId') === 'string'
+      ? (formData.get('customerId') as string).trim()
+      : '';
+
+  if (!customerId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Customer ID is required.');
+  }
+
+  const client = createServiceClient();
+
+  // Fetch property IDs linked to this customer.
+  const { data: links, error: linksError } = await client
+    .from('customer_properties')
+    .select('property_id')
+    .eq('customer_id', customerId);
+
+  if (linksError) {
+    return err(ErrorCode.DB_ERROR, linksError.message);
+  }
+
+  const propertyIds = (links ?? []).map((l) => l.property_id);
+
+  if (propertyIds.length === 0) {
+    return ok([]);
+  }
+
+  const { data: props, error: propsError } = await client
+    .from('properties')
+    .select('id, address_line_1, city, state, zip')
+    .eq('org_id', orgId)
+    .in('id', propertyIds)
+    .order('address_line_1', { ascending: true });
+
+  if (propsError) {
+    return err(ErrorCode.DB_ERROR, propsError.message);
+  }
+
+  return ok(
+    (props ?? []).map((p) => ({
+      id: p.id,
+      addressLine1: p.address_line_1,
+      city: p.city,
+      state: p.state,
+      zip: p.zip,
+    }))
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Create manual estimate (no service request)
+// ---------------------------------------------------------------------------
+
+export type CreateManualEstimateActionState = Result<{ estimateId: string }>;
+
+export async function createManualEstimateAction(
+  _prevState: CreateManualEstimateActionState | null,
+  formData: FormData
+): Promise<CreateManualEstimateActionState> {
+  const contextResult = await getEstimateActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId, userId } = contextResult.data;
+
+  const customerId =
+    typeof formData.get('customerId') === 'string'
+      ? (formData.get('customerId') as string).trim()
+      : '';
+  const propertyId =
+    typeof formData.get('propertyId') === 'string'
+      ? (formData.get('propertyId') as string).trim()
+      : '';
+  const title =
+    typeof formData.get('title') === 'string'
+      ? (formData.get('title') as string).trim()
+      : '';
+  const description =
+    typeof formData.get('description') === 'string'
+      ? (formData.get('description') as string).trim()
+      : '';
+
+  if (!customerId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'A customer is required.');
+  }
+  if (!propertyId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'A property is required.');
+  }
+  if (!title) {
+    return err(ErrorCode.VALIDATION_ERROR, 'A title is required.');
+  }
+
+  const client = createServiceClient();
+
+  // Verify customer belongs to this org.
+  const { data: customer, error: customerError } = await client
+    .from('customers')
+    .select('id')
+    .eq('id', customerId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (customerError) {
+    return err(ErrorCode.DB_ERROR, customerError.message);
+  }
+  if (!customer) {
+    return err(ErrorCode.NOT_FOUND, 'Customer not found.');
+  }
+
+  // Verify the property is linked to this customer.
+  const { data: link, error: linkError } = await client
+    .from('customer_properties')
+    .select('property_id')
+    .eq('customer_id', customerId)
+    .eq('property_id', propertyId)
+    .maybeSingle();
+
+  if (linkError) {
+    return err(ErrorCode.DB_ERROR, linkError.message);
+  }
+  if (!link) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      'The selected property is not linked to this customer.'
+    );
+  }
+
+  const { data: newEstimate, error: insertError } = await client
+    .from('estimates')
+    .insert({
+      org_id: orgId,
+      customer_id: customerId,
+      property_id: propertyId,
+      title,
+      description: description || null,
+      status: 'draft',
+      created_by: userId,
+    })
+    .select('id')
+    .single();
+
+  if (insertError || !newEstimate) {
+    return err(
+      ErrorCode.DB_ERROR,
+      insertError?.message ?? 'Failed to create estimate.'
+    );
+  }
+
+  revalidatePath('/estimates');
+
+  return ok({ estimateId: newEstimate.id });
 }

@@ -196,13 +196,21 @@ function PageShell({
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
       <header className="space-y-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Estimates
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Site visits, scoped work, and quoted proposals.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Estimates
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Site visits, scoped work, and quoted proposals.
+            </p>
+          </div>
+          <Link
+            href="/estimates/new"
+            className="inline-flex shrink-0 items-center rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-slate-700"
+          >
+            New estimate
+          </Link>
         </div>
 
         <nav className="flex gap-1">
@@ -245,7 +253,11 @@ function EmptyState({ view }: { view: ViewFilter }) {
     <div className="space-y-2 rounded-md border bg-background px-4 py-8 text-center">
       <p className="text-sm font-medium text-foreground">No active estimates</p>
       <p className="text-sm text-muted-foreground">
-        Convert a request to create an estimate, or create one directly from a customer.
+        Convert a request to create an estimate, or{' '}
+        <Link href="/estimates/new" className="font-medium text-foreground underline-offset-2 hover:underline">
+          create one manually
+        </Link>
+        .
       </p>
     </div>
   );

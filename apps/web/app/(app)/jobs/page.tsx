@@ -20,19 +20,20 @@ const STATUS_FILTERS: Array<{ label: string; value?: JobStatus }> = [
   { label: 'Cancelled', value: 'cancelled' },
 ] as const;
 
-const ESTIMATE_STATUSES: JobStatus[] = ['lead', 'site_visit_scheduled', 'quoted'];
-
-type ViewMode = 'jobs' | 'estimates';
-
 interface JobsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function JobsPage({ searchParams }: JobsPageProps) {
   const params = await searchParams;
+
+  // Legacy bridge-model route — redirect to the real estimates workspace.
+  if (readStringParam(params.view) === 'estimates') {
+    redirect('/estimates');
+  }
+
   const search = readStringParam(params.q);
   const status = readStatusParam(params.status);
-  const view = readViewParam(params.view);
 
   const supabase = await getServerSupabase();
   const {
@@ -53,7 +54,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 
   if (membershipError) {
     return (
-      <PageShell search={search} status={status} view={view}>
+      <PageShell search={search} status={status}>
         <ErrorPanel>
           Could not load your organization membership: {membershipError.message}
         </ErrorPanel>
@@ -63,7 +64,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 
   if (!membership?.org_id) {
     return (
-      <PageShell search={search} status={status} view={view}>
+      <PageShell search={search} status={status}>
         <WarningPanel>
           You don&apos;t have an active organization membership yet. Ask the owner
           to approve your account, or contact Kevin.
@@ -77,14 +78,12 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
     offset: 0,
     orgId: membership.org_id,
     search,
-    ...(view === 'estimates'
-      ? { statuses: ESTIMATE_STATUSES }
-      : { status }),
+    status,
   });
 
   if (!result.success) {
     return (
-      <PageShell search={search} status={status} view={view}>
+      <PageShell search={search} status={status}>
         <ErrorPanel>Failed to load jobs: {result.error}</ErrorPanel>
       </PageShell>
     );
@@ -93,15 +92,13 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   const { jobs, total } = result.data;
 
   return (
-    <PageShell search={search} status={status} view={view}>
+    <PageShell search={search} status={status}>
       <p className="text-sm text-muted-foreground">
-        {view === 'estimates'
-          ? formatEstimatesTotal(total, search)
-          : formatTotal(total, search, status)}
+        {formatTotal(total, search, status)}
       </p>
 
       {jobs.length === 0 ? (
-        <EmptyState search={search} status={status} view={view} />
+        <EmptyState search={search} status={status} />
       ) : (
         <ul className="divide-y rounded-md border bg-background">
           {jobs.map((item) => (
@@ -155,89 +152,42 @@ function PageShell({
   children,
   search = '',
   status,
-  view,
 }: {
   children: React.ReactNode;
   search?: string;
   status?: JobStatus;
-  view: ViewMode;
 }) {
-  const isEstimates = view === 'estimates';
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
       <header className="space-y-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {isEstimates ? 'Estimates' : 'Jobs'}
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Jobs</h1>
           <p className="text-sm text-muted-foreground">
-            {isEstimates
-              ? 'In-progress estimates — leads, site visits, and quoted-but-pending jobs.'
-              : 'Review active work, schedule visibility, and linked customer/property context.'}
+            Review active work, schedule visibility, and linked customer/property context.
           </p>
         </div>
 
-        <nav className="flex gap-1">
-          <Link
-            href="/jobs"
-            className={[
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              !isEstimates
-                ? 'bg-foreground text-background'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            ].join(' ')}
+        <form action="/jobs" className="flex flex-col gap-2 lg:flex-row">
+          <Input
+            defaultValue={search}
+            name="q"
+            placeholder="Search by title, description, or job number..."
+          />
+          <select
+            defaultValue={status ?? ''}
+            name="status"
+            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring lg:max-w-56"
           >
-            Jobs
-          </Link>
-          <Link
-            href="/jobs?view=estimates"
-            className={[
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              isEstimates
-                ? 'bg-foreground text-background'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            ].join(' ')}
-          >
-            Estimates
-          </Link>
-        </nav>
-
-        {!isEstimates ? (
-          <form action="/jobs" className="flex flex-col gap-2 lg:flex-row">
-            <Input
-              defaultValue={search}
-              name="q"
-              placeholder="Search by title, description, or job number..."
-            />
-            <select
-              defaultValue={status ?? ''}
-              name="status"
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring lg:max-w-56"
-            >
-              {STATUS_FILTERS.map((filter) => (
-                <option key={filter.label} value={filter.value ?? ''}>
-                  {filter.label}
-                </option>
-              ))}
-            </select>
-            <Button type="submit" variant="outline">
-              Filter
-            </Button>
-          </form>
-        ) : (
-          <form action="/jobs" className="flex flex-col gap-2 lg:flex-row">
-            <input type="hidden" name="view" value="estimates" />
-            <Input
-              defaultValue={search}
-              name="q"
-              placeholder="Search estimates..."
-            />
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-          </form>
-        )}
+            {STATUS_FILTERS.map((filter) => (
+              <option key={filter.label} value={filter.value ?? ''}>
+                {filter.label}
+              </option>
+            ))}
+          </select>
+          <Button type="submit" variant="outline">
+            Filter
+          </Button>
+        </form>
       </header>
 
       {children}
@@ -248,38 +198,10 @@ function PageShell({
 function EmptyState({
   search,
   status,
-  view,
 }: {
   search?: string;
   status?: JobStatus;
-  view: ViewMode;
 }) {
-  if (view === 'estimates') {
-    if (search) {
-      return (
-        <div className="space-y-3 rounded-md border bg-background px-4 py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            No estimates match that search.
-          </p>
-          <Button asChild variant="outline">
-            <Link href="/jobs?view=estimates">Clear search</Link>
-          </Button>
-        </div>
-      );
-    }
-    return (
-      <div className="space-y-2 rounded-md border bg-background px-4 py-8 text-center">
-        <p className="text-sm font-medium text-foreground">No estimates in progress</p>
-        <p className="text-sm text-muted-foreground">
-          Convert a request to a job to start an estimate.{' '}
-          <Link href="/requests" className="underline-offset-2 hover:underline text-foreground">
-            Open requests →
-          </Link>
-        </p>
-      </div>
-    );
-  }
-
   if (search || status) {
     return (
       <div className="space-y-3 rounded-md border bg-background px-4 py-8 text-center">
@@ -295,7 +217,7 @@ function EmptyState({
 
   return (
     <div className="rounded-md border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
-      No jobs yet. Imported work and future job creation will show up here.
+      No jobs yet. Jobs are created when a quote is accepted and approved.
     </div>
   );
 }
@@ -345,11 +267,6 @@ function PriorityBadge({
   );
 }
 
-function readViewParam(value: string | string[] | undefined): ViewMode {
-  const raw = Array.isArray(value) ? value[0] : value;
-  return raw === 'estimates' ? 'estimates' : 'jobs';
-}
-
 function readStringParam(
   value: string | string[] | undefined
 ): string | undefined {
@@ -382,9 +299,7 @@ function formatPropertyAddress(property: {
 }
 
 function formatScheduledAt(value: string | null) {
-  if (!value) {
-    return 'Unscheduled';
-  }
+  if (!value) return 'Unscheduled';
 
   return new Intl.DateTimeFormat('en-US', {
     day: 'numeric',
@@ -402,15 +317,9 @@ function formatEnumLabel(value: string) {
     .join(' ');
 }
 
-function formatEstimatesTotal(total: number, search?: string) {
-  if (total === 0) return '';
-  const noun = total === 1 ? 'estimate' : 'estimates';
-  return search ? `${total} ${noun} matching "${search}"` : `${total} ${noun} in progress`;
-}
-
 function formatTotal(total: number, search?: string, status?: JobStatus) {
   if (total === 0) {
-    return search || status ? '' : 'No jobs yet.';
+    return search || status ? '' : '';
   }
 
   const noun = total === 1 ? 'job' : 'jobs';
