@@ -156,6 +156,74 @@ export async function sendQuoteAction(
   return ok({ quoteUrl, emailSent });
 }
 
+// ---------------------------------------------------------------------------
+// Resend quote email
+// ---------------------------------------------------------------------------
+
+export type ResendQuoteEmailActionState = Result<{ sent: boolean }>;
+
+// Statuses for which resending makes sense — excludes terminal and pre-send states.
+const RESEND_ELIGIBLE_STATUSES = new Set(['sent', 'viewed']);
+
+export async function resendQuoteEmailAction(
+  _prevState: ResendQuoteEmailActionState | null,
+  formData: FormData
+): Promise<ResendQuoteEmailActionState> {
+  const contextResult = await getQuoteActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId } = contextResult.data;
+
+  const rawInput = { quoteId: readString(formData, 'quoteId') };
+  const parsed = SendQuoteInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    const firstError = parsed.error.errors[0];
+    return err(ErrorCode.VALIDATION_ERROR, firstError?.message ?? 'Invalid quote ID.');
+  }
+
+  const client = createServiceClient();
+  const detailResult = await getQuoteById(client, {
+    orgId,
+    quoteId: parsed.data.quoteId,
+  });
+
+  if (!detailResult.success) {
+    return detailResult;
+  }
+
+  const { customer, quote: quoteDetail } = detailResult.data;
+
+  if (!RESEND_ELIGIBLE_STATUSES.has(quoteDetail.status)) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      `Cannot resend email for a quote with status '${quoteDetail.status}'. Only sent or viewed quotes are eligible.`
+    );
+  }
+
+  if (!customer?.email) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      'No customer email address on record for this quote.'
+    );
+  }
+
+  const emailResult = await sendQuoteEmail({
+    customerEmail: customer.email,
+    customerName: customer.displayName,
+    quoteTitle: quoteDetail.title?.trim() || quoteDetail.quote_number || 'Your quote',
+    quoteTotal: quoteDetail.total,
+    quoteUrl: `/q/${quoteDetail.share_token}`,
+    validUntil: quoteDetail.valid_until,
+  });
+
+  if (!emailResult.sent) {
+    return err(ErrorCode.DB_ERROR, 'Email delivery failed. Check server logs for details.');
+  }
+
+  return ok({ sent: true });
+}
+
 export async function addLineItemAction(
   _prevState: LineItemActionState | null,
   formData: FormData

@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { LineItemEditor } from '../_components/line-item-editor';
+import { ResendQuoteEmailButton } from '../_components/resend-quote-email-button';
 import { SendQuoteButton } from '../_components/send-quote-button';
 
 interface QuoteDetailPageProps {
@@ -287,7 +288,18 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
                 <SendQuoteButton quoteId={quote.id} status={quote.status} />
               </>
             ) : (
-              <QuoteLifecycleTimeline quote={quote} />
+              <div className="space-y-4">
+                <QuoteLifecycleTimeline quote={quote} />
+                {(quote.status === 'sent' || quote.status === 'viewed') &&
+                customer?.email ? (
+                  <div className="border-t pt-3">
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      Resend to {customer.email}
+                    </p>
+                    <ResendQuoteEmailButton quoteId={quote.id} />
+                  </div>
+                ) : null}
+              </div>
             )}
           </CardContent>
         </Card>
