@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { LineItemEditor } from '../_components/line-item-editor';
+import { QuoteMetadataForm } from '../_components/quote-metadata-form';
 import { ResendQuoteEmailButton } from '../_components/resend-quote-email-button';
 import { SendQuoteButton } from '../_components/send-quote-button';
 
@@ -145,52 +146,66 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
         />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Quote summary</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <DetailRow label="Status" value={formatEnumLabel(quote.status)} />
-            <DetailRow label="Type" value={formatEnumLabel(quote.type)} />
-            <DetailRow label="Service category" value={job.category?.name || 'Not set'} />
-            <DetailRow label="Job priority" value={formatEnumLabel(job.job.priority)} />
-            <DetailRow
-              label="Scheduled window"
-              value={formatScheduledWindow(
-                job.job.scheduled_start,
-                job.job.scheduled_end
-              )}
-            />
-            <DetailRow
-              label="Intro text"
-              value={quote.intro_text?.trim() || 'No intro text yet'}
-            />
-            <DetailRow
-              label="Outro text"
-              value={quote.outro_text?.trim() || 'No outro text yet'}
-            />
-            <DetailRow label="Terms" value={quote.terms?.trim() || 'No terms yet'} />
-          </CardContent>
-        </Card>
+      {quote.status === 'draft' ? (
+        <section>
+          <QuoteMetadataForm
+            quoteId={quote.id}
+            currentTitle={quote.title}
+            currentValidUntil={quote.valid_until}
+            currentDiscountAmount={quote.discount_amount}
+            currentTaxPct={quote.tax_pct}
+            currentIntroText={quote.intro_text}
+            currentOutroText={quote.outro_text}
+          />
+        </section>
+      ) : (
+        <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Quote summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <DetailRow label="Status" value={formatEnumLabel(quote.status)} />
+              <DetailRow label="Type" value={formatEnumLabel(quote.type)} />
+              <DetailRow label="Service category" value={job.category?.name || 'Not set'} />
+              <DetailRow label="Job priority" value={formatEnumLabel(job.job.priority)} />
+              <DetailRow
+                label="Scheduled window"
+                value={formatScheduledWindow(
+                  job.job.scheduled_start,
+                  job.job.scheduled_end
+                )}
+              />
+              <DetailRow
+                label="Intro text"
+                value={quote.intro_text?.trim() || 'No intro text yet'}
+              />
+              <DetailRow
+                label="Outro text"
+                value={quote.outro_text?.trim() || 'No outro text yet'}
+              />
+              <DetailRow label="Terms" value={quote.terms?.trim() || 'No terms yet'} />
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Pricing snapshot</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <DetailRow label="Subtotal" value={formatMoney(quote.subtotal)} />
-            <DetailRow
-              label="Discount amount"
-              value={formatMoney(quote.discount_amount)}
-            />
-            <DetailRow label="Tax rate" value={formatPercent(quote.tax_pct)} />
-            <DetailRow label="Tax amount" value={formatMoney(quote.tax_amount)} />
-            <DetailRow label="Total" value={formatMoney(quote.total)} />
-            <DetailRow label="Updated" value={formatDateTime(quote.updated_at)} />
-          </CardContent>
-        </Card>
-      </section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Pricing snapshot</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <DetailRow label="Subtotal" value={formatMoney(quote.subtotal)} />
+              <DetailRow
+                label="Discount amount"
+                value={formatMoney(quote.discount_amount)}
+              />
+              <DetailRow label="Tax rate" value={formatPercent(quote.tax_pct)} />
+              <DetailRow label="Tax amount" value={formatMoney(quote.tax_amount)} />
+              <DetailRow label="Total" value={formatMoney(quote.total)} />
+              <DetailRow label="Updated" value={formatDateTime(quote.updated_at)} />
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
       <section className="grid gap-4 xl:grid-cols-2">
         <Card>

@@ -26,6 +26,7 @@ export {
   listQuotesForJob,
   removeQuoteLineItem,
   updateQuoteLineItem,
+  updateQuoteMetadata,
   listCatalogItemsForPicker,
   listServiceCatalogItems,
   listServiceCategories,

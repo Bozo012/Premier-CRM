@@ -79,6 +79,25 @@ export const RemoveLineItemInputSchema = z.object({
   quoteId: z.string().uuid(),
 });
 
+export const UpdateQuoteMetadataInputSchema = z.object({
+  quoteId: z.string().uuid(),
+  title: z.string().max(200),
+  // Empty string clears the date; YYYY-MM-DD sets it.
+  validUntil: z.string().max(20),
+  discountAmount: z.coerce
+    .number({ invalid_type_error: 'Discount must be a number' })
+    .min(0, 'Discount cannot be negative')
+    .max(999_999),
+  taxPct: z.coerce
+    .number({ invalid_type_error: 'Tax rate must be a number' })
+    .min(0, 'Tax rate cannot be negative')
+    .max(100, 'Tax rate cannot exceed 100%'),
+  introText: z.string().max(2000),
+  outroText: z.string().max(2000),
+});
+
+export type UpdateQuoteMetadataInput = z.infer<typeof UpdateQuoteMetadataInputSchema>;
+
 export const SendQuoteInputSchema = z.object({
   quoteId: z.string().uuid(),
 });

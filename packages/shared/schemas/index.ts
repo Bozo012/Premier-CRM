@@ -16,6 +16,7 @@ export {
   RespondToQuoteInputSchema,
   SendQuoteInputSchema,
   UpdateLineItemInputSchema,
+  UpdateQuoteMetadataInputSchema,
   type AddLineItemInput,
   type CreateQuoteFromJobInput,
   type ListQuotesArgs,
@@ -25,6 +26,7 @@ export {
   type RespondToQuoteInput,
   type SendQuoteInput,
   type UpdateLineItemInput,
+  type UpdateQuoteMetadataInput,
 } from './quote';
 export {
   ListServiceCatalogItemsArgsSchema,

@@ -7,6 +7,7 @@ export {
   listQuotesForJob,
   removeQuoteLineItem,
   updateQuoteLineItem,
+  updateQuoteMetadata,
   type JobQuoteSummary,
   type Quote,
   type QuoteCategorySummary,
