@@ -2531,6 +2531,7 @@ export type Database = {
           decline_reason: string | null
           declined_at: string | null
           discount_amount: number | null
+          estimate_id: string | null
           id: string
           intro_text: string | null
           job_id: string
@@ -2566,6 +2567,7 @@ export type Database = {
           decline_reason?: string | null
           declined_at?: string | null
           discount_amount?: number | null
+          estimate_id?: string | null
           id?: string
           intro_text?: string | null
           job_id: string
@@ -2601,6 +2603,7 @@ export type Database = {
           decline_reason?: string | null
           declined_at?: string | null
           discount_amount?: number | null
+          estimate_id?: string | null
           id?: string
           intro_text?: string | null
           job_id?: string
@@ -2628,6 +2631,13 @@ export type Database = {
           viewed_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "quotes_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "quotes_job_id_fkey"
             columns: ["job_id"]
