@@ -67,15 +67,16 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
     );
   }
 
-  // When showing 'open' filter, still exclude done/cancelled from count text.
   const { requests, total } = result.data;
 
-  // For the 'open' tab, requests were already filtered server-side.
-  // For 'all', include everything. For 'done', showDone=true but we want
-  // to only display done/cancelled rows.
+  // For the 'open' tab, requests were already filtered server-side (status='new').
+  // For 'all', include everything. For 'done', showDone=true but we only
+  // display the reviewing/completed/cancelled rows.
   const displayed =
     show === 'done'
-      ? requests.filter((r) => r.status === 'done' || r.status === 'cancelled')
+      ? requests.filter(
+          (r) => r.status === 'reviewing' || r.status === 'completed' || r.status === 'cancelled'
+        )
       : requests;
 
   return (
@@ -102,10 +103,6 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 // ---------------------------------------------------------------------------
 
 function RequestRow({ item }: { item: RequestListItem }) {
-  // Extract the service line from the description block built by
-  // buildTaskDescription: "Service: {service_needed}" appears near the top.
-  const serviceLine = extractServiceLine(item.description);
-
   return (
     <li>
       <div className="space-y-2 px-4 py-4 sm:px-5">
@@ -117,8 +114,8 @@ function RequestRow({ item }: { item: RequestListItem }) {
             >
               {item.title}
             </Link>
-            {serviceLine ? (
-              <p className="text-sm text-muted-foreground">{serviceLine}</p>
+            {item.serviceLine ? (
+              <p className="text-sm text-muted-foreground">{item.serviceLine}</p>
             ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -248,11 +245,14 @@ function EmptyState({ show }: { show: ShowFilter }) {
 
 function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
-    open: 'bg-amber-50 text-amber-700',
+    new: 'bg-amber-50 text-amber-700',
+    reviewing: 'bg-blue-50 text-blue-700',
+    approved: 'bg-green-50 text-green-700',
+    scheduled: 'bg-indigo-50 text-indigo-700',
     in_progress: 'bg-blue-50 text-blue-700',
-    done: 'bg-slate-100 text-slate-600',
+    completed: 'bg-slate-100 text-slate-600',
     cancelled: 'bg-slate-100 text-slate-500',
-    snoozed: 'bg-purple-50 text-purple-700',
+    spam: 'bg-red-50 text-red-600',
   };
   const color = colorMap[status] ?? 'bg-slate-100 text-slate-600';
   return (
@@ -295,22 +295,6 @@ function WarningPanel({ children }: { children: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Pull the "Service: {value}" line out of the structured description block
- * that buildTaskDescription writes. Returns null if the line isn't present.
- */
-function extractServiceLine(description: string | null): string | null {
-  if (!description) return null;
-  for (const line of description.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('Service:')) {
-      const value = trimmed.slice('Service:'.length).trim();
-      return value || null;
-    }
-  }
-  return null;
-}
 
 function formatEnumLabel(value: string): string {
   return value

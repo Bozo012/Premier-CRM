@@ -64,46 +64,45 @@ export async function convertRequestToJobAction(
   if (!contextResult.success) return contextResult;
   const { orgId, userId } = contextResult.data;
 
-  const taskId = readString(formData, 'taskId');
-  if (!taskId) {
+  const requestId = readString(formData, 'taskId');
+  if (!requestId) {
     return err(ErrorCode.VALIDATION_ERROR, 'Missing request ID.');
   }
 
   const client = createServiceClient();
 
-  // Fetch the task — must belong to org and not already be converted.
-  const { data: task, error: taskError } = await client
-    .from('tasks')
-    .select('id, title, description, customer_id, property_id, job_id')
-    .eq('id', taskId)
+  const { data: request, error: fetchError } = await client
+    .from('service_requests')
+    .select('id, service_title, service_category, customer_id, property_id, job_id')
+    .eq('id', requestId)
     .eq('org_id', orgId)
     .maybeSingle();
 
-  if (taskError) {
-    return err(ErrorCode.DB_ERROR, taskError.message);
+  if (fetchError) {
+    return err(ErrorCode.DB_ERROR, fetchError.message);
   }
 
-  if (!task) {
+  if (!request) {
     return err(ErrorCode.NOT_FOUND, 'Request not found.');
   }
 
-  if (task.job_id) {
+  if (request.job_id) {
     return err(ErrorCode.VALIDATION_ERROR, 'This request has already been converted to a job.');
   }
 
-  if (!task.customer_id) {
+  if (!request.customer_id) {
     return err(ErrorCode.VALIDATION_ERROR, 'No customer linked to this request.');
   }
 
-  // Resolve property_id: prefer the task's own property_id, otherwise look up
-  // the customer's first property via customer_properties.
-  let propertyId = task.property_id as string | null;
+  // service_requests always has property_id set by createServiceRequest, but
+  // fall back to customer_properties lookup for any edge-case rows.
+  let propertyId = request.property_id as string | null;
 
   if (!propertyId) {
     const { data: link, error: linkError } = await client
       .from('customer_properties')
       .select('property_id')
-      .eq('customer_id', task.customer_id)
+      .eq('customer_id', request.customer_id)
       .limit(1)
       .maybeSingle();
 
@@ -121,15 +120,13 @@ export async function convertRequestToJobAction(
     );
   }
 
-  // Derive the job title from the task title (strip "Quote request from " prefix).
-  const jobTitle = deriveJobTitle(task.title, task.description);
+  const jobTitle = request.service_category ?? request.service_title;
 
-  // Create the lead-status job.
   const { data: newJob, error: insertError } = await client
     .from('jobs')
     .insert({
       org_id: orgId,
-      customer_id: task.customer_id,
+      customer_id: request.customer_id,
       property_id: propertyId,
       title: jobTitle,
       status: 'lead',
@@ -142,18 +139,21 @@ export async function convertRequestToJobAction(
     return err(ErrorCode.DB_ERROR, insertError?.message ?? 'Failed to create job.');
   }
 
-  // Link the task back to the job and mark it done.
   const { error: updateError } = await client
-    .from('tasks')
-    .update({ job_id: newJob.id, status: 'done' })
-    .eq('id', taskId)
+    .from('service_requests')
+    .update({
+      job_id: newJob.id,
+      status: 'approved',
+      converted_at: new Date().toISOString(),
+    })
+    .eq('id', requestId)
     .eq('org_id', orgId);
 
   if (updateError) {
     return err(ErrorCode.DB_ERROR, updateError.message);
   }
 
-  revalidatePath(`/requests/${taskId}`);
+  revalidatePath(`/requests/${requestId}`);
   revalidatePath('/requests');
   revalidatePath('/jobs');
 
@@ -161,7 +161,7 @@ export async function convertRequestToJobAction(
 }
 
 // ---------------------------------------------------------------------------
-// Mark request as reviewed (done)
+// Mark request as reviewed
 // ---------------------------------------------------------------------------
 
 export type MarkRequestReviewedActionState = Result<{ taskId: string }>;
@@ -174,63 +174,28 @@ export async function markRequestReviewedAction(
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 
-  const taskId = readString(formData, 'taskId');
-  if (!taskId) {
+  const requestId = readString(formData, 'taskId');
+  if (!requestId) {
     return err(ErrorCode.VALIDATION_ERROR, 'Missing request ID.');
   }
 
   const client = createServiceClient();
 
   const { error } = await client
-    .from('tasks')
-    .update({ status: 'done' })
-    .eq('id', taskId)
+    .from('service_requests')
+    .update({
+      status: 'reviewing',
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', requestId)
     .eq('org_id', orgId);
 
   if (error) {
     return err(ErrorCode.DB_ERROR, error.message);
   }
 
-  revalidatePath(`/requests/${taskId}`);
+  revalidatePath(`/requests/${requestId}`);
   revalidatePath('/requests');
 
-  return ok({ taskId });
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Derive a job title from the intake task title.
- * The task title follows the pattern "Quote request from {name}" or
- * "Quote request from {name} — {service}". Strip the prefix and fall back
- * to extracting the service line from the structured description block.
- */
-function deriveJobTitle(taskTitle: string, description: string | null): string {
-  const PREFIX = 'Quote request from ';
-  if (taskTitle.startsWith(PREFIX)) {
-    const rest = taskTitle.slice(PREFIX.length).trim();
-    // If the title already includes " — {service}", use it directly.
-    const dashIdx = rest.indexOf(' — ');
-    if (dashIdx !== -1) {
-      return rest.slice(dashIdx + 3).trim() || rest;
-    }
-    // Otherwise extract from the description's "Service: {value}" line.
-    const service = extractServiceLine(description);
-    return service ?? rest;
-  }
-  return taskTitle;
-}
-
-function extractServiceLine(description: string | null): string | null {
-  if (!description) return null;
-  for (const line of description.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('Service:')) {
-      const value = trimmed.slice('Service:'.length).trim();
-      return value || null;
-    }
-  }
-  return null;
+  return ok({ taskId: requestId });
 }

@@ -80,6 +80,9 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
               Job created
             </Link>
           ) : null}
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {request.requestNumber}
+          </span>
         </div>
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{request.title}</h1>
         <p className="text-sm text-muted-foreground">
@@ -89,7 +92,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
 
       <div className="space-y-4">
         <CustomerCard request={request} />
-        <DescriptionCard request={request} />
+        <RequestDetailsCard request={request} />
         <PropertyCard request={request} />
         <ActionsCard request={request} />
       </div>
@@ -102,8 +105,8 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
 // ---------------------------------------------------------------------------
 
 function CustomerCard({ request }: { request: RequestDetail }) {
-  if (!request.customer) return null;
-  const { customer } = request;
+  const email = request.contactEmail ?? request.customer?.email;
+  const phone = request.contactPhone ?? request.customer?.phonePrimary;
 
   return (
     <section className="rounded-md border bg-background p-4 space-y-1">
@@ -111,78 +114,50 @@ function CustomerCard({ request }: { request: RequestDetail }) {
         Customer
       </h2>
       <p className="font-medium">
-        <Link
-          href={`/customers/${customer.id}`}
-          className="underline-offset-2 hover:underline"
-        >
-          {customer.displayName}
-        </Link>
+        {request.customer ? (
+          <Link
+            href={`/customers/${request.customer.id}`}
+            className="underline-offset-2 hover:underline"
+          >
+            {request.contactName}
+          </Link>
+        ) : (
+          request.contactName
+        )}
       </p>
-      {customer.phonePrimary ? (
-        <p className="text-sm text-muted-foreground">{customer.phonePrimary}</p>
-      ) : null}
-      {customer.email ? (
-        <p className="text-sm text-muted-foreground">{customer.email}</p>
-      ) : null}
+      {phone ? <p className="text-sm text-muted-foreground">{phone}</p> : null}
+      {email ? <p className="text-sm text-muted-foreground">{email}</p> : null}
     </section>
   );
 }
 
-function DescriptionCard({ request }: { request: RequestDetail }) {
-  const parsed = parseDescription(request.description);
-
+function RequestDetailsCard({ request }: { request: RequestDetail }) {
   return (
     <section className="rounded-md border bg-background p-4 space-y-3">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Request Details
       </h2>
 
-      {parsed.fields.length > 0 ? (
-        <dl className="space-y-1">
-          {parsed.fields.map(({ key, value }) => (
-            <div key={key} className="flex gap-2 text-sm">
-              <dt className="font-medium text-foreground min-w-[110px]">{key}</dt>
-              <dd className="text-muted-foreground">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-
-      {parsed.body ? (
-        <div className="space-y-1">
-          {parsed.fields.length > 0 ? (
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Message
-            </p>
-          ) : null}
-          <p className="text-sm text-foreground whitespace-pre-wrap">{parsed.body}</p>
+      <dl className="space-y-1">
+        <div className="flex gap-2 text-sm">
+          <dt className="font-medium text-foreground min-w-[110px]">Service</dt>
+          <dd className="text-muted-foreground">{request.serviceTitle}</dd>
         </div>
-      ) : null}
+        {request.serviceCategory && request.serviceCategory !== request.serviceTitle ? (
+          <div className="flex gap-2 text-sm">
+            <dt className="font-medium text-foreground min-w-[110px]">Category</dt>
+            <dd className="text-muted-foreground">{request.serviceCategory}</dd>
+          </div>
+        ) : null}
+      </dl>
 
-      {parsed.photos.length > 0 ? (
+      {request.description ? (
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Photos
+            Description
           </p>
-          <ul className="space-y-1">
-            {parsed.photos.map((url) => (
-              <li key={url}>
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 underline-offset-2 hover:underline break-all"
-                >
-                  {url}
-                </a>
-              </li>
-            ))}
-          </ul>
+          <p className="text-sm text-foreground whitespace-pre-wrap">{request.description}</p>
         </div>
-      ) : null}
-
-      {!parsed.fields.length && !parsed.body && !parsed.photos.length ? (
-        <p className="text-sm text-muted-foreground">No description provided.</p>
       ) : null}
     </section>
   );
@@ -237,6 +212,12 @@ function PropertyCard({ request }: { request: RequestDetail }) {
 }
 
 function ActionsCard({ request }: { request: RequestDetail }) {
+  const isTerminal =
+    request.status === 'completed' ||
+    request.status === 'cancelled' ||
+    request.status === 'spam';
+  const isReviewed = request.status !== 'new';
+
   return (
     <section className="rounded-md border bg-background p-4 space-y-3">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -255,7 +236,7 @@ function ActionsCard({ request }: { request: RequestDetail }) {
           <ConvertToJobButton taskId={request.id} />
         )}
 
-        {request.status !== 'done' && request.status !== 'cancelled' ? (
+        {!isReviewed ? (
           <MarkReviewedButton taskId={request.id} />
         ) : null}
       </div>
@@ -271,6 +252,12 @@ function ActionsCard({ request }: { request: RequestDetail }) {
           </Link>
         </p>
       ) : null}
+
+      {request.reviewedAt && !isTerminal ? (
+        <p className="text-xs text-muted-foreground">
+          Reviewed {formatDateTime(request.reviewedAt)}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -281,11 +268,14 @@ function ActionsCard({ request }: { request: RequestDetail }) {
 
 function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
-    open: 'bg-amber-50 text-amber-700',
+    new: 'bg-amber-50 text-amber-700',
+    reviewing: 'bg-blue-50 text-blue-700',
+    approved: 'bg-green-50 text-green-700',
+    scheduled: 'bg-indigo-50 text-indigo-700',
     in_progress: 'bg-blue-50 text-blue-700',
-    done: 'bg-slate-100 text-slate-600',
+    completed: 'bg-slate-100 text-slate-600',
     cancelled: 'bg-slate-100 text-slate-500',
-    snoozed: 'bg-purple-50 text-purple-700',
+    spam: 'bg-red-50 text-red-600',
   };
   const color = colorMap[status] ?? 'bg-slate-100 text-slate-600';
   return (
@@ -298,7 +288,7 @@ function StatusBadge({ status }: { status: string }) {
 function PriorityBadge({ priority }: { priority: string }) {
   const colorMap: Record<string, string> = {
     high: 'bg-orange-50 text-orange-700',
-    urgent: 'bg-red-50 text-red-700',
+    emergency: 'bg-red-50 text-red-700',
     low: 'bg-slate-100 text-slate-500',
   };
   const color = colorMap[priority] ?? 'bg-slate-100 text-slate-600';
@@ -328,64 +318,6 @@ function ErrorPage({ children }: { children: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-interface ParsedDescription {
-  fields: Array<{ key: string; value: string }>;
-  body: string;
-  photos: string[];
-}
-
-/**
- * Parse the structured description block written by buildTaskDescription.
- * Lines at the top that match "Key: Value" are extracted as fields.
- * Everything after the blank line separator is the body.
- * Photo URLs after "Photos:" are extracted separately.
- */
-function parseDescription(description: string | null): ParsedDescription {
-  if (!description) return { fields: [], body: '', photos: [] };
-
-  const FIELD_KEYS = new Set(['From', 'Email', 'Phone', 'Property type', 'Timeline', 'Service']);
-  const lines = description.split('\n');
-
-  const fields: Array<{ key: string; value: string }> = [];
-  const bodyLines: string[] = [];
-  const photos: string[] = [];
-  let inPhotos = false;
-  let pastHeader = false;
-
-  for (const line of lines) {
-    if (!pastHeader) {
-      if (line.trim() === '') {
-        pastHeader = true;
-        continue;
-      }
-      const colonIdx = line.indexOf(':');
-      if (colonIdx !== -1) {
-        const key = line.slice(0, colonIdx).trim();
-        const value = line.slice(colonIdx + 1).trim();
-        if (FIELD_KEYS.has(key) && value) {
-          fields.push({ key, value });
-          continue;
-        }
-      }
-      pastHeader = true;
-    }
-
-    if (line.trim() === 'Photos:') {
-      inPhotos = true;
-      continue;
-    }
-
-    if (inPhotos) {
-      const url = line.trim().replace(/^-\s*/, '');
-      if (url) photos.push(url);
-    } else {
-      bodyLines.push(line);
-    }
-  }
-
-  return { fields, body: bodyLines.join('\n').trim(), photos };
-}
 
 function formatEnumLabel(value: string): string {
   return value
