@@ -3,7 +3,7 @@
 ## Current branch
 
 `main`
-At commit `becae39`. Branch is up to date with origin. Working tree clean. No open PRs.
+At commit `307f7af`. Branch is up to date with origin. Working tree clean. No open PRs.
 
 ---
 
@@ -17,23 +17,31 @@ All PRs merged. No open PRs.
 
 ### PR #66 — Wire request → estimate creation (merged)
 
-Delivered:
-- **`supabase/migrations/20260511130730_add_estimate_created_status.sql`**: Adds `estimate_created` to `service_request_status` enum. Applied to `premier-crm-prod`.
-- **`packages/db/types.ts`**: Regenerated — `estimate_created` in `service_request_status` enum.
-- **`packages/db/queries/requests.ts`**: Added `estimateId: string | null` to `RequestListItem` and `RequestDetail`; both SELECT queries now include `estimate_id`.
-- **`apps/web/app/(app)/requests/actions.ts`**: Removed `convertRequestToJobAction`. Added `createEstimateFromRequestAction` — inserts `estimates` row (status=`draft`, `service_request_id` set), updates `service_requests` (`estimate_id`, `status='estimate_created'`, `converted_at`).
-- **`apps/web/app/(app)/requests/_components/create-estimate-button.tsx`**: New client button. On success: toast + `router.push(/estimates/[id])`.
-- **`apps/web/app/(app)/requests/_components/convert-to-job-button.tsx`**: Deleted (replaced by create-estimate-button).
-- **`apps/web/app/(app)/requests/[taskId]/page.tsx`**: `ActionsCard` shows "Open estimate →" if `estimateId` set, else `<CreateEstimateButton>`. Header shows "Estimate created" badge. `estimate_created` in `StatusBadge` colorMap. Hint text updated to mention property requirement for estimates, not jobs.
-- **`apps/web/app/(app)/requests/page.tsx`**: `estimate_created` in status badge. List rows show "Estimate created" pill linking to `/estimates/[id]` (legacy "Job created" badge still shows for older rows with `job_id`).
+- `estimate_created` enum value added to `service_request_status`
+- `createEstimateFromRequestAction`: creates `estimates` row (draft), sets `service_requests.estimate_id` + `status='estimate_created'` + `converted_at`
+- `CreateEstimateButton` component replaces `ConvertToJobButton`
+- Request detail page: "Create estimate" CTA → on success redirects to `/estimates/[id]`; if estimate exists shows "Open estimate →"
+- `estimateId` field added to `RequestListItem` and `RequestDetail`
+- Status badge + list row badges updated for `estimate_created`
 
-### PR #67A — Add `estimate_id` FK to quotes table (merged)
+### PR #67A — Add `estimate_id` FK to quotes (merged)
 
-Delivered:
-- **`supabase/migrations/20260511131122_add_estimate_id_to_quotes.sql`**: `ALTER TABLE quotes ADD COLUMN estimate_id UUID REFERENCES estimates(id) ON DELETE SET NULL`. Partial index on non-null values. Applied to `premier-crm-prod`.
-- **`packages/db/types.ts`**: Regenerated — `quotes.Row` now has `estimate_id: string | null`.
-- `quotes.job_id NOT NULL` constraint intentionally kept — that's PR #67B.
-- `quote_line_items.job_id` was already nullable; no change needed there.
+- `ALTER TABLE quotes ADD COLUMN estimate_id UUID REFERENCES estimates(id) ON DELETE SET NULL`
+- Partial index on non-null `estimate_id`
+- Types regenerated: `quotes.Row.estimate_id: string | null`
+
+### PR #67B — Make `quotes.job_id` nullable (merged)
+
+- `ALTER TABLE quotes ALTER COLUMN job_id DROP NOT NULL`
+- `ADD CONSTRAINT quotes_has_job_or_estimate CHECK (job_id IS NOT NULL OR estimate_id IS NOT NULL)`
+- Applied to `premier-crm-prod`. Table was empty — zero data risk.
+- `packages/db/types.ts`: `quotes.Row.job_id: string | null`
+- `packages/db/queries/quotes.ts`:
+  - `createDraftQuote`: now accepts either `input.jobId` (job path, unchanged) or `estimateId + title` (estimate path, no job fetch)
+  - `listQuotes`: null-safe jobIds filter, conditional job fetch, `QuoteListJobSummary.id: string | null`
+  - `getQuoteById` + `getQuoteByToken`: early return if `job_id` null (guard for future estimate-only quote detail, PR #68)
+  - `addQuoteLineItem`: conditional job property fetch when `job_id` null
+- `apps/web/app/(app)/quotes/actions.ts`: `approveJobAction` null guard on `quote.job_id`
 
 ---
 
@@ -41,6 +49,7 @@ Delivered:
 
 | PR | Title | Status |
 |---|---|---|
+| #67B | feat(quotes): make quotes.job_id nullable + safety CHECK | MERGED |
 | #67A | feat(quotes): add estimate_id FK to quotes table | MERGED |
 | #66 | feat(requests): wire request → estimate creation | MERGED |
 | #65 | feat(estimates): query layer + /estimates list page | MERGED |
@@ -62,7 +71,7 @@ Nothing. All branches pushed. No open PRs.
 
 ## Repo sync state
 
-- `main`: at commit `becae39` (PR #67A merge)
+- `main`: at commit `307f7af` (PR #67B)
 - Working tree: clean
 - No open PRs
 
@@ -73,76 +82,70 @@ Nothing. All branches pushed. No open PRs.
 ### Operational backbone (target)
 **Website Request → Estimate → Quote → Job → Invoice**
 
-All stages now have schema and UI. The quote↔job coupling is the last structural constraint to resolve.
+All schema steps are now complete. The remaining work is UI wiring for the estimate workspace.
 
 ### Stage definitions
 
-- **Requests** (`/requests`): Inbound intake queue. `service_requests` table. Website form → `createServiceRequest` → `service_requests`. Count badge on nav. "Create estimate" CTA converts request → estimate.
-- **Estimates** (`/estimates`): First-class entity. `estimates` table. List + stub detail pages live. PR #66 wires request → estimate. Full detail + quote creation in PR #68.
-- **Quotes** (`/quotes`): Customer-facing commercial document. Fully built (PRs #47–#57). Now has `estimate_id` column (nullable). Still requires `job_id NOT NULL` until PR #67B.
-- **Jobs** (`/jobs`): Execution workspace. Full lifecycle status enum.
+- **Requests** (`/requests`): Inbound intake. "Create estimate" CTA converts request → estimate (sets `service_requests.estimate_id`, `status='estimate_created'`).
+- **Estimates** (`/estimates`): First-class entity. List + stub detail pages live. Full detail + quote creation in PR #68.
+- **Quotes** (`/quotes`): Fully built. Now decoupled from `job_id` (nullable with CHECK constraint). Can be created from either a job or an estimate. `getQuoteById` / `getQuoteByToken` still assume job presence — PR #68 will add the estimate-only detail path.
+- **Jobs** (`/jobs`): Execution workspace. Full lifecycle.
 
-### Navigation model
-Bottom nav: **Today | Jobs | Quotes | Customers | Requests** (5 slots).
-Nav changes deferred until after PR #68 (estimates detail + quote creation from estimate).
+### Quote FK state (final)
+- `quotes.job_id`: nullable, `CHECK (job_id IS NOT NULL OR estimate_id IS NOT NULL)` enforces at least one anchor
+- `quotes.estimate_id`: nullable FK → `estimates(id)` ON DELETE SET NULL
+- `createDraftQuote`: accepts either `{ input: { jobId } }` (job path) or `{ estimateId, title }` (estimate path)
+- `approveJobAction`: guards against `job_id IS NULL` — estimate-only quote approval deferred to PR #69
 
-### Estimates schema
-`estimates` table live in `premier-crm-prod`. Migration: `20260511123231_estimates.sql`.
-`estimate_status` enum: `draft | site_visit_scheduled | site_visit_complete | quoted | accepted | declined | expired | converted`.
-`service_requests.estimate_id` FK exists. `service_requests.status='estimate_created'` set on conversion.
-
-### Quote FK state
-- `quotes.estimate_id`: nullable FK → `estimates(id)` (added PR #67A)
-- `quotes.job_id`: still NOT NULL — drops in PR #67B
-- `quote_line_items.job_id`: already nullable, no further change needed
-
-### Legacy bridge model
-`/jobs?view=estimates` still exists (lead-status jobs). Now superseded by `/estimates` but not removed. Can be cleaned up in a future housekeeping PR.
+### Known deferred items
+- `getQuoteById` / `getQuoteByToken` return NOT_FOUND if `job_id` is null — PR #68 extends these for estimate context
+- `approveJobAction` returns VALIDATION_ERROR for estimate-only accepted quotes — PR #69 handles this path
+- `QuoteListJobSummary.id` is now `string | null` — quote list UI currently renders `job.id` as a link; null case not yet reached in practice
 
 ---
 
 ## Risks / blockers
 
-### 1. `quotes.job_id NOT NULL` — still in place (PR #67B)
-Quote creation still requires a `job_id`. Estimates cannot generate quotes until PR #67B drops this constraint.
+### 1. Quote detail for estimate-only quotes not yet wired
+`getQuoteById` / `getQuoteByToken` return NOT_FOUND when `job_id` is null. No estimate-only quotes exist yet, so this is safe. PR #68 extends both.
 
-### 2. `quote-requests` route still writes to tasks
+### 2. Accept-quote → approve-job for estimate-only quotes
+`approveJobAction` returns VALIDATION_ERROR for quotes without `job_id`. Correct behavior for now. PR #69 wires the accept-quote → approve-estimate → create-job flow.
+
+### 3. Bridge model at /jobs?view=estimates
+`/jobs?view=estimates` still exists (lead-status jobs). Superseded by `/estimates`. Can be removed in a housekeeping PR after nav is finalised.
+
+### 4. `quote-requests` route still writes to tasks
 `/api/v1/quote-requests` → `createQuoteRequest` → `tasks`. Harmless but stale.
-
-### 3. Today page is still a full client component
-Not urgent. Covered in suggested future work.
 
 ---
 
 ## Suggested next work (ordered)
 
-### PR #67B — Make `quotes.job_id` nullable
-Migration only:
-```sql
-ALTER TABLE public.quotes ALTER COLUMN job_id DROP NOT NULL;
-ALTER TABLE public.quotes ADD CONSTRAINT quotes_has_job_or_estimate
-  CHECK (job_id IS NOT NULL OR estimate_id IS NOT NULL);
-```
-No backfill needed — all existing rows have `job_id` set.
-After this: regenerate types, update `createDraftQuote` in `quotes.ts` to accept either `jobId` or `estimateId` (not both required).
-
 ### PR #68 — Estimate detail page + quote creation from estimate
-- Replace stub `/estimates/[estimateId]/page.tsx` with full detail page
-- "Create quote" server action (`createQuoteFromEstimateAction`) using the decoupled `createDraftQuote`
-- Status workflow buttons (approve site visit, mark complete, etc.)
-- Nav changes: add Estimates slot or replace Jobs tab
+This replaces the stub at `/estimates/[estimateId]/page.tsx`.
+
+Build:
+1. Fetch estimate with customer + property + linked quotes (JOIN `quotes WHERE estimate_id = ?`)
+2. Status workflow display (draft → site_visit_scheduled → site_visit_complete → quoted → accepted)
+3. "Create quote" action: calls `createDraftQuote(client, { createdBy, orgId, estimateId, title: estimate.title })`
+4. On quote created: `estimates.status` updates to `quoted` (or keep as `draft` until quote is sent — decision needed)
+5. Link to existing quote detail page `/quotes/[id]` from estimate detail
+6. Extend `getQuoteById` to work when `job_id` is null (build job summary from estimate context instead)
 
 ### PR #69 — Approve estimate → create job
-- `approveEstimateAction`: creates job from estimate, sets `estimates.converted_job_id` + `converted_at`, `estimates.status='converted'`
+- `approveEstimateAction`: creates job from estimate fields, sets `estimates.converted_job_id` + `converted_at`, `estimates.status='converted'`
+- Updates `quotes WHERE estimate_id = ?` to set `job_id` (so existing quote detail / token pages continue to work without changes)
 
-### PR #70 — Request status cleanup
-- Remove stale enum values (`approved`, `scheduled`, `in_progress`) from `service_request_status` if they're no longer reachable via UI
-- Or add to "reviewed" tab display only
+### PR #70 — Nav: add Estimates slot
+- Add Estimates to bottom nav (replace one of the 5 current slots, or decision to use a different nav model)
+- Currently deferred; user decision needed on which slot to swap
 
 ---
 
 ## Resume instructions for next session
 
-1. Confirm repo state: `git log --oneline -3` should show `becae39` at HEAD on `main`
+1. Confirm repo state: `git log --oneline -3` should show `307f7af` at HEAD on `main`
 2. Re-read this file: `docs/HANDOFF-current.md`
-3. Proceed with PR #67B (make `quotes.job_id` nullable) — it is a migration + type regen + one function signature update, very small
+3. Proceed with PR #68 — Estimate detail page + quote creation from estimate
+   - Key decision before building: should `estimates.status` advance to `quoted` when a quote is created, or only when the quote is sent? Recommend: `quoted` on quote creation (visible signal to team). Verify with Kevin if needed.
