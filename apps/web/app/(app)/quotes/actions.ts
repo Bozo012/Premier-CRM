@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import {
   AddLineItemInputSchema,
+  CreateQuoteFromJobInputSchema,
   ErrorCode,
   RemoveLineItemInputSchema,
   SendQuoteInputSchema,
@@ -14,7 +15,9 @@ import {
 } from '@premier/shared';
 import {
   addQuoteLineItem,
+  createDraftQuote,
   getQuoteById,
+  listJobs,
   removeQuoteLineItem,
   updateQuoteLineItem,
   createServiceClient,
@@ -27,6 +30,7 @@ export type LineItemActionState = Result<{ lineItemId: string }>;
 
 interface QuoteActionContext {
   orgId: string;
+  userId: string;
 }
 
 async function getQuoteActionContext(): Promise<Result<QuoteActionContext>> {
@@ -55,7 +59,7 @@ async function getQuoteActionContext(): Promise<Result<QuoteActionContext>> {
     return err(ErrorCode.FORBIDDEN, 'No active organization membership found.');
   }
 
-  return ok({ orgId: membership.org_id });
+  return ok({ orgId: membership.org_id, userId: user.id });
 }
 
 function readString(formData: FormData, key: string): string {
@@ -222,6 +226,89 @@ export async function resendQuoteEmailAction(
   }
 
   return ok({ sent: true });
+}
+
+// ---------------------------------------------------------------------------
+// Quote creation from the workspace
+// ---------------------------------------------------------------------------
+
+export interface JobPickerItem {
+  customerName: string | null;
+  id: string;
+  jobNumber: string | null;
+  status: string;
+  title: string;
+}
+
+export type SearchJobsForPickerActionState = Result<JobPickerItem[]>;
+
+export async function searchJobsForPickerAction(
+  _prevState: SearchJobsForPickerActionState | null,
+  formData: FormData
+): Promise<SearchJobsForPickerActionState> {
+  const contextResult = await getQuoteActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId } = contextResult.data;
+
+  const search = readOptionalString(formData, 'q');
+
+  const client = createServiceClient();
+  const result = await listJobs(client, {
+    limit: 30,
+    offset: 0,
+    orgId,
+    search,
+  });
+
+  if (!result.success) {
+    return result;
+  }
+
+  const items: JobPickerItem[] = result.data.jobs.map((item) => ({
+    customerName: item.customer?.displayName ?? null,
+    id: item.job.id,
+    jobNumber: item.job.job_number,
+    status: item.job.status,
+    title: item.job.title,
+  }));
+
+  return ok(items);
+}
+
+export type CreateDraftQuoteActionState = Result<{ quoteId: string }>;
+
+export async function createDraftQuoteAction(
+  _prevState: CreateDraftQuoteActionState | null,
+  formData: FormData
+): Promise<CreateDraftQuoteActionState> {
+  const contextResult = await getQuoteActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId, userId } = contextResult.data;
+
+  const rawInput = { jobId: readString(formData, 'jobId') };
+  const parsed = CreateQuoteFromJobInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    const firstError = parsed.error.errors[0];
+    return err(ErrorCode.VALIDATION_ERROR, firstError?.message ?? 'Invalid job ID.');
+  }
+
+  const client = createServiceClient();
+  const result = await createDraftQuote(client, {
+    createdBy: userId,
+    input: parsed.data,
+    orgId,
+  });
+
+  if (!result.success) {
+    return result;
+  }
+
+  revalidatePath('/quotes');
+  return ok({ quoteId: result.data.id });
 }
 
 export async function addLineItemAction(
