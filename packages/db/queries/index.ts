@@ -93,6 +93,16 @@ export {
   type CreateServiceRequestResult,
 } from './service-requests';
 export {
+  getEstimateById,
+  listEstimates,
+  type EstimateCustomerSummary,
+  type EstimateDetail,
+  type EstimateListItem,
+  type EstimateListPage,
+  type EstimatePropertySummary,
+  type EstimateStatus,
+} from './estimates';
+export {
   deleteWebsitePromotion,
   deleteWebsiteServiceHighlight,
   getPublicWebsiteContentSnapshot,
