@@ -534,6 +534,60 @@ export type Database = {
           },
         ]
       }
+      customer_accounts: {
+        Row: {
+          accepted_at: string | null
+          auth_user_id: string
+          created_at: string
+          customer_id: string
+          email: string
+          id: string
+          invited_at: string | null
+          org_id: string
+          status: Database["public"]["Enums"]["customer_account_status"]
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          auth_user_id: string
+          created_at?: string
+          customer_id: string
+          email: string
+          id?: string
+          invited_at?: string | null
+          org_id: string
+          status?: Database["public"]["Enums"]["customer_account_status"]
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          auth_user_id?: string
+          created_at?: string
+          customer_id?: string
+          email?: string
+          id?: string
+          invited_at?: string | null
+          org_id?: string
+          status?: Database["public"]["Enums"]["customer_account_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_accounts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_accounts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_archetype_defaults: {
         Row: {
           archetype: Database["public"]["Enums"]["customer_archetype"]
@@ -1843,6 +1897,7 @@ export type Database = {
           joined_at: string
           org_id: string
           role: Database["public"]["Enums"]["user_role"]
+          status: string
           user_id: string
         }
         Insert: {
@@ -1850,6 +1905,7 @@ export type Database = {
           joined_at?: string
           org_id: string
           role?: Database["public"]["Enums"]["user_role"]
+          status?: string
           user_id: string
         }
         Update: {
@@ -1857,6 +1913,7 @@ export type Database = {
           joined_at?: string
           org_id?: string
           role?: Database["public"]["Enums"]["user_role"]
+          status?: string
           user_id?: string
         }
         Relationships: [
@@ -2677,6 +2734,146 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "service_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_requests: {
+        Row: {
+          access_notes: string | null
+          contact_email: string | null
+          contact_name: string
+          contact_phone: string | null
+          contact_preferred_channel:
+            | Database["public"]["Enums"]["preferred_channel"]
+            | null
+          converted_at: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          internal_notes: string | null
+          job_id: string | null
+          org_id: string
+          preferred_date: string | null
+          preferred_time: string | null
+          priority: Database["public"]["Enums"]["service_request_priority"]
+          property_address_line_1: string | null
+          property_address_line_2: string | null
+          property_city: string | null
+          property_country: string | null
+          property_id: string | null
+          property_state: string | null
+          property_type: string | null
+          property_zip: string | null
+          request_number: string
+          reviewed_at: string | null
+          service_category: string | null
+          service_description: string
+          service_title: string
+          source: Database["public"]["Enums"]["service_request_source"]
+          status: Database["public"]["Enums"]["service_request_status"]
+          submitted_at: string
+          updated_at: string
+        }
+        Insert: {
+          access_notes?: string | null
+          contact_email?: string | null
+          contact_name: string
+          contact_phone?: string | null
+          contact_preferred_channel?:
+            | Database["public"]["Enums"]["preferred_channel"]
+            | null
+          converted_at?: string | null
+          created_at?: string
+          customer_id: string
+          id?: string
+          internal_notes?: string | null
+          job_id?: string | null
+          org_id: string
+          preferred_date?: string | null
+          preferred_time?: string | null
+          priority?: Database["public"]["Enums"]["service_request_priority"]
+          property_address_line_1?: string | null
+          property_address_line_2?: string | null
+          property_city?: string | null
+          property_country?: string | null
+          property_id?: string | null
+          property_state?: string | null
+          property_type?: string | null
+          property_zip?: string | null
+          request_number?: string
+          reviewed_at?: string | null
+          service_category?: string | null
+          service_description: string
+          service_title: string
+          source?: Database["public"]["Enums"]["service_request_source"]
+          status?: Database["public"]["Enums"]["service_request_status"]
+          submitted_at?: string
+          updated_at?: string
+        }
+        Update: {
+          access_notes?: string | null
+          contact_email?: string | null
+          contact_name?: string
+          contact_phone?: string | null
+          contact_preferred_channel?:
+            | Database["public"]["Enums"]["preferred_channel"]
+            | null
+          converted_at?: string | null
+          created_at?: string
+          customer_id?: string
+          id?: string
+          internal_notes?: string | null
+          job_id?: string | null
+          org_id?: string
+          preferred_date?: string | null
+          preferred_time?: string | null
+          priority?: Database["public"]["Enums"]["service_request_priority"]
+          property_address_line_1?: string | null
+          property_address_line_2?: string | null
+          property_city?: string | null
+          property_country?: string | null
+          property_id?: string | null
+          property_state?: string | null
+          property_type?: string | null
+          property_zip?: string | null
+          request_number?: string
+          reviewed_at?: string | null
+          service_category?: string | null
+          service_description?: string
+          service_title?: string
+          source?: Database["public"]["Enums"]["service_request_source"]
+          status?: Database["public"]["Enums"]["service_request_status"]
+          submitted_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_requests_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
         ]
@@ -3954,6 +4151,7 @@ export type Database = {
       }
       gettransactionid: { Args: never; Returns: unknown }
       longtransactionsenabled: { Args: never; Returns: boolean }
+      next_service_request_number: { Args: never; Returns: string }
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
         | { Args: { use_typmod?: boolean }; Returns: string }
@@ -4648,6 +4846,7 @@ export type Database = {
         | "in_person"
         | "other"
       comm_direction: "inbound" | "outbound"
+      customer_account_status: "invited" | "active" | "disabled"
       customer_archetype:
         | "residential_one_off"
         | "residential_repeat"
@@ -4701,6 +4900,25 @@ export type Database = {
         | "expired"
         | "revised"
       quote_type: "standard" | "options" | "package" | "quick"
+      service_request_priority: "low" | "normal" | "high" | "emergency"
+      service_request_source:
+        | "website"
+        | "portal"
+        | "phone"
+        | "sms"
+        | "email"
+        | "manual"
+        | "ai_capture"
+        | "jobber_import"
+      service_request_status:
+        | "new"
+        | "reviewing"
+        | "approved"
+        | "scheduled"
+        | "in_progress"
+        | "completed"
+        | "cancelled"
+        | "spam"
       task_priority: "low" | "normal" | "high" | "urgent"
       task_status: "open" | "in_progress" | "done" | "cancelled" | "snoozed"
       trip_purpose:
@@ -4888,6 +5106,7 @@ export const Constants = {
         "other",
       ],
       comm_direction: ["inbound", "outbound"],
+      customer_account_status: ["invited", "active", "disabled"],
       customer_archetype: [
         "residential_one_off",
         "residential_repeat",
@@ -4946,6 +5165,27 @@ export const Constants = {
         "revised",
       ],
       quote_type: ["standard", "options", "package", "quick"],
+      service_request_priority: ["low", "normal", "high", "emergency"],
+      service_request_source: [
+        "website",
+        "portal",
+        "phone",
+        "sms",
+        "email",
+        "manual",
+        "ai_capture",
+        "jobber_import",
+      ],
+      service_request_status: [
+        "new",
+        "reviewing",
+        "approved",
+        "scheduled",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "spam",
+      ],
       task_priority: ["low", "normal", "high", "urgent"],
       task_status: ["open", "in_progress", "done", "cancelled", "snoozed"],
       trip_purpose: [
