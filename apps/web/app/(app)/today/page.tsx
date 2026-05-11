@@ -29,7 +29,7 @@ const quickActions: QuickAction[] = [
   { id: 'capture-note', label: 'Capture note' },
   { id: 'new-customer', label: 'New customer', href: '/customers' },
   { id: 'new-job', label: 'New job' },
-  { id: 'new-estimate', label: 'New estimate', href: '/quotes' },
+  { id: 'new-estimate', label: 'New estimate', href: '/jobs?view=estimates' },
 ] as const;
 
 function normalizePropertyAddressKey(property: {

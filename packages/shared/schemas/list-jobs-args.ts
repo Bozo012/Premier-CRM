@@ -20,6 +20,7 @@ export const ListJobsArgsSchema = z.object({
   orgId: z.string().uuid(),
   search: z.string().trim().min(1).max(200).optional(),
   status: JobStatusSchema.optional(),
+  statuses: z.array(JobStatusSchema).optional(),
   limit: z.number().int().min(1).max(100).default(50),
   offset: z.number().int().min(0).default(0),
 });

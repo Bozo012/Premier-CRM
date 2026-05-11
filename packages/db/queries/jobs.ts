@@ -235,7 +235,7 @@ export async function listJobs(
   client: DbClient,
   args: ListJobsArgs
 ): Promise<Result<JobListPage>> {
-  const { limit, offset, orgId, search, status } = args;
+  const { limit, offset, orgId, search, status, statuses } = args;
 
   let query = client
     .from('jobs')
@@ -256,7 +256,9 @@ export async function listJobs(
     );
   }
 
-  if (status) {
+  if (statuses && statuses.length > 0) {
+    query = query.in('status', statuses);
+  } else if (status) {
     query = query.eq('status', status);
   }
 
