@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -897,6 +897,102 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimates: {
+        Row: {
+          converted_at: string | null
+          converted_job_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          description: string | null
+          estimate_number: string
+          expires_at: string | null
+          id: string
+          org_id: string
+          property_id: string
+          service_request_id: string | null
+          site_visit_at: string | null
+          site_visit_notes: string | null
+          status: Database["public"]["Enums"]["estimate_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          converted_at?: string | null
+          converted_job_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          description?: string | null
+          estimate_number?: string
+          expires_at?: string | null
+          id?: string
+          org_id: string
+          property_id: string
+          service_request_id?: string | null
+          site_visit_at?: string | null
+          site_visit_notes?: string | null
+          status?: Database["public"]["Enums"]["estimate_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          converted_at?: string | null
+          converted_job_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          description?: string | null
+          estimate_number?: string
+          expires_at?: string | null
+          id?: string
+          org_id?: string
+          property_id?: string
+          service_request_id?: string | null
+          site_visit_at?: string | null
+          site_visit_notes?: string | null
+          status?: Database["public"]["Enums"]["estimate_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimates_converted_job_id_fkey"
+            columns: ["converted_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
             referencedColumns: ["id"]
           },
         ]
@@ -2750,6 +2846,7 @@ export type Database = {
           converted_at: string | null
           created_at: string
           customer_id: string
+          estimate_id: string | null
           id: string
           internal_notes: string | null
           job_id: string | null
@@ -2786,6 +2883,7 @@ export type Database = {
           converted_at?: string | null
           created_at?: string
           customer_id: string
+          estimate_id?: string | null
           id?: string
           internal_notes?: string | null
           job_id?: string | null
@@ -2822,6 +2920,7 @@ export type Database = {
           converted_at?: string | null
           created_at?: string
           customer_id?: string
+          estimate_id?: string | null
           id?: string
           internal_notes?: string | null
           job_id?: string | null
@@ -2853,6 +2952,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
             referencedColumns: ["id"]
           },
           {
@@ -4151,6 +4257,7 @@ export type Database = {
       }
       gettransactionid: { Args: never; Returns: unknown }
       longtransactionsenabled: { Args: never; Returns: boolean }
+      next_estimate_number: { Args: never; Returns: string }
       next_service_request_number: { Args: never; Returns: string }
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
@@ -4856,6 +4963,15 @@ export type Database = {
         | "commercial"
         | "unknown"
       customer_type: "residential" | "commercial" | "property_manager"
+      estimate_status:
+        | "draft"
+        | "site_visit_scheduled"
+        | "site_visit_complete"
+        | "quoted"
+        | "accepted"
+        | "declined"
+        | "expired"
+        | "converted"
       geofence_event_type: "entered" | "exited" | "dwelled"
       geofence_type: "property" | "home" | "shop" | "supplier" | "custom"
       invoice_kind: "deposit" | "progress" | "final" | "standalone"
@@ -5117,6 +5233,16 @@ export const Constants = {
         "unknown",
       ],
       customer_type: ["residential", "commercial", "property_manager"],
+      estimate_status: [
+        "draft",
+        "site_visit_scheduled",
+        "site_visit_complete",
+        "quoted",
+        "accepted",
+        "declined",
+        "expired",
+        "converted",
+      ],
       geofence_event_type: ["entered", "exited", "dwelled"],
       geofence_type: ["property", "home", "shop", "supplier", "custom"],
       invoice_kind: ["deposit", "progress", "final", "standalone"],
