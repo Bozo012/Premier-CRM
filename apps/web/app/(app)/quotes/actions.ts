@@ -6,6 +6,7 @@ import {
   AddLineItemInputSchema,
   ErrorCode,
   RemoveLineItemInputSchema,
+  SendQuoteInputSchema,
   UpdateLineItemInputSchema,
   err,
   ok,
@@ -66,6 +67,66 @@ function readOptionalString(
 ): string | undefined {
   const value = readString(formData, key);
   return value.length > 0 ? value : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Send quote
+// ---------------------------------------------------------------------------
+
+export type SendQuoteActionState = Result<{ quoteUrl: string }>;
+
+export async function sendQuoteAction(
+  _prevState: SendQuoteActionState | null,
+  formData: FormData
+): Promise<SendQuoteActionState> {
+  const contextResult = await getQuoteActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId } = contextResult.data;
+
+  const rawInput = { quoteId: readString(formData, 'quoteId') };
+  const parsed = SendQuoteInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    const firstError = parsed.error.errors[0];
+    return err(ErrorCode.VALIDATION_ERROR, firstError?.message ?? 'Invalid quote ID.');
+  }
+
+  const client = createServiceClient();
+
+  const { data: quote, error: fetchError } = await client
+    .from('quotes')
+    .select('id, status, share_token')
+    .eq('id', parsed.data.quoteId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return err(ErrorCode.DB_ERROR, fetchError.message);
+  }
+
+  if (!quote) {
+    return err(ErrorCode.NOT_FOUND, 'Quote not found.');
+  }
+
+  if (quote.status !== 'draft') {
+    return err(ErrorCode.VALIDATION_ERROR, `Quote is already ${quote.status} — only draft quotes can be sent.`);
+  }
+
+  const { error: updateError } = await client
+    .from('quotes')
+    .update({ status: 'sent', sent_at: new Date().toISOString() })
+    .eq('id', parsed.data.quoteId)
+    .eq('org_id', orgId);
+
+  if (updateError) {
+    return err(ErrorCode.DB_ERROR, updateError.message);
+  }
+
+  revalidatePath(`/quotes/${parsed.data.quoteId}`);
+  revalidatePath('/quotes');
+
+  return ok({ quoteUrl: `/q/${quote.share_token}` });
 }
 
 export async function addLineItemAction(

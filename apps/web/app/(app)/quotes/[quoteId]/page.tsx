@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { LineItemEditor } from '../_components/line-item-editor';
+import { SendQuoteButton } from '../_components/send-quote-button';
 
 interface QuoteDetailPageProps {
   params: Promise<{ quoteId: string }>;
@@ -269,13 +270,42 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <FutureSectionCard
-          title="Send & approval"
-          description="Email delivery, magic-link viewing, and approval flow stay in later quote slices."
-        />
+        <Card>
+          <CardHeader>
+            <CardTitle>Send quote</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {quote.status === 'draft' ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Marking as sent transitions the quote to{' '}
+                  <span className="font-medium text-foreground">Sent</span> and
+                  generates a shareable customer link.
+                </p>
+                <SendQuoteButton quoteId={quote.id} status={quote.status} />
+              </>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Status: <span className="font-medium capitalize text-foreground">{quote.status}</span>
+                </p>
+                {quote.sent_at ? (
+                  <p className="text-sm text-muted-foreground">
+                    Sent {formatDateTime(quote.sent_at)}
+                  </p>
+                ) : null}
+                {quote.share_token ? (
+                  <p className="break-all text-xs text-muted-foreground">
+                    Customer link: /q/{quote.share_token}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </CardContent>
+        </Card>
         <FutureSectionCard
           title="PDF"
-          description="PDF generation will attach once the builder structure and send flow are in place."
+          description="PDF generation will attach once the send flow is proven in production."
         />
         <FutureSectionCard
           title="Revisions"

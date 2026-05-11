@@ -79,6 +79,11 @@ export const RemoveLineItemInputSchema = z.object({
   quoteId: z.string().uuid(),
 });
 
+export const SendQuoteInputSchema = z.object({
+  quoteId: z.string().uuid(),
+});
+
+export type SendQuoteInput = z.infer<typeof SendQuoteInputSchema>;
 export type AddLineItemInput = z.infer<typeof AddLineItemInputSchema>;
 export type UpdateLineItemInput = z.infer<typeof UpdateLineItemInputSchema>;
 export type RemoveLineItemInput = z.infer<typeof RemoveLineItemInputSchema>;
