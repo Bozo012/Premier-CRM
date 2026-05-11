@@ -245,7 +245,7 @@ export interface QuoteListCustomerSummary {
 }
 
 export interface QuoteListJobSummary {
-  id: string;
+  id: string | null;
   jobNumber: string | null;
   title: string;
 }
@@ -294,15 +294,19 @@ export async function listQuotes(
     return ok({ quotes: [], total: count ?? 0 });
   }
 
-  const jobIds = Array.from(new Set(quoteRows.map((q) => q.job_id)));
+  const jobIds = Array.from(
+    new Set(quoteRows.map((q) => q.job_id).filter((id): id is string => id !== null))
+  );
   const quoteIds = quoteRows.map((q) => q.id);
 
   const [jobsResult, lineItemsResult] = await Promise.all([
-    client
-      .from('jobs')
-      .select('id, job_number, title, customer_id')
-      .eq('org_id', args.orgId)
-      .in('id', jobIds),
+    jobIds.length > 0
+      ? client
+          .from('jobs')
+          .select('id, job_number, title, customer_id')
+          .eq('org_id', args.orgId)
+          .in('id', jobIds)
+      : Promise.resolve({ data: [] as QuoteListJobRow[], error: null }),
     client
       .from('quote_line_items')
       .select('quote_id')
@@ -353,7 +357,7 @@ export async function listQuotes(
   );
 
   const items: QuoteListItem[] = quoteRows.map((quote) => {
-    const job = jobsById.get(quote.job_id);
+    const job = quote.job_id ? jobsById.get(quote.job_id) : undefined;
     const customer = job?.customer_id
       ? (customersById.get(job.customer_id) ?? null)
       : null;
@@ -390,6 +394,10 @@ export async function getQuoteById(
 
   if (!quote) {
     return err(ErrorCode.NOT_FOUND, `Quote ${args.quoteId} not found`);
+  }
+
+  if (!quote.job_id) {
+    return err(ErrorCode.NOT_FOUND, 'Quote has no linked job.');
   }
 
   const { data: job, error: jobError } = await client
@@ -568,6 +576,10 @@ export async function getQuoteByToken(
     return err(ErrorCode.NOT_FOUND, 'Quote not found');
   }
 
+  if (!quote.job_id) {
+    return err(ErrorCode.NOT_FOUND, 'Quote has no linked job.');
+  }
+
   const { data: job, error: jobError } = await client
     .from('jobs')
     .select('*')
@@ -701,10 +713,41 @@ export async function createDraftQuote(
   client: DbClient,
   args: {
     createdBy: string;
-    input: CreateQuoteFromJobInput;
+    estimateId?: string;
+    input?: CreateQuoteFromJobInput;
     orgId: string;
+    title?: string;
   }
 ): Promise<Result<Quote>> {
+  // Estimate path — no job required.
+  if (args.estimateId && !args.input?.jobId) {
+    const payload = {
+      created_by: args.createdBy,
+      estimate_id: args.estimateId,
+      org_id: args.orgId,
+      status: 'draft' satisfies QuoteStatus,
+      title: args.title ?? 'Draft quote',
+      type: 'standard' satisfies QuoteType,
+    } satisfies QuoteInsert;
+
+    const { data: quote, error } = await client
+      .from('quotes')
+      .insert(payload)
+      .select('*')
+      .single();
+
+    if (error) {
+      return err(ErrorCode.DB_ERROR, error.message);
+    }
+
+    return ok(quote);
+  }
+
+  // Job path — existing behaviour.
+  if (!args.input?.jobId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'A job ID or estimate ID is required.');
+  }
+
   const { data: job, error: jobError } = await client
     .from('jobs')
     .select('*')
@@ -881,11 +924,13 @@ export async function addQuoteLineItem(
 
   // Denormalize property_id and zip_code from the job so pricing intelligence
   // queries can filter by location without joining all the way back to jobs.
-  const { data: job } = await client
-    .from('jobs')
-    .select('property_id')
-    .eq('id', quote.job_id)
-    .maybeSingle();
+  const { data: job } = quote.job_id
+    ? await client
+        .from('jobs')
+        .select('property_id')
+        .eq('id', quote.job_id)
+        .maybeSingle()
+    : { data: null };
 
   const propertyId = job?.property_id ?? null;
 

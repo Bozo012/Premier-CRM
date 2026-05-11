@@ -2534,7 +2534,7 @@ export type Database = {
           estimate_id: string | null
           id: string
           intro_text: string | null
-          job_id: string
+          job_id: string | null
           jobber_id: string | null
           org_id: string
           outro_text: string | null
@@ -2570,7 +2570,7 @@ export type Database = {
           estimate_id?: string | null
           id?: string
           intro_text?: string | null
-          job_id: string
+          job_id?: string | null
           jobber_id?: string | null
           org_id: string
           outro_text?: string | null
@@ -2606,7 +2606,7 @@ export type Database = {
           estimate_id?: string | null
           id?: string
           intro_text?: string | null
-          job_id?: string
+          job_id?: string | null
           jobber_id?: string | null
           org_id?: string
           outro_text?: string | null
