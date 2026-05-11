@@ -134,6 +134,117 @@ export async function updateEstimateStatusAction(
 }
 
 // ---------------------------------------------------------------------------
+// Create job from accepted estimate-origin quote
+// ---------------------------------------------------------------------------
+
+export type CreateJobFromAcceptedQuoteActionState = Result<{ jobId: string }>;
+
+export async function createJobFromAcceptedQuoteAction(
+  _prevState: CreateJobFromAcceptedQuoteActionState | null,
+  formData: FormData
+): Promise<CreateJobFromAcceptedQuoteActionState> {
+  const contextResult = await getEstimateActionContext();
+  if (!contextResult.success) return contextResult;
+  const { orgId, userId } = contextResult.data;
+
+  const quoteId =
+    typeof formData.get('quoteId') === 'string'
+      ? (formData.get('quoteId') as string).trim()
+      : '';
+
+  if (!quoteId) return err(ErrorCode.VALIDATION_ERROR, 'Quote ID is required.');
+
+  const client = createServiceClient();
+
+  // 1. Fetch and validate the quote.
+  const { data: quote, error: quoteError } = await client
+    .from('quotes')
+    .select('id, status, estimate_id, job_id, total, title')
+    .eq('id', quoteId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (quoteError) return err(ErrorCode.DB_ERROR, quoteError.message);
+  if (!quote) return err(ErrorCode.NOT_FOUND, 'Quote not found.');
+  if (quote.status !== 'accepted') {
+    return err(ErrorCode.VALIDATION_ERROR, 'Quote must be accepted before creating a job.');
+  }
+  if (!quote.estimate_id) {
+    return err(ErrorCode.VALIDATION_ERROR, 'This quote is not linked to an estimate.');
+  }
+  if (quote.job_id) {
+    return err(ErrorCode.VALIDATION_ERROR, 'A job has already been created for this quote.');
+  }
+
+  // 2. Fetch and validate the estimate.
+  const { data: estimate, error: estimateError } = await client
+    .from('estimates')
+    .select('id, customer_id, property_id, title, converted_job_id')
+    .eq('id', quote.estimate_id)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (estimateError) return err(ErrorCode.DB_ERROR, estimateError.message);
+  if (!estimate) return err(ErrorCode.NOT_FOUND, 'Linked estimate not found.');
+  if (estimate.converted_job_id) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      'A job has already been created for this estimate. Only one job may be created per estimate.'
+    );
+  }
+
+  // 3. Create the job.
+  const jobTitle = estimate.title?.trim() || quote.title?.trim() || 'New job';
+
+  const { data: newJob, error: insertError } = await client
+    .from('jobs')
+    .insert({
+      org_id: orgId,
+      customer_id: estimate.customer_id,
+      property_id: estimate.property_id,
+      title: jobTitle,
+      status: 'approved',
+      quoted_total: quote.total ?? null,
+      created_by: userId,
+    })
+    .select('id')
+    .single();
+
+  if (insertError || !newJob) {
+    return err(ErrorCode.DB_ERROR, insertError?.message ?? 'Failed to create job.');
+  }
+
+  // 4. Link quote → job.
+  const { error: quoteLinkError } = await client
+    .from('quotes')
+    .update({ job_id: newJob.id })
+    .eq('id', quoteId)
+    .eq('org_id', orgId);
+
+  if (quoteLinkError) return err(ErrorCode.DB_ERROR, quoteLinkError.message);
+
+  // 5. Mark estimate converted.
+  const { error: estimateUpdateError } = await client
+    .from('estimates')
+    .update({
+      converted_job_id: newJob.id,
+      converted_at: new Date().toISOString(),
+      status: 'converted',
+    })
+    .eq('id', quote.estimate_id)
+    .eq('org_id', orgId);
+
+  if (estimateUpdateError) return err(ErrorCode.DB_ERROR, estimateUpdateError.message);
+
+  revalidatePath(`/quotes/${quoteId}`);
+  revalidatePath(`/estimates/${quote.estimate_id}`);
+  revalidatePath('/estimates');
+  revalidatePath('/jobs');
+
+  return ok({ jobId: newJob.id });
+}
+
+// ---------------------------------------------------------------------------
 // Create draft quote from estimate
 // ---------------------------------------------------------------------------
 

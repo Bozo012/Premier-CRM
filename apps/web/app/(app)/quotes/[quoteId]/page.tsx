@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { ApproveJobButton } from '../_components/approve-job-button';
+import { CreateJobButton } from '../_components/create-job-button';
 import { LineItemEditor } from '../_components/line-item-editor';
 import { QuoteMetadataForm } from '../_components/quote-metadata-form';
 import { ResendQuoteEmailButton } from '../_components/resend-quote-email-button';
@@ -359,11 +360,12 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
                       Open job →
                     </Link>
                   </div>
-                ) : quote.status === 'accepted' && !job ? (
-                  <div className="border-t pt-3">
+                ) : quote.status === 'accepted' && !job && quote.estimate_id ? (
+                  <div className="border-t pt-3 space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      The customer accepted this quote. Job creation from estimate is coming soon.
+                      The customer accepted this quote. Create a job to begin scheduling the work.
                     </p>
+                    <CreateJobButton quoteId={quote.id} />
                   </div>
                 ) : null}
               </div>
