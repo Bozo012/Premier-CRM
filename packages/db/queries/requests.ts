@@ -34,8 +34,10 @@ export interface RequestListItem {
   status: string;
   priority: string;
   createdAt: string;
-  /** Linked job id if this request has been converted to a job. */
+  /** Linked job id if this request has been converted to a job (legacy path). */
   jobId: string | null;
+  /** Linked estimate id if an estimate was created from this request. */
+  estimateId: string | null;
   customer: RequestCustomerSummary | null;
 }
 
@@ -88,6 +90,7 @@ export async function listRequests(
       status,
       priority,
       job_id,
+      estimate_id,
       customer_id,
       contact_name,
       service_title,
@@ -145,6 +148,7 @@ export async function listRequests(
       priority: row.priority,
       createdAt: row.submitted_at,
       jobId: row.job_id ?? null,
+      estimateId: row.estimate_id ?? null,
       customer: cust
         ? {
             id: cust.id,
@@ -178,6 +182,7 @@ export async function getRequestById(
       status,
       priority,
       job_id,
+      estimate_id,
       customer_id,
       property_id,
       contact_name,
@@ -245,6 +250,7 @@ export async function getRequestById(
     priority: row.priority,
     createdAt: row.submitted_at,
     jobId: row.job_id ?? null,
+    estimateId: row.estimate_id ?? null,
     customerId: row.customer_id ?? null,
     propertyId: row.property_id ?? null,
     contactName: row.contact_name,

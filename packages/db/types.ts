@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -5035,6 +5035,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "spam"
+        | "estimate_created"
       task_priority: "low" | "normal" | "high" | "urgent"
       task_status: "open" | "in_progress" | "done" | "cancelled" | "snoozed"
       trip_purpose:
@@ -5311,6 +5312,7 @@ export const Constants = {
         "completed",
         "cancelled",
         "spam",
+        "estimate_created",
       ],
       task_priority: ["low", "normal", "high", "urgent"],
       task_status: ["open", "in_progress", "done", "cancelled", "snoozed"],

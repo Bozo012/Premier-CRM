@@ -5,40 +5,40 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import {
-  convertRequestToJobAction,
-  type ConvertRequestToJobActionState,
+  createEstimateFromRequestAction,
+  type CreateEstimateFromRequestActionState,
 } from '../actions';
 
-interface ConvertToJobButtonProps {
-  taskId: string;
+interface CreateEstimateButtonProps {
+  requestId: string;
 }
 
-export function ConvertToJobButton({ taskId }: ConvertToJobButtonProps) {
+export function CreateEstimateButton({ requestId }: CreateEstimateButtonProps) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState<
-    ConvertRequestToJobActionState | null,
+    CreateEstimateFromRequestActionState | null,
     FormData
-  >(convertRequestToJobAction, null);
+  >(createEstimateFromRequestAction, null);
 
   useEffect(() => {
     if (!state) return;
     if (state.success) {
-      toast.success('Job created successfully.');
-      router.push(`/jobs/${state.data.jobId}`);
+      toast.success('Estimate created.');
+      router.push(`/estimates/${state.data.estimateId}`);
     } else {
-      toast.error(state.error ?? 'Could not convert request to job.');
+      toast.error(state.error ?? 'Could not create estimate.');
     }
   }, [state, router]);
 
   return (
     <form action={formAction}>
-      <input type="hidden" name="taskId" value={taskId} />
+      <input type="hidden" name="requestId" value={requestId} />
       <button
         type="submit"
         disabled={isPending}
         className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90 disabled:pointer-events-none disabled:opacity-50"
       >
-        {isPending ? 'Creating job…' : 'Convert to job'}
+        {isPending ? 'Creating estimate…' : 'Create estimate'}
       </button>
     </form>
   );

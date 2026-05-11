@@ -51,20 +51,20 @@ function readString(formData: FormData, key: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Convert request to lead-status job
+// Create estimate from request
 // ---------------------------------------------------------------------------
 
-export type ConvertRequestToJobActionState = Result<{ jobId: string }>;
+export type CreateEstimateFromRequestActionState = Result<{ estimateId: string }>;
 
-export async function convertRequestToJobAction(
-  _prevState: ConvertRequestToJobActionState | null,
+export async function createEstimateFromRequestAction(
+  _prevState: CreateEstimateFromRequestActionState | null,
   formData: FormData
-): Promise<ConvertRequestToJobActionState> {
+): Promise<CreateEstimateFromRequestActionState> {
   const contextResult = await getRequestActionContext();
   if (!contextResult.success) return contextResult;
   const { orgId, userId } = contextResult.data;
 
-  const requestId = readString(formData, 'taskId');
+  const requestId = readString(formData, 'requestId');
   if (!requestId) {
     return err(ErrorCode.VALIDATION_ERROR, 'Missing request ID.');
   }
@@ -73,7 +73,7 @@ export async function convertRequestToJobAction(
 
   const { data: request, error: fetchError } = await client
     .from('service_requests')
-    .select('id, service_title, service_category, customer_id, property_id, job_id')
+    .select('id, service_title, service_category, customer_id, property_id, estimate_id')
     .eq('id', requestId)
     .eq('org_id', orgId)
     .maybeSingle();
@@ -86,16 +86,14 @@ export async function convertRequestToJobAction(
     return err(ErrorCode.NOT_FOUND, 'Request not found.');
   }
 
-  if (request.job_id) {
-    return err(ErrorCode.VALIDATION_ERROR, 'This request has already been converted to a job.');
+  if (request.estimate_id) {
+    return err(ErrorCode.VALIDATION_ERROR, 'An estimate already exists for this request.');
   }
 
   if (!request.customer_id) {
     return err(ErrorCode.VALIDATION_ERROR, 'No customer linked to this request.');
   }
 
-  // service_requests always has property_id set by createServiceRequest, but
-  // fall back to customer_properties lookup for any edge-case rows.
   let propertyId = request.property_id as string | null;
 
   if (!propertyId) {
@@ -116,34 +114,35 @@ export async function convertRequestToJobAction(
   if (!propertyId) {
     return err(
       ErrorCode.VALIDATION_ERROR,
-      'No property on file for this customer. Add a property from the customer record, then convert.'
+      'No property on file for this customer. Add a property from the customer record first.'
     );
   }
 
-  const jobTitle = request.service_category ?? request.service_title;
+  const estimateTitle = request.service_category ?? request.service_title;
 
-  const { data: newJob, error: insertError } = await client
-    .from('jobs')
+  const { data: newEstimate, error: insertError } = await client
+    .from('estimates')
     .insert({
       org_id: orgId,
       customer_id: request.customer_id,
       property_id: propertyId,
-      title: jobTitle,
-      status: 'lead',
+      service_request_id: requestId,
+      title: estimateTitle,
+      status: 'draft',
       created_by: userId,
     })
     .select('id')
     .single();
 
-  if (insertError || !newJob) {
-    return err(ErrorCode.DB_ERROR, insertError?.message ?? 'Failed to create job.');
+  if (insertError || !newEstimate) {
+    return err(ErrorCode.DB_ERROR, insertError?.message ?? 'Failed to create estimate.');
   }
 
   const { error: updateError } = await client
     .from('service_requests')
     .update({
-      job_id: newJob.id,
-      status: 'approved',
+      estimate_id: newEstimate.id,
+      status: 'estimate_created',
       converted_at: new Date().toISOString(),
     })
     .eq('id', requestId)
@@ -155,9 +154,9 @@ export async function convertRequestToJobAction(
 
   revalidatePath(`/requests/${requestId}`);
   revalidatePath('/requests');
-  revalidatePath('/jobs');
+  revalidatePath('/estimates');
 
-  return ok({ jobId: newJob.id });
+  return ok({ estimateId: newEstimate.id });
 }
 
 // ---------------------------------------------------------------------------

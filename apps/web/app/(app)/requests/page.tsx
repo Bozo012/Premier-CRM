@@ -123,7 +123,14 @@ function RequestRow({ item }: { item: RequestListItem }) {
             {item.priority !== 'normal' ? (
               <PriorityBadge priority={item.priority} />
             ) : null}
-            {item.jobId ? (
+            {item.estimateId ? (
+              <Link
+                href={`/estimates/${item.estimateId}`}
+                className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+              >
+                Estimate created
+              </Link>
+            ) : item.jobId ? (
               <Link
                 href={`/jobs/${item.jobId}`}
                 className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 hover:bg-green-100"
@@ -247,6 +254,7 @@ function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
     new: 'bg-amber-50 text-amber-700',
     reviewing: 'bg-blue-50 text-blue-700',
+    estimate_created: 'bg-indigo-50 text-indigo-700',
     approved: 'bg-green-50 text-green-700',
     scheduled: 'bg-indigo-50 text-indigo-700',
     in_progress: 'bg-blue-50 text-blue-700',

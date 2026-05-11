@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { getRequestById, type RequestDetail } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
-import { ConvertToJobButton } from '../_components/convert-to-job-button';
+import { CreateEstimateButton } from '../_components/create-estimate-button';
 import { MarkReviewedButton } from '../_components/mark-reviewed-button';
 
 interface RequestDetailPageProps {
@@ -72,12 +72,12 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
           {request.priority !== 'normal' ? (
             <PriorityBadge priority={request.priority} />
           ) : null}
-          {request.jobId ? (
+          {request.estimateId ? (
             <Link
-              href={`/jobs/${request.jobId}`}
-              className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 hover:bg-green-100"
+              href={`/estimates/${request.estimateId}`}
+              className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
             >
-              Job created
+              Estimate created
             </Link>
           ) : null}
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -212,11 +212,8 @@ function PropertyCard({ request }: { request: RequestDetail }) {
 }
 
 function ActionsCard({ request }: { request: RequestDetail }) {
-  const isTerminal =
-    request.status === 'completed' ||
-    request.status === 'cancelled' ||
-    request.status === 'spam';
   const isReviewed = request.status !== 'new';
+  const hasEstimate = !!request.estimateId;
 
   return (
     <section className="rounded-md border bg-background p-4 space-y-3">
@@ -225,15 +222,15 @@ function ActionsCard({ request }: { request: RequestDetail }) {
       </h2>
 
       <div className="flex flex-wrap gap-3">
-        {request.jobId ? (
+        {hasEstimate ? (
           <Link
-            href={`/jobs/${request.jobId}`}
+            href={`/estimates/${request.estimateId}`}
             className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
           >
-            Open job →
+            Open estimate →
           </Link>
         ) : (
-          <ConvertToJobButton taskId={request.id} />
+          <CreateEstimateButton requestId={request.id} />
         )}
 
         {!isReviewed ? (
@@ -241,9 +238,9 @@ function ActionsCard({ request }: { request: RequestDetail }) {
         ) : null}
       </div>
 
-      {!request.jobId && !request.property && request.customerId ? (
+      {!hasEstimate && !request.property && request.customerId ? (
         <p className="text-xs text-muted-foreground">
-          A property must be linked to the customer before converting to a job.{' '}
+          A property must be linked to the customer before creating an estimate.{' '}
           <Link
             href={`/customers/${request.customerId}`}
             className="underline-offset-2 hover:underline text-foreground"
@@ -253,9 +250,15 @@ function ActionsCard({ request }: { request: RequestDetail }) {
         </p>
       ) : null}
 
-      {request.reviewedAt && !isTerminal ? (
+      {request.reviewedAt && !hasEstimate ? (
         <p className="text-xs text-muted-foreground">
           Reviewed {formatDateTime(request.reviewedAt)}
+        </p>
+      ) : null}
+
+      {request.convertedAt && hasEstimate ? (
+        <p className="text-xs text-muted-foreground">
+          Estimate created {formatDateTime(request.convertedAt)}
         </p>
       ) : null}
     </section>
@@ -270,6 +273,7 @@ function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
     new: 'bg-amber-50 text-amber-700',
     reviewing: 'bg-blue-50 text-blue-700',
+    estimate_created: 'bg-indigo-50 text-indigo-700',
     approved: 'bg-green-50 text-green-700',
     scheduled: 'bg-indigo-50 text-indigo-700',
     in_progress: 'bg-blue-50 text-blue-700',
