@@ -535,6 +535,167 @@ export async function getQuoteById(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Public token-based quote lookup (used by /q/[token] — no auth required)
+// Must be called with a service-role client since the anonymous reader has
+// no org membership and cannot satisfy the org_isolation_quotes RLS policy.
+// ---------------------------------------------------------------------------
+
+export interface QuoteTokenDetail {
+  customer: QuoteCustomerSummary | null;
+  job: QuoteJobSummary;
+  lineItems: QuoteLineItemSummary[];
+  property: QuotePropertySummary | null;
+  quote: Quote;
+}
+
+export async function getQuoteByToken(
+  client: DbClient,
+  args: { token: string }
+): Promise<Result<QuoteTokenDetail>> {
+  const { data: quote, error } = await client
+    .from('quotes')
+    .select('*')
+    .eq('share_token', args.token)
+    .maybeSingle();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  if (!quote) {
+    return err(ErrorCode.NOT_FOUND, 'Quote not found');
+  }
+
+  const { data: job, error: jobError } = await client
+    .from('jobs')
+    .select('*')
+    .eq('id', quote.job_id)
+    .maybeSingle();
+
+  if (jobError) {
+    return err(ErrorCode.DB_ERROR, jobError.message);
+  }
+
+  if (!job) {
+    return err(ErrorCode.NOT_FOUND, `Job ${quote.job_id} not found`);
+  }
+
+  const [customerResult, propertyResult, categoryResult, lineItemsResult] =
+    await Promise.all([
+      job.customer_id
+        ? client
+            .from('customers')
+            .select(
+              'id, display_name, company_name, first_name, last_name, phone_primary, email'
+            )
+            .eq('id', job.customer_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null as CustomerRow | null, error: null }),
+      job.property_id
+        ? client
+            .from('properties')
+            .select(
+              'id, address_line_1, address_line_2, city, state, zip, property_type'
+            )
+            .eq('id', job.property_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null as PropertyRow | null, error: null }),
+      job.category_id
+        ? client
+            .from('service_categories')
+            .select('id, name')
+            .eq('id', job.category_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null as ServiceCategoryRow | null, error: null }),
+      client
+        .from('quote_line_items')
+        .select('*')
+        .eq('quote_id', quote.id)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
+    ]);
+
+  if (customerResult.error) {
+    return err(ErrorCode.DB_ERROR, customerResult.error.message);
+  }
+  if (propertyResult.error) {
+    return err(ErrorCode.DB_ERROR, propertyResult.error.message);
+  }
+  if (categoryResult.error) {
+    return err(ErrorCode.DB_ERROR, categoryResult.error.message);
+  }
+  if (lineItemsResult.error) {
+    return err(ErrorCode.DB_ERROR, lineItemsResult.error.message);
+  }
+
+  const lineItems = lineItemsResult.data ?? [];
+  const serviceIds = Array.from(
+    new Set(
+      lineItems
+        .map((li) => li.service_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const phaseIds = Array.from(
+    new Set(
+      lineItems
+        .map((li) => li.phase_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  const [servicesResult, phasesResult] = await Promise.all([
+    serviceIds.length > 0
+      ? client
+          .from('service_items')
+          .select('id, name, pricing_metric')
+          .in('id', serviceIds)
+      : Promise.resolve({ data: [] as ServiceItemRow[], error: null }),
+    phaseIds.length > 0
+      ? client
+          .from('job_phases')
+          .select('id, name')
+          .eq('job_id', job.id)
+          .in('id', phaseIds)
+      : Promise.resolve({ data: [] as JobPhaseRow[], error: null }),
+  ]);
+
+  if (servicesResult.error) {
+    return err(ErrorCode.DB_ERROR, servicesResult.error.message);
+  }
+  if (phasesResult.error) {
+    return err(ErrorCode.DB_ERROR, phasesResult.error.message);
+  }
+
+  const servicesById = new Map(
+    (servicesResult.data ?? []).map((s) => [s.id, s as ServiceItemRow])
+  );
+  const phasesById = new Map(
+    (phasesResult.data ?? []).map((p) => [p.id, p as JobPhaseRow])
+  );
+
+  return ok({
+    customer: toCustomerSummary(customerResult.data as CustomerRow | null),
+    job: {
+      category: toCategorySummary(categoryResult.data as ServiceCategoryRow | null),
+      job,
+    },
+    lineItems: lineItems.map((li) => {
+      const service = li.service_id ? servicesById.get(li.service_id) ?? null : null;
+      return {
+        item: li,
+        phaseName: li.phase_id ? phasesById.get(li.phase_id)?.name ?? null : null,
+        service: service
+          ? { id: service.id, name: service.name, pricingMetric: service.pricing_metric }
+          : null,
+      };
+    }),
+    property: toPropertySummary(propertyResult.data as PropertyRow | null),
+    quote,
+  });
+}
+
 export async function createDraftQuote(
   client: DbClient,
   args: {

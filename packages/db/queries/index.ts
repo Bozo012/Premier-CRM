@@ -2,6 +2,7 @@ export {
   addQuoteLineItem,
   createDraftQuote,
   getQuoteById,
+  getQuoteByToken,
   listQuotes,
   listQuotesForJob,
   removeQuoteLineItem,
@@ -19,6 +20,7 @@ export {
   type QuoteListJobSummary,
   type QuoteListPage,
   type QuotePropertySummary,
+  type QuoteTokenDetail,
 } from './quotes';
 export {
   getJobById,
