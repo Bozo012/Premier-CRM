@@ -29,17 +29,24 @@ export function SendQuoteButton({ quoteId, status }: SendQuoteButtonProps) {
           router.refresh();
         });
 
-        try {
-          await navigator.clipboard.writeText(fullUrl);
-          toast.success('Quote sent — customer link copied to clipboard.', {
+        if (result.data.emailSent) {
+          toast.success('Quote sent and emailed to customer.', {
             description: fullUrl,
             duration: 8000,
           });
-        } catch {
-          toast.success('Quote marked as sent.', {
-            description: `Customer link: ${fullUrl}`,
-            duration: 10000,
-          });
+        } else {
+          try {
+            await navigator.clipboard.writeText(fullUrl);
+            toast.success('Quote sent — customer link copied to clipboard.', {
+              description: fullUrl,
+              duration: 8000,
+            });
+          } catch {
+            toast.success('Quote marked as sent.', {
+              description: `Customer link: ${fullUrl}`,
+              duration: 10000,
+            });
+          }
         }
       } else {
         toast.error(result.error ?? 'Could not send quote. Please try again.');
