@@ -5,6 +5,7 @@ import { createServiceClient, getEstimateById, listQuotesForEstimate } from '@pr
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { AdvanceStatusButton } from '../_components/advance-status-button';
 import { CreateQuoteButton } from '../_components/create-quote-button';
 
 interface EstimateDetailPageProps {
@@ -81,6 +82,8 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
           Created {formatDate(estimate.createdAt)}
         </p>
       </header>
+
+      <AdvanceStatusButton estimateId={estimate.id} currentStatus={estimate.status} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <InfoCard label="Customer">

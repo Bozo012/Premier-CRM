@@ -57,6 +57,83 @@ async function getEstimateActionContext(): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Advance estimate status (pre-quote stages only)
+// ---------------------------------------------------------------------------
+
+export type UpdateEstimateStatusActionState = Result<{ status: string }>;
+
+const ALLOWED_TRANSITIONS: Record<string, string> = {
+  draft: 'site_visit_scheduled',
+  site_visit_scheduled: 'site_visit_complete',
+};
+
+export async function updateEstimateStatusAction(
+  _prevState: UpdateEstimateStatusActionState | null,
+  formData: FormData
+): Promise<UpdateEstimateStatusActionState> {
+  const contextResult = await getEstimateActionContext();
+  if (!contextResult.success) return contextResult;
+  const { orgId } = contextResult.data;
+
+  const estimateId =
+    typeof formData.get('estimateId') === 'string'
+      ? (formData.get('estimateId') as string).trim()
+      : '';
+  const newStatus =
+    typeof formData.get('newStatus') === 'string'
+      ? (formData.get('newStatus') as string).trim()
+      : '';
+  const siteVisitAt =
+    typeof formData.get('siteVisitAt') === 'string'
+      ? (formData.get('siteVisitAt') as string).trim() || null
+      : null;
+
+  if (!estimateId) return err(ErrorCode.VALIDATION_ERROR, 'Estimate ID is required.');
+  if (!newStatus) return err(ErrorCode.VALIDATION_ERROR, 'New status is required.');
+
+  const client = createServiceClient();
+
+  const { data: estimate, error: fetchError } = await client
+    .from('estimates')
+    .select('id, status')
+    .eq('id', estimateId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (fetchError) return err(ErrorCode.DB_ERROR, fetchError.message);
+  if (!estimate) return err(ErrorCode.NOT_FOUND, 'Estimate not found.');
+
+  const allowedNext = ALLOWED_TRANSITIONS[estimate.status];
+  if (!allowedNext || allowedNext !== newStatus) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      `Cannot transition estimate from "${estimate.status}" to "${newStatus}".`
+    );
+  }
+
+  type EstimateStatus = 'draft' | 'site_visit_scheduled' | 'site_visit_complete' | 'quoted' | 'accepted' | 'declined' | 'expired' | 'converted';
+  const updateData: { status: EstimateStatus; site_visit_at?: string } = {
+    status: newStatus as EstimateStatus,
+  };
+  if (newStatus === 'site_visit_scheduled' && siteVisitAt) {
+    updateData.site_visit_at = siteVisitAt;
+  }
+
+  const { error: updateError } = await client
+    .from('estimates')
+    .update(updateData)
+    .eq('id', estimateId)
+    .eq('org_id', orgId);
+
+  if (updateError) return err(ErrorCode.DB_ERROR, updateError.message);
+
+  revalidatePath(`/estimates/${estimateId}`);
+  revalidatePath('/estimates');
+
+  return ok({ status: newStatus });
+}
+
+// ---------------------------------------------------------------------------
 // Create draft quote from estimate
 // ---------------------------------------------------------------------------
 
