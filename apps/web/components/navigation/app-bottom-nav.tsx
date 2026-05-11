@@ -17,9 +17,9 @@ const navItems = [
     label: 'Jobs',
   },
   {
-    href: '/services',
-    isActive: (pathname: string) => pathname.startsWith('/services'),
-    label: 'Services',
+    href: '/quotes',
+    isActive: (pathname: string) => pathname.startsWith('/quotes'),
+    label: 'Quotes',
   },
   {
     href: '/customers',
