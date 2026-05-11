@@ -347,12 +347,20 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
                 ) : null}
                 {quote.status === 'accepted' && job ? (
                   <div className="border-t pt-3 space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      The customer accepted this quote. Mark the linked job as{' '}
-                      <span className="font-medium text-foreground">Approved</span>{' '}
-                      to begin scheduling.
-                    </p>
-                    <ApproveJobButton quoteId={quote.id} />
+                    {job.job.status !== 'approved' ? (
+                      <>
+                        <p className="text-sm text-muted-foreground">
+                          The customer accepted this quote. Mark the linked job as{' '}
+                          <span className="font-medium text-foreground">Approved</span>{' '}
+                          to begin scheduling.
+                        </p>
+                        <ApproveJobButton quoteId={quote.id} />
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Job is approved and ready to schedule.
+                      </p>
+                    )}
                     <Link
                       href={`/jobs/${job.job.id}`}
                       className="block text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"

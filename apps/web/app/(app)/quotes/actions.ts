@@ -174,6 +174,25 @@ export async function approveJobAction(
     );
   }
 
+  const { data: linkedJob, error: jobFetchError } = await client
+    .from('jobs')
+    .select('id, status')
+    .eq('id', quote.job_id)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (jobFetchError) {
+    return err(ErrorCode.DB_ERROR, jobFetchError.message);
+  }
+  if (!linkedJob) {
+    return err(ErrorCode.NOT_FOUND, 'Linked job not found.');
+  }
+
+  // Idempotent — already approved.
+  if (linkedJob.status === 'approved') {
+    return ok({ jobId: linkedJob.id });
+  }
+
   const { error: updateError } = await client
     .from('jobs')
     .update({ status: 'approved', quoted_total: quote.total })

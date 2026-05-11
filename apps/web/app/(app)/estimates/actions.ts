@@ -290,6 +290,14 @@ export async function createQuoteFromEstimateAction(
     return err(ErrorCode.NOT_FOUND, 'Estimate not found.');
   }
 
+  const blockedStatuses = new Set(['declined', 'expired', 'converted']);
+  if (blockedStatuses.has(estimate.status)) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      `Cannot create a quote for an estimate with status "${estimate.status}".`
+    );
+  }
+
   // Create the draft quote linked to this estimate.
   const quoteResult = await createDraftQuote(client, {
     createdBy: userId,
