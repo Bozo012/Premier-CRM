@@ -10,6 +10,7 @@ import {
   type RemoveLineItemInput,
   type Result,
   type UpdateLineItemInput,
+  type UpdateQuoteMetadataInput,
 } from '@premier/shared';
 
 import type { DbClient } from '../client';
@@ -737,6 +738,65 @@ export async function createDraftQuote(
   if (error) {
     return err(ErrorCode.DB_ERROR, error.message);
   }
+
+  return ok(quote);
+}
+
+// ---------------------------------------------------------------------------
+// Quote metadata update (draft only)
+// ---------------------------------------------------------------------------
+
+type QuoteUpdate = Database['public']['Tables']['quotes']['Update'];
+
+export async function updateQuoteMetadata(
+  client: DbClient,
+  args: { input: UpdateQuoteMetadataInput; orgId: string }
+): Promise<Result<Quote>> {
+  const { data: existing, error: fetchError } = await client
+    .from('quotes')
+    .select('status')
+    .eq('id', args.input.quoteId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return err(ErrorCode.DB_ERROR, fetchError.message);
+  }
+
+  if (!existing) {
+    return err(ErrorCode.NOT_FOUND, 'Quote not found.');
+  }
+
+  if (existing.status !== 'draft') {
+    return err(ErrorCode.VALIDATION_ERROR, 'Only draft quotes can be edited.');
+  }
+
+  const update: QuoteUpdate = {
+    title: args.input.title.trim() || null,
+    valid_until: args.input.validUntil.trim() || null,
+    discount_amount: args.input.discountAmount,
+    tax_pct: args.input.taxPct,
+    intro_text: args.input.introText.trim() || null,
+    outro_text: args.input.outroText.trim() || null,
+  };
+
+  const { data: quote, error } = await client
+    .from('quotes')
+    .update(update)
+    .eq('id', args.input.quoteId)
+    .eq('org_id', args.orgId)
+    .select('*')
+    .single();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  // Recalculate totals whenever discount or tax changed.
+  await recalcQuoteTotals(client, {
+    orgId: args.orgId,
+    quoteId: args.input.quoteId,
+  });
 
   return ok(quote);
 }

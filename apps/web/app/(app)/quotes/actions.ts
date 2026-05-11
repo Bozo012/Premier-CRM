@@ -9,6 +9,7 @@ import {
   RemoveLineItemInputSchema,
   SendQuoteInputSchema,
   UpdateLineItemInputSchema,
+  UpdateQuoteMetadataInputSchema,
   err,
   ok,
   type Result,
@@ -20,6 +21,7 @@ import {
   listJobs,
   removeQuoteLineItem,
   updateQuoteLineItem,
+  updateQuoteMetadata,
   createServiceClient,
 } from '@premier/db';
 
@@ -73,6 +75,49 @@ function readOptionalString(
 ): string | undefined {
   const value = readString(formData, key);
   return value.length > 0 ? value : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Quote metadata editing (draft only)
+// ---------------------------------------------------------------------------
+
+export type UpdateQuoteMetadataActionState = Result<{ quoteId: string }>;
+
+export async function updateQuoteMetadataAction(
+  _prevState: UpdateQuoteMetadataActionState | null,
+  formData: FormData
+): Promise<UpdateQuoteMetadataActionState> {
+  const contextResult = await getQuoteActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId } = contextResult.data;
+
+  const rawInput = {
+    quoteId: readString(formData, 'quoteId'),
+    title: readString(formData, 'title'),
+    validUntil: readString(formData, 'validUntil'),
+    discountAmount: readString(formData, 'discountAmount'),
+    taxPct: readString(formData, 'taxPct'),
+    introText: readString(formData, 'introText'),
+    outroText: readString(formData, 'outroText'),
+  };
+
+  const parsed = UpdateQuoteMetadataInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    const firstError = parsed.error.errors[0];
+    return err(ErrorCode.VALIDATION_ERROR, firstError?.message ?? 'Invalid quote metadata.');
+  }
+
+  const client = createServiceClient();
+  const result = await updateQuoteMetadata(client, { input: parsed.data, orgId });
+  if (!result.success) {
+    return result;
+  }
+
+  revalidatePath(`/quotes/${parsed.data.quoteId}`);
+  revalidatePath('/quotes');
+  return ok({ quoteId: parsed.data.quoteId });
 }
 
 // ---------------------------------------------------------------------------
