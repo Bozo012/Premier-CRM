@@ -79,6 +79,12 @@ export {
 } from './properties';
 export { createQuoteRequest, type CreateQuoteRequestResult } from './quote-requests';
 export {
+  listRequests,
+  type RequestCustomerSummary,
+  type RequestListItem,
+  type RequestListPage,
+} from './requests';
+export {
   createServiceRequest,
   type CreateServiceRequestResult,
 } from './service-requests';

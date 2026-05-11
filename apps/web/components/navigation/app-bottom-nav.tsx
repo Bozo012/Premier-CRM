@@ -27,9 +27,9 @@ const navItems = [
     label: 'Customers',
   },
   {
-    href: '/properties',
-    isActive: (pathname: string) => pathname.startsWith('/properties'),
-    label: 'Properties',
+    href: '/requests',
+    isActive: (pathname: string) => pathname.startsWith('/requests'),
+    label: 'Requests',
   },
 ] as const;
 
