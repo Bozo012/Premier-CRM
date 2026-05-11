@@ -24,9 +24,13 @@ export interface RequestPropertySummary {
 
 export interface RequestListItem {
   id: string;
+  requestNumber: string;
+  /** Composed display title: "{contactName} — {serviceTitle}" */
   title: string;
-  /** Structured description block built by createQuoteRequest. */
+  /** Free-text service description. */
   description: string | null;
+  /** Service category or title for the sub-line in the inbox row. */
+  serviceLine: string | null;
   status: string;
   priority: string;
   createdAt: string;
@@ -38,6 +42,13 @@ export interface RequestListItem {
 export interface RequestDetail extends RequestListItem {
   customerId: string | null;
   propertyId: string | null;
+  contactName: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  serviceTitle: string;
+  serviceCategory: string | null;
+  reviewedAt: string | null;
+  convertedAt: string | null;
   property: RequestPropertySummary | null;
 }
 
@@ -47,15 +58,15 @@ export interface RequestListPage {
 }
 
 // ---------------------------------------------------------------------------
-// Query
+// List requests
 // ---------------------------------------------------------------------------
 
 /**
- * List inbound intake requests backed by the tasks table.
+ * List inbound intake requests from the service_requests table.
  *
- * Web leads land in tasks via createQuoteRequest (title always starts with
- * "Quote request from"). The `showDone` flag controls whether completed /
- * cancelled tasks are included; the default inbox shows only open ones.
+ * `showDone` controls visibility of reviewed/converted rows:
+ *   false  → only status='new'
+ *   true   → all statuses including reviewing/completed/cancelled
  */
 export async function listRequests(
   client: DbClient,
@@ -69,16 +80,20 @@ export async function listRequests(
   const { orgId, limit = 100, offset = 0, showDone = false } = args;
 
   let query = client
-    .from('tasks')
+    .from('service_requests')
     .select(
       `
       id,
-      title,
-      description,
+      request_number,
       status,
       priority,
-      created_at,
       job_id,
+      customer_id,
+      contact_name,
+      service_title,
+      service_category,
+      service_description,
+      submitted_at,
       customers (
         id,
         first_name,
@@ -90,15 +105,14 @@ export async function listRequests(
     `,
       { count: 'exact' }
     )
-    .eq('org_id', orgId)
-    .ilike('title', 'Quote request from%');
+    .eq('org_id', orgId);
 
   if (!showDone) {
-    query = query.not('status', 'in', '("done","cancelled")');
+    query = query.eq('status', 'new');
   }
 
   const { data, error, count } = await query
-    .order('created_at', { ascending: false })
+    .order('submitted_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) {
@@ -106,9 +120,7 @@ export async function listRequests(
   }
 
   const requests: RequestListItem[] = (data ?? []).map((row) => {
-    const cust = Array.isArray(row.customers)
-      ? row.customers[0]
-      : row.customers;
+    const cust = Array.isArray(row.customers) ? row.customers[0] : row.customers;
 
     let displayName = 'Unknown customer';
     if (cust) {
@@ -120,13 +132,18 @@ export async function listRequests(
       }
     }
 
+    const serviceLine = row.service_category ?? row.service_title ?? null;
+    const title = `${row.contact_name} — ${row.service_title}`;
+
     return {
       id: row.id,
-      title: row.title,
-      description: row.description ?? null,
+      requestNumber: row.request_number,
+      title,
+      description: row.service_description ?? null,
+      serviceLine,
       status: row.status,
       priority: row.priority,
-      createdAt: row.created_at,
+      createdAt: row.submitted_at,
       jobId: row.job_id ?? null,
       customer: cust
         ? {
@@ -153,18 +170,25 @@ export async function getRequestById(
   const { taskId, orgId } = args;
 
   const { data: row, error } = await client
-    .from('tasks')
+    .from('service_requests')
     .select(
       `
       id,
-      title,
-      description,
+      request_number,
       status,
       priority,
-      created_at,
       job_id,
       customer_id,
       property_id,
+      contact_name,
+      contact_email,
+      contact_phone,
+      service_title,
+      service_category,
+      service_description,
+      submitted_at,
+      reviewed_at,
+      converted_at,
       customers (
         id,
         first_name,
@@ -208,16 +232,28 @@ export async function getRequestById(
     }
   }
 
+  const serviceLine = row.service_category ?? row.service_title ?? null;
+  const title = `${row.contact_name} — ${row.service_title}`;
+
   return ok({
     id: row.id,
-    title: row.title,
-    description: row.description ?? null,
+    requestNumber: row.request_number,
+    title,
+    description: row.service_description ?? null,
+    serviceLine,
     status: row.status,
     priority: row.priority,
-    createdAt: row.created_at,
+    createdAt: row.submitted_at,
     jobId: row.job_id ?? null,
     customerId: row.customer_id ?? null,
     propertyId: row.property_id ?? null,
+    contactName: row.contact_name,
+    contactEmail: row.contact_email ?? null,
+    contactPhone: row.contact_phone ?? null,
+    serviceTitle: row.service_title,
+    serviceCategory: row.service_category ?? null,
+    reviewedAt: row.reviewed_at ?? null,
+    convertedAt: row.converted_at ?? null,
     customer: cust
       ? {
           id: cust.id,
