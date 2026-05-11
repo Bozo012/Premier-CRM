@@ -11,10 +11,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 import {
   ErrorCode,
   WebsiteServiceRequestPayloadSchema,
-  type QuoteRequestPayload,
+  type ServiceRequestPayload,
   type WebsiteServiceRequestPayload,
 } from '@premier/shared';
-import { createQuoteRequest, createServiceClient } from '@premier/db';
+import { createServiceRequest, createServiceClient } from '@premier/db';
 
 const PREMIER_ORG_ID =
   process.env.PREMIER_ORG_ID ?? 'a0000000-0000-0000-0000-000000000001';
@@ -110,63 +110,64 @@ function cleanupExpiredRateLimits(): void {
   }
 }
 
-function mapPropertyType(value: WebsiteServiceRequestPayload['propertyType']) {
+function mapPropertyType(
+  value: WebsiteServiceRequestPayload['propertyType']
+): ServiceRequestPayload['property_type'] {
   switch (value) {
     case 'single-family':
-      return 'single_family' as const;
+      return 'single_family';
     case 'multi-family':
-      return 'multi_family' as const;
+      return 'multi_family';
     case 'commercial':
-      return 'commercial' as const;
+      return 'commercial';
     default:
-      return 'other' as const;
+      return 'other';
   }
 }
 
-function mapTimeline(value: WebsiteServiceRequestPayload['priorityLevel']) {
+function mapPriority(
+  value: WebsiteServiceRequestPayload['priorityLevel']
+): ServiceRequestPayload['priority'] {
   switch (value) {
     case 'emergency':
-      return 'asap' as const;
+      return 'emergency';
     case 'urgent':
-      return 'this_week' as const;
+      return 'high';
     case 'normal':
-      return 'this_month' as const;
+      return 'normal';
     default:
-      return 'flexible' as const;
+      return 'normal';
   }
 }
 
-function toQuoteRequestPayload(
+function toServiceRequestPayload(
   payload: WebsiteServiceRequestPayload
-): QuoteRequestPayload {
-  const customerName = `${payload.firstName} ${payload.lastName}`.trim();
-  const descriptionLines = [
-    `Preferred contact method: ${payload.preferredContactMethod}`,
-    `Customer type: ${payload.customerType}`,
-    `Property address: ${payload.addressLine1}, ${payload.city}, ${payload.state} ${payload.zipCode}`,
-    `Property type: ${payload.propertyType}`,
-    `Priority level: ${payload.priorityLevel}`,
-    payload.preferredDateTime
-      ? `Preferred date/time: ${payload.preferredDateTime}`
-      : null,
-    payload.accessInstructions
-      ? `Access instructions: ${payload.accessInstructions}`
-      : null,
-    '',
-    payload.problemDescription,
-    payload.additionalNotes
-      ? `Additional notes: ${payload.additionalNotes}`
-      : null,
-  ].filter(Boolean);
+): ServiceRequestPayload {
+  const name = `${payload.firstName} ${payload.lastName}`.trim();
+
+  const descriptionParts = [payload.problemDescription];
+  if (payload.additionalNotes) {
+    descriptionParts.push(`Additional notes: ${payload.additionalNotes}`);
+  }
+  if (payload.preferredDateTime) {
+    descriptionParts.push(`Preferred date/time: ${payload.preferredDateTime}`);
+  }
 
   return {
-    name: customerName,
+    name,
     email: payload.emailAddress,
     phone: payload.phoneNumber,
+    address_line_1: payload.addressLine1,
+    city: payload.city,
+    state: payload.state,
+    zip: payload.zipCode,
+    country: 'US',
     property_type: mapPropertyType(payload.propertyType),
-    timeline: mapTimeline(payload.priorityLevel),
-    service_needed: payload.serviceCategory,
-    description: descriptionLines.join('\n'),
+    service_category: payload.serviceCategory,
+    service_title: payload.serviceCategory ?? 'Service Request',
+    service_description: descriptionParts.join('\n\n'),
+    access_notes: payload.accessInstructions ?? undefined,
+    priority: mapPriority(payload.priorityLevel),
   };
 }
 
@@ -246,9 +247,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const supabase = createServiceClient();
-  const result = await createQuoteRequest(supabase, {
+  const result = await createServiceRequest(supabase, {
     orgId: PREMIER_ORG_ID,
-    payload: toQuoteRequestPayload(parsed.data),
+    payload: toServiceRequestPayload(parsed.data),
   });
 
   if (!result.success) {
@@ -266,8 +267,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     {
       success: true,
       data: {
-        ticket_id: result.data.taskId,
-        message: result.data.deduped
+        ticket_id: result.data.serviceRequestId,
+        message: result.data.dedupedCustomer
           ? "Got it. We have your details on file already and will follow up within one business day."
           : "Got it. We'll follow up within one business day.",
       },

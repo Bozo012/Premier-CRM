@@ -1,5 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 import type { ServiceRequestPayload } from '@premier/shared';
 import { ErrorCode, err, ok, type Result } from '@premier/shared';
 
@@ -38,6 +36,7 @@ function propertyNotes(payload: ServiceRequestPayload): string | null {
   ].filter(Boolean);
   return lines.length > 0 ? lines.join('\n') : null;
 }
+
 
 export async function createServiceRequest(
   client: DbClient,
@@ -183,8 +182,7 @@ export async function createServiceRequest(
 
   if (linkError) return err(ErrorCode.DB_ERROR, linkError.message);
 
-  const untypedClient = client as unknown as SupabaseClient;
-  const { data: serviceRequest, error: serviceRequestError } = await untypedClient
+  const { data: serviceRequest, error: serviceRequestError } = await client
     .from('service_requests')
     .insert({
       org_id: orgId,
@@ -215,11 +213,7 @@ export async function createServiceRequest(
     .select('id')
     .single();
 
-  const createdId = serviceRequest && typeof serviceRequest === 'object' && 'id' in serviceRequest
-    ? serviceRequest.id
-    : null;
-
-  if (serviceRequestError || typeof createdId !== 'string') {
+  if (serviceRequestError || !serviceRequest) {
     return err(
       ErrorCode.DB_ERROR,
       serviceRequestError?.message ?? 'Failed to create service request.'
@@ -227,7 +221,7 @@ export async function createServiceRequest(
   }
 
   return ok({
-    serviceRequestId: createdId,
+    serviceRequestId: serviceRequest.id,
     customerId,
     propertyId,
     dedupedCustomer,
