@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -33,7 +34,11 @@ const navItems = [
   },
 ] as const;
 
-export function AppBottomNav() {
+interface AppBottomNavProps {
+  requestsBadge?: ReactNode;
+}
+
+export function AppBottomNav({ requestsBadge }: AppBottomNavProps) {
   const pathname = usePathname();
 
   return (
@@ -47,11 +52,12 @@ export function AppBottomNav() {
               <Link
                 href={item.href}
                 className={cn(
-                  'min-h-14 w-full px-2 py-3 text-center transition-colors',
+                  'inline-flex min-h-14 w-full items-center justify-center gap-1 px-2 py-3 transition-colors',
                   active ? 'font-semibold text-foreground' : 'text-muted-foreground'
                 )}
               >
                 {item.label}
+                {item.href === '/requests' ? requestsBadge : null}
               </Link>
             </li>
           );

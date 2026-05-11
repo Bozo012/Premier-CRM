@@ -13,6 +13,7 @@ interface TodayState {
   customerCount: number;
   firstName: string;
   jobCount: number;
+  newRequestCount: number;
   orgName: string;
   orgRole: string;
   propertyCount: number;
@@ -101,7 +102,7 @@ export default function TodayPage() {
       const canManageTeam =
         membership.role === 'owner' || membership.role === 'admin';
 
-      const [customersResult, propertiesResult, jobsResult, profileResult] =
+      const [customersResult, propertiesResult, jobsResult, profileResult, requestsResult] =
         await Promise.all([
           supabase
             .from('customers')
@@ -120,6 +121,11 @@ export default function TodayPage() {
             .select('full_name')
             .eq('id', user.id)
             .maybeSingle(),
+          supabase
+            .from('service_requests')
+            .select('id', { count: 'exact', head: true })
+            .eq('org_id', membership.org_id)
+            .eq('status', 'new'),
         ]);
 
       if (customersResult.error || propertiesResult.error || jobsResult.error) {
@@ -132,6 +138,8 @@ export default function TodayPage() {
         setIsLoading(false);
         return;
       }
+
+      const newRequestCount = requestsResult.count ?? 0;
 
       const uniquePropertyCount = new Set(
         (propertiesResult.data || []).map((property) =>
@@ -149,6 +157,7 @@ export default function TodayPage() {
         customerCount: customersResult.count || 0,
         firstName: resolvedFirstName,
         jobCount: jobsResult.count || 0,
+        newRequestCount,
         orgName: orgNameValue,
         orgRole: membership.role,
         propertyCount: uniquePropertyCount,
@@ -297,15 +306,10 @@ export default function TodayPage() {
             value={String(data?.jobCount ?? 0)}
           />
           <SnapshotCard
-            helper={
-              data?.canManageTeam
-                ? 'Review app access'
-                : 'Imported customer + property records'
-            }
-            label={data?.canManageTeam ? 'Team access' : 'Imported records'}
-            value={String(
-              (data?.customerCount ?? 0) + (data?.propertyCount ?? 0)
-            )}
+            helper="Unreviewed website inquiries"
+            href="/requests"
+            label="New requests"
+            value={String(data?.newRequestCount ?? 0)}
           />
         </div>
       </section>
