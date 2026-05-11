@@ -111,7 +111,12 @@ function RequestRow({ item }: { item: RequestListItem }) {
       <div className="space-y-2 px-4 py-4 sm:px-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0 space-y-1">
-            <p className="font-medium text-foreground">{item.title}</p>
+            <Link
+              href={`/requests/${item.id}`}
+              className="font-medium text-foreground underline-offset-2 hover:underline"
+            >
+              {item.title}
+            </Link>
             {serviceLine ? (
               <p className="text-sm text-muted-foreground">{serviceLine}</p>
             ) : null}
