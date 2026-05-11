@@ -170,7 +170,7 @@ export async function approveJobAction(
   if (!quote.job_id) {
     return err(
       ErrorCode.VALIDATION_ERROR,
-      'Quote has no linked job. Job approval for estimate-only quotes is not yet supported.'
+      'This quote has no linked job. For estimate-origin quotes, use the Create job action instead.'
     );
   }
 
