@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation';
 
-import { createServiceClient } from '@premier/db';
-import { getQuoteByToken, type QuoteLineItemSummary } from '@premier/db';
+import { createServiceClient, getQuoteByToken, type QuoteLineItemSummary } from '@premier/db';
 import { ErrorCode } from '@premier/shared';
+
+import { RespondToQuoteForm } from './_components/respond-to-quote-form';
 
 interface PublicQuotePageProps {
   params: Promise<{ token: string }>;
@@ -34,6 +35,18 @@ export default async function PublicQuotePage({ params }: PublicQuotePageProps) 
   }
 
   const { customer, job, lineItems, property, quote } = result.data;
+
+  // Stamp viewed_at on first open only.
+  // The WHERE conditions make this idempotent: if status is already anything
+  // other than 'sent', or viewed_at is already set, no update is written.
+  if (quote.status === 'sent') {
+    await client
+      .from('quotes')
+      .update({ viewed_at: new Date().toISOString(), status: 'viewed' })
+      .eq('share_token', token)
+      .eq('status', 'sent')
+      .is('viewed_at', null);
+  }
 
   const quoteTitle = quote.title?.trim() || quote.quote_number || 'Quote';
   const customerName = customer?.displayName ?? null;
@@ -144,12 +157,46 @@ export default async function PublicQuotePage({ params }: PublicQuotePageProps) 
         </div>
       ) : null}
 
+      {/* Customer response */}
+      {quote.status === 'accepted' ? (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-5 text-center">
+          <p className="text-base font-semibold text-green-800">Quote accepted</p>
+          <p className="mt-1 text-sm text-green-700">
+            Thank you — Premier has been notified and will be in touch shortly.
+          </p>
+        </div>
+      ) : quote.status === 'declined' ? (
+        <div className="rounded-md border bg-muted/40 px-4 py-5 text-center">
+          <p className="text-base font-semibold text-foreground">Quote declined</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your response has been recorded. Contact Premier if you have any questions.
+          </p>
+        </div>
+      ) : quote.valid_until && new Date(quote.valid_until) < new Date() ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-4 text-center">
+          <p className="text-sm font-medium text-amber-800">
+            This quote expired on {formatDate(quote.valid_until)} — contact Premier to request an updated quote.
+          </p>
+        </div>
+      ) : (
+        <section className="space-y-3">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">Ready to proceed?</p>
+            <p className="text-sm text-muted-foreground">
+              Accept or decline this quote below. Premier will be notified of your response.
+            </p>
+          </div>
+          <RespondToQuoteForm
+            token={token}
+            status={quote.status}
+            validUntil={quote.valid_until}
+          />
+        </section>
+      )}
+
       {/* Footer */}
       <footer className="border-t pt-4 text-center text-xs text-muted-foreground">
-        <p>Premier Property Maintenance · This quote is provided for review only.</p>
-        <p className="mt-1">
-          Contact Premier to discuss or accept this quote.
-        </p>
+        <p>Premier Property Maintenance · Questions? Contact us directly.</p>
       </footer>
     </PageShell>
   );

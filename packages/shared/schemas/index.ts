@@ -13,6 +13,7 @@ export {
   QuoteStatusSchema,
   QuoteTypeSchema,
   RemoveLineItemInputSchema,
+  RespondToQuoteInputSchema,
   SendQuoteInputSchema,
   UpdateLineItemInputSchema,
   type AddLineItemInput,
@@ -21,6 +22,7 @@ export {
   type QuoteStatus,
   type QuoteType,
   type RemoveLineItemInput,
+  type RespondToQuoteInput,
   type SendQuoteInput,
   type UpdateLineItemInput,
 } from './quote';
