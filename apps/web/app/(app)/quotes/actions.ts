@@ -14,12 +14,14 @@ import {
 } from '@premier/shared';
 import {
   addQuoteLineItem,
+  getQuoteById,
   removeQuoteLineItem,
   updateQuoteLineItem,
   createServiceClient,
 } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
+import { sendQuoteEmail } from '@/lib/email';
 
 export type LineItemActionState = Result<{ lineItemId: string }>;
 
@@ -73,7 +75,7 @@ function readOptionalString(
 // Send quote
 // ---------------------------------------------------------------------------
 
-export type SendQuoteActionState = Result<{ quoteUrl: string }>;
+export type SendQuoteActionState = Result<{ quoteUrl: string; emailSent: boolean }>;
 
 export async function sendQuoteAction(
   _prevState: SendQuoteActionState | null,
@@ -126,7 +128,32 @@ export async function sendQuoteAction(
   revalidatePath(`/quotes/${parsed.data.quoteId}`);
   revalidatePath('/quotes');
 
-  return ok({ quoteUrl: `/q/${quote.share_token}` });
+  const quoteUrl = `/q/${quote.share_token}`;
+
+  // Attempt email delivery — best-effort, never blocks success path.
+  // Fetch full quote detail for customer email + display context.
+  let emailSent = false;
+  const detailResult = await getQuoteById(client, {
+    orgId,
+    quoteId: parsed.data.quoteId,
+  });
+
+  if (detailResult.success) {
+    const { customer, quote: quoteDetail } = detailResult.data;
+    if (customer?.email) {
+      const emailResult = await sendQuoteEmail({
+        customerEmail: customer.email,
+        customerName: customer.displayName,
+        quoteTitle: quoteDetail.title?.trim() || quoteDetail.quote_number || 'Your quote',
+        quoteTotal: quoteDetail.total,
+        quoteUrl,
+        validUntil: quoteDetail.valid_until,
+      });
+      emailSent = emailResult.sent;
+    }
+  }
+
+  return ok({ quoteUrl, emailSent });
 }
 
 export async function addLineItemAction(
