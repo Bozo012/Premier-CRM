@@ -272,7 +272,9 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
       <section className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle>Send quote</CardTitle>
+            <CardTitle>
+              {quote.status === 'draft' ? 'Send quote' : 'Customer timeline'}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {quote.status === 'draft' ? (
@@ -285,21 +287,7 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
                 <SendQuoteButton quoteId={quote.id} status={quote.status} />
               </>
             ) : (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Status: <span className="font-medium capitalize text-foreground">{quote.status}</span>
-                </p>
-                {quote.sent_at ? (
-                  <p className="text-sm text-muted-foreground">
-                    Sent {formatDateTime(quote.sent_at)}
-                  </p>
-                ) : null}
-                {quote.share_token ? (
-                  <p className="break-all text-xs text-muted-foreground">
-                    Customer link: /q/{quote.share_token}
-                  </p>
-                ) : null}
-              </div>
+              <QuoteLifecycleTimeline quote={quote} />
             )}
           </CardContent>
         </Card>
@@ -450,9 +438,121 @@ function FutureSectionCard({
   );
 }
 
-function QuoteStatusBadge({ status }: { status: string }) {
+function QuoteLifecycleTimeline({ quote }: { quote: { sent_at: string | null; viewed_at: string | null; accepted_at: string | null; declined_at: string | null; decline_reason: string | null; share_token: string | null; status: string } }) {
+  const declined = quote.status === 'declined';
+  const accepted = quote.status === 'accepted';
+  const awaitingResponse = quote.status === 'sent' || quote.status === 'viewed';
+
   return (
-    <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+    <div className="space-y-4">
+      <ol className="space-y-3">
+        <LifecycleEvent
+          label="Sent"
+          timestamp={quote.sent_at}
+          emptyText="Not recorded"
+          dotColor="bg-violet-400"
+        />
+        <LifecycleEvent
+          label="Viewed"
+          timestamp={quote.viewed_at}
+          emptyText="Not yet opened"
+          dotColor="bg-indigo-400"
+        />
+        {accepted ? (
+          <LifecycleEvent
+            label="Accepted"
+            timestamp={quote.accepted_at}
+            emptyText="—"
+            dotColor="bg-green-500"
+            highlight="green"
+          />
+        ) : declined ? (
+          <>
+            <LifecycleEvent
+              label="Declined"
+              timestamp={quote.declined_at}
+              emptyText="—"
+              dotColor="bg-red-500"
+              highlight="red"
+            />
+            {quote.decline_reason?.trim() ? (
+              <li className="pl-5 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Reason: </span>
+                {quote.decline_reason.trim()}
+              </li>
+            ) : null}
+          </>
+        ) : awaitingResponse ? (
+          <li className="flex items-center gap-2">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-slate-300" />
+            <span className="text-sm text-muted-foreground">Awaiting customer response</span>
+          </li>
+        ) : null}
+      </ol>
+
+      {quote.share_token ? (
+        <div className="space-y-1 border-t pt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Customer link
+          </p>
+          <p className="break-all text-xs text-foreground">
+            /q/{quote.share_token}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LifecycleEvent({
+  dotColor,
+  emptyText,
+  highlight,
+  label,
+  timestamp,
+}: {
+  dotColor: string;
+  emptyText: string;
+  highlight?: 'green' | 'red';
+  label: string;
+  timestamp: string | null;
+}) {
+  const labelClass =
+    highlight === 'green'
+      ? 'text-green-700 font-medium'
+      : highlight === 'red'
+        ? 'text-red-700 font-medium'
+        : 'text-foreground';
+
+  return (
+    <li className="flex items-start gap-2">
+      <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${timestamp ? dotColor : 'bg-slate-200'}`} />
+      <div className="min-w-0 flex-1">
+        <span className={`text-sm ${labelClass}`}>{label}</span>
+        {timestamp ? (
+          <span className="ml-2 text-xs text-muted-foreground">{formatDateTime(timestamp)}</span>
+        ) : (
+          <span className="ml-2 text-xs text-muted-foreground">{emptyText}</span>
+        )}
+      </div>
+    </li>
+  );
+}
+
+const STATUS_BADGE_COLORS: Record<string, string> = {
+  draft: 'bg-slate-100 text-slate-700',
+  sent: 'bg-violet-50 text-violet-700',
+  viewed: 'bg-indigo-50 text-indigo-700',
+  accepted: 'bg-green-50 text-green-700',
+  declined: 'bg-red-50 text-red-700',
+  expired: 'bg-orange-50 text-orange-700',
+  revised: 'bg-blue-50 text-blue-700',
+};
+
+function QuoteStatusBadge({ status }: { status: string }) {
+  const colorClass = STATUS_BADGE_COLORS[status] ?? 'bg-slate-100 text-slate-700';
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
       {formatEnumLabel(status)}
     </span>
   );
