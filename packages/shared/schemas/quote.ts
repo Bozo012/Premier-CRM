@@ -83,7 +83,14 @@ export const SendQuoteInputSchema = z.object({
   quoteId: z.string().uuid(),
 });
 
+export const RespondToQuoteInputSchema = z.object({
+  token: z.string().uuid(),
+  response: z.enum(['accept', 'decline']),
+  declineReason: z.string().max(500).optional(),
+});
+
 export type SendQuoteInput = z.infer<typeof SendQuoteInputSchema>;
+export type RespondToQuoteInput = z.infer<typeof RespondToQuoteInputSchema>;
 export type AddLineItemInput = z.infer<typeof AddLineItemInputSchema>;
 export type UpdateLineItemInput = z.infer<typeof UpdateLineItemInputSchema>;
 export type RemoveLineItemInput = z.infer<typeof RemoveLineItemInputSchema>;
