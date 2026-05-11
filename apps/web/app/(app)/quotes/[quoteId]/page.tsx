@@ -12,6 +12,7 @@ import { ErrorCode } from '@premier/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { ApproveJobButton } from '../_components/approve-job-button';
 import { LineItemEditor } from '../_components/line-item-editor';
 import { QuoteMetadataForm } from '../_components/quote-metadata-form';
 import { ResendQuoteEmailButton } from '../_components/resend-quote-email-button';
@@ -312,6 +313,22 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
                       Resend to {customer.email}
                     </p>
                     <ResendQuoteEmailButton quoteId={quote.id} />
+                  </div>
+                ) : null}
+                {quote.status === 'accepted' ? (
+                  <div className="border-t pt-3 space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      The customer accepted this quote. Mark the linked job as{' '}
+                      <span className="font-medium text-foreground">Approved</span>{' '}
+                      to begin scheduling.
+                    </p>
+                    <ApproveJobButton quoteId={quote.id} />
+                    <Link
+                      href={`/jobs/${job.job.id}`}
+                      className="block text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    >
+                      Open job →
+                    </Link>
                   </div>
                 ) : null}
               </div>
