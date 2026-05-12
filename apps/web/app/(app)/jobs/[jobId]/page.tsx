@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import {
+  createServiceClient,
   getJobById,
   listQuotesForJob,
   type JobPhaseSummary,
@@ -64,7 +65,9 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     );
   }
 
-  const [result, quotesResult] = await Promise.all([
+  const serviceClient = createServiceClient();
+
+  const [result, quotesResult, sourceEstimateResult] = await Promise.all([
     getJobById(supabase, {
       jobId,
       orgId: membership.org_id,
@@ -73,6 +76,12 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
       jobId,
       orgId: membership.org_id,
     }),
+    serviceClient
+      .from('estimates')
+      .select('id, title, estimate_number')
+      .eq('converted_job_id', jobId)
+      .eq('org_id', membership.org_id)
+      .maybeSingle(),
   ]);
 
   if (!result.success) {
@@ -97,6 +106,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
 
   const { category, customer, job, phases, property } = result.data;
   const quotes = quotesResult.data;
+  const sourceEstimate = sourceEstimateResult.data ?? null;
 
   return (
     <PageShell>
@@ -150,6 +160,14 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
           value={String(phases.length)}
           helper={summarizePhaseState(phases)}
         />
+        {sourceEstimate ? (
+          <InfoCard
+            label="Source estimate"
+            value={sourceEstimate.title?.trim() || sourceEstimate.estimate_number || 'View estimate'}
+            helper={sourceEstimate.estimate_number ?? 'Estimate'}
+            href={`/estimates/${sourceEstimate.id}`}
+          />
+        ) : null}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr,0.95fr]">
