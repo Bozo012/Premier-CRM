@@ -145,17 +145,20 @@ export async function listCustomers(
 }
 
 /**
- * Look up a single customer by id, scoped to the org via RLS. Returns
- * `ErrorCode.NOT_FOUND` if the customer doesn't exist or isn't visible to
- * the caller's session.
+ * Look up a single customer by id, explicitly scoped to the org in addition
+ * to RLS (defense in depth — required when called with a service-role
+ * client, which bypasses RLS). Returns `ErrorCode.NOT_FOUND` if the customer
+ * doesn't exist or belongs to another org.
  */
 export async function getCustomerById(
   client: DbClient,
-  customerId: string
+  args: { customerId: string; orgId: string }
 ): Promise<Result<Customer>> {
+  const { customerId, orgId } = args;
   const { data, error } = await client
     .from('customers')
     .select('*')
+    .eq('org_id', orgId)
     .eq('id', customerId)
     .maybeSingle();
 
