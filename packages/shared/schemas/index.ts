@@ -1,6 +1,14 @@
 export { CustomerArchetypeSchema, type CustomerArchetype } from './customer-archetype';
 export { ListCustomersArgsSchema, type ListCustomersArgs } from './list-customers-args';
 export {
+  CreateCustomerInputSchema,
+  CustomerTypeSchema,
+  PreferredChannelSchema,
+  type CreateCustomerInput,
+  type CustomerType,
+  type PreferredChannel,
+} from './create-customer-input';
+export {
   JobStatusSchema,
   ListJobsArgsSchema,
   type JobStatus,

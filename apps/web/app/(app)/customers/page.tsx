@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { listCustomers, type Customer } from '@premier/db';
 import { CustomerArchetypeSchema } from '@premier/shared';
 
+import { Button } from '@/components/ui/button';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { ArchetypeBadge } from './_components/archetype-badge';
@@ -122,9 +123,14 @@ function PageShell({
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
       <header className="space-y-3">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Customers
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Customers
+          </h1>
+          <Button asChild size="sm" className="shrink-0">
+            <Link href="/customers/new">New customer</Link>
+          </Button>
+        </div>
         <CustomerSearchInput defaultValue={search} />
       </header>
       {children}
@@ -172,7 +178,11 @@ function EmptyState({ search }: { search?: string }) {
   return (
     <div className="space-y-3 rounded-md border bg-background px-4 py-8 text-center">
       <p className="text-sm text-muted-foreground">
-        No customers yet. Import from Jobber or add your first customer.
+        No customers yet. Import from Jobber or{' '}
+        <Link href="/customers/new" className="font-medium text-foreground underline-offset-2 hover:underline">
+          add your first customer
+        </Link>
+        .
       </p>
     </div>
   );

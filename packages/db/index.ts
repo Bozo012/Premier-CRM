@@ -46,6 +46,7 @@ export {
   getQuoteById,
   getQuoteByToken,
   getRequestById,
+  createCustomer,
   deleteWebsitePromotion,
   deleteWebsiteServiceHighlight,
   getCustomer360,

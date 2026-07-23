@@ -91,6 +91,7 @@ export {
   type OrgInvite,
 } from './org-invites';
 export {
+  createCustomer,
   getCustomer360,
   getCustomerById,
   listCustomers,

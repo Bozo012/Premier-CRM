@@ -2,6 +2,7 @@ import {
   ErrorCode,
   err,
   ok,
+  type CreateCustomerInput,
   type ListCustomersArgs,
   type Result,
 } from '@premier/shared';
@@ -168,6 +169,49 @@ export async function getCustomerById(
 
   if (!data) {
     return err(ErrorCode.NOT_FOUND, `Customer ${customerId} not found`);
+  }
+
+  return ok(data);
+}
+
+/**
+ * Creates a customer directly (manual staff entry point, `/customers/new`).
+ * Distinct from the two implicit creation paths already in the codebase —
+ * `createServiceRequest` (website intake, dedupes by email/phone, always
+ * paired with a property since the intake form always collects an address)
+ * and the customer portal's `ensureCustomerAccount` (dedupes by email,
+ * paired with a `customer_accounts` auth link) — this path does neither: no
+ * dedupe (a staff member creating a customer by hand is assumed to know
+ * whether it already exists — the list page's search is right there), and
+ * no property, since `customer_properties` is a separate join table and a
+ * customer is valid without one.
+ */
+export async function createCustomer(
+  client: DbClient,
+  args: { input: CreateCustomerInput; orgId: string }
+): Promise<Result<Customer>> {
+  const { input, orgId } = args;
+
+  const { data, error } = await client
+    .from('customers')
+    .insert({
+      org_id: orgId,
+      type: input.type,
+      first_name: input.firstName || null,
+      last_name: input.lastName || null,
+      company_name: input.companyName || null,
+      email: input.email || null,
+      phone_primary: input.phonePrimary || null,
+      phone_secondary: input.phoneSecondary || null,
+      preferred_channel: input.preferredChannel,
+      notes: input.notes || null,
+      source: 'manual_staff_entry',
+    })
+    .select('*')
+    .single();
+
+  if (error || !data) {
+    return err(ErrorCode.DB_ERROR, error?.message ?? 'Failed to create customer.');
   }
 
   return ok(data);

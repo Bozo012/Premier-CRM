@@ -34,7 +34,7 @@ interface QuickAction {
 }
 
 const quickActions: QuickAction[] = [
-  { id: 'new-customer', label: 'New customer', href: '/customers' },
+  { id: 'new-customer', label: 'New customer', href: '/customers/new' },
   { id: 'new-estimate', label: 'New estimate', href: '/estimates/new' },
   { id: 'new-invoice', label: 'New invoice', href: '/invoices' },
   { id: 'review-quotes', label: 'Review quotes', href: '/quotes' },
