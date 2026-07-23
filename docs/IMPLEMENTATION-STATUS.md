@@ -141,8 +141,8 @@ Requests/Estimates/Quotes/Jobs and portal RLS were already audited SOLID (above)
 
 ## Ranked remaining issues (for the user)
 
-1. **Authenticated click-through untested** — create invoice → edit line items → send → record payment, and the new team-invite flow, need a human with staff credentials in dev (`pnpm dev`, now works with `apps/web/.env.local`).
-2. **No create-customer form** — "New customer" quick action just opens the customer list; customers arrive only via Jobber import or portal signup.
+1. **Authenticated click-through untested** — create invoice → edit line items → send → record payment, the team-invite flow, and the new customer-creation form all need a human with staff credentials in dev (`pnpm dev`, now works with `apps/web/.env.local`).
+2. **No property-creation UI** — properties are still only ever created implicitly (website intake, Jobber import); there's no manual "add property" form anywhere, matching what customer-creation looked like before this pass. Same shape of gap, not yet built.
 3. **Today page fetches client-side** (`getBrowserSupabase` in `useEffect`) — inconsistent with the server-component pattern everywhere else; works, but slower and untypical. Refactor candidate.
 4. **Migration history drift** — remote applied-migration names don't match local `NNNN_*.sql` filenames one-to-one (duplicate `0012`, mismatched `0014`); pre-existing, documented, untouched.
 5. **Lint debt** — 333 pre-existing errors (generated PWA files linted as source, `scripts/*.mjs` missing Node globals). Config fix, not code fix.
@@ -175,3 +175,17 @@ Requested by Kevin: make `/team` functional (invite by email, Resend email, invi
 - **Tests**: 14 new (45 total) — `TeamMemberInviteSchema`/`AcceptTeamMemberInviteSchema` validation (including "owner" rejected as an invite role) and `translateAcceptInviteError` message-mapping.
 - Validation: `pnpm typecheck` clean, `pnpm test` 45/45, `pnpm build` clean (`/team`, `/invite/[token]` in the route manifest), `eslint` clean on all new/changed files. Dev smoke test: `/invite/not-a-uuid` and `/invite/<unknown-token>` both 404; a real pending invite (created and deleted directly in prod, no auth user created) rendered the accept form correctly with the invitee's email/role.
 - **Not verified**: an actual authenticated click-through (invite → email → accept → land on `/today` as a new org member) — needs a human with real credentials; I don't have Kevin's password to log in and trigger this from the UI myself.
+
+## Feature: standalone New Customer entry point (2026-07-23)
+
+Confirmed first, per instructions, rather than assuming it was missing: no `/customers/new` route or "New Customer" button existed anywhere — the Today dashboard's `new-customer` quick action just linked to the customer list.
+
+- **Ground truth on existing customer-creation paths** (both implicit, neither a manual entry point): `createServiceRequest` (website intake — dedupes by email then normalized phone, always paired with a property since the intake form always collects an address) and the portal's `ensureCustomerAccount` (dedupes by email, paired with a `customer_accounts` auth link). `createManualEstimateAction` does **not** create customers — it only *selects* an existing one via a picker, contrary to how that path initially read.
+- **No migration needed, confirmed against the schema first**: `customers` has no `NOT NULL` columns beyond `org_id` and `type` (defaulted to `residential`); `customer_properties` is a separate join table. A customer with zero properties is already valid.
+- **Design choices for the manual path, deliberately different from the two implicit ones**: no dedupe (a staff member creating a customer by hand is assumed to already know whether the record exists — the list page's search is right there) and no property bundled in (properties are separately addable — though there's currently no property-creation UI either; see the ranked issues list, this is a pre-existing gap, not something this pass introduced or was asked to fix).
+- `packages/shared/schemas/create-customer-input.ts` — `CreateCustomerInputSchema`: type/name/company/contact/notes, matching the table's actual nullability, plus one UI-level rule (some name or company name required — otherwise the row would show as "Unnamed customer" everywhere the generated `display_name` column is read).
+- `packages/db/queries/customers.ts` — added `createCustomer`.
+- `apps/web/app/(app)/customers/actions.ts` (new file) — `createCustomerAction`.
+- `/customers/new` + `NewCustomerForm`, structured like `/estimates/new`; the type/preferred-channel selects use the same plain-`<select>` convention as `invite-member-form.tsx` and `record-payment-form.tsx` (no shadcn `Select` component exists in this repo).
+- "New Customer" button added to `/customers` header (matching the `/quotes`/`/jobs` pattern) and to the empty state; Today's "New customer" quick action now points at the form instead of the bare list.
+- Validation: `pnpm typecheck` clean, `pnpm test` 52/52 (7 new), `pnpm build` clean (`/customers/new` in the route manifest), `eslint` clean on all new/changed files, dev smoke test confirms `/customers` and `/customers/new` both return 200 (client-side `AuthGuard` shell when signed out, same as every other route in `(app)`, no 404/500).
