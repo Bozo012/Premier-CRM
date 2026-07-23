@@ -128,5 +128,24 @@ Vitest added at the workspace root (`vitest.config.ts` with `@premier/*` aliases
 - [x] Payment recording UI
 - [x] Public invoice view + send action
 - [x] Tests (Vitest unit + rollback-safe live-DB invariant checks)
-- [ ] Phase 2 (Customers/Properties/Requests/Estimates/Quotes/Jobs/Nav audit)
-- [ ] Phase 3 (UX/reliability/security/performance pass)
+- [x] Phase 2 (Customers/Properties/Requests/Estimates/Quotes/Jobs/Nav audit — see below)
+- [ ] Phase 3 (UX/reliability/security/performance pass — partially covered by Phase 2 fixes; remaining items ranked below)
+
+## Phase 2 audit (2026-07-22) — customers/properties/today/team/services/settings/nav
+
+Requests/Estimates/Quotes/Jobs and portal RLS were already audited SOLID (above). Remaining areas:
+
+- **Customers, Properties, Team, Services, Settings/website**: all wired to real data (RPCs `get_customer_360`, `get_property_memory`; org-scoped queries). All server actions Zod-validate, org-scope from session, return `Result<T>`. No fake data found.
+- **Fixed this pass** (commit `6263c12`): `/invoices` was completely unreachable — no nav entry, no dashboard link; added to bottom nav. Today dashboard dead placeholder buttons ("Capture note", "New job", "Capture field note" — all no-ops behind `handlePlaceholderAction`) removed; quick actions now all navigate. "Today's work" card was a hardcoded "No jobs scheduled" string — now queries jobs with `scheduled_start` today (org-scoped, linked). Internal "Current phase" roadmap card removed.
+- **Fixed this pass** (commit `bcba3fd`): `getCustomerById` was the only entity lookup without an explicit org filter (RLS-only) — now org-scoped like everything else.
+
+## Ranked remaining issues (for the user)
+
+1. **Authenticated click-through untested** — create invoice → edit line items → send → record payment needs a human with staff credentials in dev (`pnpm dev`, now works with `apps/web/.env.local`).
+2. **Team invites not implemented** — `/team` is read-only ("accounts created manually until owner invites land"); invite schemas exist in `packages/shared/schemas/` but nothing uses them. Real feature work (Supabase auth admin invite + email).
+3. **No create-customer form** — "New customer" quick action just opens the customer list; customers arrive only via Jobber import or portal signup.
+4. **Today page fetches client-side** (`getBrowserSupabase` in `useEffect`) — inconsistent with the server-component pattern everywhere else; works, but slower and untypical. Refactor candidate.
+5. **Migration history drift** — remote applied-migration names don't match local `NNNN_*.sql` filenames one-to-one (duplicate `0012`, mismatched `0014`); pre-existing, documented, untouched.
+6. **Lint debt** — 333 pre-existing errors (generated PWA files linted as source, `scripts/*.mjs` missing Node globals). Config fix, not code fix.
+7. **`/settings` has no landing page** (only `/settings/website`); nothing links to bare `/settings` so nothing is broken.
+8. **`jobs.customer_id`/`jobs.property_id`** still lack explicit `ON DELETE` behavior (pre-existing, flagged in Phase 1, out of scope).
