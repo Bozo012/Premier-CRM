@@ -1987,6 +1987,59 @@ export type Database = {
           },
         ]
       }
+      org_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_user_id: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          full_name: string
+          id: string
+          invited_by: string | null
+          org_id: string
+          role: Database["public"]["Enums"]["user_role"]
+          status: Database["public"]["Enums"]["org_invite_status"]
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          full_name: string
+          id?: string
+          invited_by?: string | null
+          org_id: string
+          role?: Database["public"]["Enums"]["user_role"]
+          status?: Database["public"]["Enums"]["org_invite_status"]
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          full_name?: string
+          id?: string
+          invited_by?: string | null
+          org_id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          status?: Database["public"]["Enums"]["org_invite_status"]
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_invites_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_members: {
         Row: {
           id: string
@@ -4025,6 +4078,10 @@ export type Database = {
         Returns: unknown
       }
       _st_within: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      accept_org_invite: {
+        Args: { p_full_name: string; p_token: string; p_user_id: string }
+        Returns: string
+      }
       addauth: { Args: { "": string }; Returns: boolean }
       addgeometrycolumn:
         | {
@@ -5009,6 +5066,7 @@ export type Database = {
         | "cancelled"
         | "on_hold"
       message_role: "user" | "assistant" | "tool" | "system"
+      org_invite_status: "pending" | "accepted" | "revoked" | "expired"
       payment_method: "card" | "ach" | "check" | "cash" | "venmo" | "other"
       preferred_channel: "sms" | "email" | "call" | "portal"
       prompt_status:
@@ -5283,6 +5341,7 @@ export const Constants = {
         "on_hold",
       ],
       message_role: ["user", "assistant", "tool", "system"],
+      org_invite_status: ["pending", "accepted", "revoked", "expired"],
       payment_method: ["card", "ach", "check", "cash", "venmo", "other"],
       preferred_channel: ["sms", "email", "call", "portal"],
       prompt_status: [

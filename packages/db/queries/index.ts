@@ -82,6 +82,15 @@ export {
   type ServiceItem,
 } from './service-catalog';
 export {
+  acceptOrgInvite,
+  createOrgInvite,
+  getInviteByToken,
+  listPendingInvites,
+  revokeOrgInvite,
+  translateAcceptInviteError,
+  type OrgInvite,
+} from './org-invites';
+export {
   getCustomer360,
   getCustomerById,
   listCustomers,

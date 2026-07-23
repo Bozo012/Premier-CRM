@@ -80,7 +80,12 @@ export {
   type TeamMemberApprovalRole,
   type TeamMemberApprovalStatus,
 } from './team-member-approval';
-export { TeamMemberInviteSchema, type TeamMemberInvite } from './team-member-invite';
+export {
+  TeamMemberInviteSchema,
+  AcceptTeamMemberInviteSchema,
+  type TeamMemberInvite,
+  type AcceptTeamMemberInvite,
+} from './team-member-invite';
 export { QuoteRequestPayloadSchema, type QuoteRequestPayload } from './quote-request-payload';
 export {
   ServiceRequestPayloadSchema,
