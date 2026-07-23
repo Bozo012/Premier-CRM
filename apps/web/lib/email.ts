@@ -126,6 +126,109 @@ export async function sendInvoiceEmail(
   return { sent: true };
 }
 
+// ---------------------------------------------------------------------------
+// Team invite email
+// ---------------------------------------------------------------------------
+
+export interface SendTeamInviteEmailArgs {
+  fullName: string;
+  inviteUrl: string; // relative path, e.g. /invite/{token}
+  inviterName: string;
+  toEmail: string;
+}
+
+export async function sendTeamInviteEmail(
+  args: SendTeamInviteEmailArgs
+): Promise<{ sent: boolean }> {
+  const resend = getResendClient();
+  if (!resend) return { sent: false };
+
+  const absoluteUrl = `${getAppUrl()}${args.inviteUrl}`;
+  const subject = `${args.inviterName} invited you to Premier`;
+  const html = buildTeamInviteEmailHtml({ ...args, absoluteUrl });
+  const text = buildTeamInviteEmailText({ ...args, absoluteUrl });
+
+  const { error } = await resend.emails.send({
+    from: getFromAddress(),
+    to: args.toEmail,
+    subject,
+    html,
+    text,
+  });
+
+  if (error) {
+    console.error('[email] Resend delivery failed:', error);
+    return { sent: false };
+  }
+
+  return { sent: true };
+}
+
+interface TeamInviteEmailBodyArgs {
+  absoluteUrl: string;
+  fullName: string;
+  inviterName: string;
+}
+
+function buildTeamInviteEmailHtml(args: TeamInviteEmailBodyArgs): string {
+  const { absoluteUrl, fullName, inviterName } = args;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+    <tr>
+      <td>
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
+          <tr>
+            <td style="background:#1e293b;padding:20px 28px;">
+              <p style="margin:0;color:#f8fafc;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Premier Property Maintenance</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <p style="margin:0 0 16px;color:#111827;font-size:16px;">Hi ${escapeHtml(fullName)},</p>
+              <p style="margin:0 0 20px;color:#111827;font-size:16px;">${escapeHtml(inviterName)} invited you to join the Premier team workspace.</p>
+              <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                <tr>
+                  <td style="background:#2563eb;border-radius:6px;">
+                    <a href="${absoluteUrl}" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">Accept invite →</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;color:#6b7280;font-size:13px;">Or copy this link: <a href="${absoluteUrl}" style="color:#2563eb;">${absoluteUrl}</a></p>
+              <p style="margin:16px 0 0;color:#9ca3af;font-size:12px;">This invite expires in 14 days.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;color:#9ca3af;font-size:12px;">Premier Property Maintenance · Questions? Reply to this email or contact us directly.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildTeamInviteEmailText(args: TeamInviteEmailBodyArgs): string {
+  const { absoluteUrl, fullName, inviterName } = args;
+  return `Hi ${fullName},
+
+${inviterName} invited you to join the Premier team workspace.
+
+Accept your invite:
+${absoluteUrl}
+
+This invite expires in 14 days.
+
+Premier Property Maintenance
+Questions? Reply to this email or contact us directly.`;
+}
+
 interface InvoiceEmailBodyArgs {
   absoluteUrl: string;
   customerName: string;

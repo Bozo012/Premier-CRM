@@ -1,11 +1,14 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { createServiceClient, type Database } from '@premier/db';
+import { createServiceClient, type Database, type OrgInvite } from '@premier/db';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+import { InviteMemberForm } from './_components/invite-member-form';
+import { RevokeInviteButton } from './_components/revoke-invite-button';
 
 type OrgMember = Database['public']['Tables']['org_members']['Row'];
 type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
@@ -118,6 +121,13 @@ export default async function TeamPage() {
     buildTeamMemberView(member, profileById.get(member.user_id), emailByUserId)
   );
 
+  const { data: pendingInvites } = await supabase
+    .from('org_invites')
+    .select('*')
+    .eq('org_id', currentMembership.org_id)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
   return (
     <TeamPageShell>
       <section className="grid gap-3 md:grid-cols-2">
@@ -134,10 +144,40 @@ export default async function TeamPage() {
 
       <section className="space-y-3">
         <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight">Invite a team member</h2>
+          <p className="text-sm text-muted-foreground">
+            They&apos;ll get an email with a link to set up their account.
+          </p>
+        </div>
+        <InviteMemberForm />
+      </section>
+
+      {pendingInvites && pendingInvites.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold tracking-tight">Pending invites</h2>
+          <div className="space-y-3">
+            {(pendingInvites as OrgInvite[]).map((invite) => (
+              <Card key={invite.id}>
+                <CardContent className="flex flex-col gap-1 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">{invite.full_name}</p>
+                    <p className="text-sm text-muted-foreground">{invite.email}</p>
+                    <p className="text-sm capitalize text-muted-foreground">{invite.role}</p>
+                  </div>
+                  <RevokeInviteButton inviteId={invite.id} />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="space-y-3">
+        <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">Current team</h2>
           <p className="text-sm text-muted-foreground">
             Accounts listed here already have access through their organization
-            membership. New accounts are created manually until owner invites land.
+            membership.
           </p>
         </div>
 
@@ -177,7 +217,7 @@ function TeamPageShell({ children }: { children: React.ReactNode }) {
               Team access
             </h1>
             <p className="text-sm text-muted-foreground">
-              Review the manually-created accounts that can access the app.
+              Manage who has access to the app.
             </p>
           </div>
           <Button asChild variant="outline">
