@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { ArchetypeBadge } from '../_components/archetype-badge';
+import { PropertiesCard } from '../_components/properties-card';
 
 interface CustomerDetailPageProps {
   params: Promise<{ customerId: string }>;
@@ -160,21 +161,7 @@ export default async function CustomerDetailPage({
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
-        <ListCard
-          title="Properties"
-          emptyMessage="No linked properties yet."
-          items={properties.map((property) => ({
-            href: `/properties/${property.id}`,
-            id: property.id,
-            title: formatAddress(property),
-            subtitle: [
-              property.property_type,
-              formatGeofence(property.geofence_radius_m),
-            ]
-              .filter(Boolean)
-              .join(' · '),
-          }))}
-        />
+        <PropertiesCard customerId={customerId} properties={properties} />
 
         <ListCard
           title="Recent jobs"
@@ -328,14 +315,6 @@ function resolveDisplayName(customer: Customer): string {
   return fullName || 'Unnamed customer';
 }
 
-function formatAddress(property: {
-  address_line_1: string;
-  city: string;
-  state: string;
-  zip: string;
-}) {
-  return `${property.address_line_1}, ${property.city}, ${property.state} ${property.zip}`;
-}
 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined) {
@@ -381,14 +360,6 @@ function formatPaymentTerms(value: number | null | undefined): string {
   }
 
   return value === 0 ? 'Due on receipt' : `Net ${value}`;
-}
-
-function formatGeofence(value: number | null | undefined): string {
-  if (!value) {
-    return '';
-  }
-
-  return `${Math.round(value)}m geofence`;
 }
 
 function sumInvoices(

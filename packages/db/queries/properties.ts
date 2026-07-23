@@ -1,4 +1,4 @@
-import { ErrorCode, err, ok, type Result } from '@premier/shared';
+import { ErrorCode, err, ok, type CreatePropertyInput, type Result } from '@premier/shared';
 
 import type { DbClient } from '../client';
 import type { Database } from '../types';
@@ -143,6 +143,79 @@ interface PropertyCustomerLink
         'company_name' | 'display_name' | 'first_name' | 'id' | 'last_name'
       >
     | null;
+}
+
+/**
+ * Adds a property to a customer (staff-side manual entry point,
+ * `/customers/[customerId]`). Reuses the same field shape as the website
+ * intake path's inline property creation (`createServiceRequest`), minus
+ * the intake-specific dedupe-by-address logic — a staff member adding a
+ * property to a specific customer they're already looking at isn't at risk
+ * of the same duplicate-property problem the anonymous public form is.
+ *
+ * Supports multiple properties per customer: the new property is marked
+ * `is_primary` only if this customer currently has zero linked properties,
+ * so adding a second (or third) property never silently steals primary
+ * status from an existing one.
+ */
+export async function createPropertyForCustomer(
+  client: DbClient,
+  args: { input: CreatePropertyInput; orgId: string }
+): Promise<Result<Database['public']['Tables']['properties']['Row']>> {
+  const { input, orgId } = args;
+
+  const { data: customer, error: customerError } = await client
+    .from('customers')
+    .select('id')
+    .eq('id', input.customerId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (customerError) return err(ErrorCode.DB_ERROR, customerError.message);
+  if (!customer) return err(ErrorCode.NOT_FOUND, 'Customer not found.');
+
+  const { count: existingPropertyCount, error: countError } = await client
+    .from('customer_properties')
+    .select('property_id', { count: 'exact', head: true })
+    .eq('customer_id', input.customerId);
+
+  if (countError) return err(ErrorCode.DB_ERROR, countError.message);
+
+  const { data: property, error: propertyError } = await client
+    .from('properties')
+    .insert({
+      org_id: orgId,
+      address_line_1: input.addressLine1,
+      address_line_2: input.addressLine2 || null,
+      city: input.city,
+      state: input.state,
+      zip: input.zip,
+      country: input.country,
+      property_type: input.propertyType ?? null,
+      access_notes: input.accessNotes || null,
+      notes: input.notes || null,
+    })
+    .select('*')
+    .single();
+
+  if (propertyError || !property) {
+    return err(ErrorCode.DB_ERROR, propertyError?.message ?? 'Failed to create property.');
+  }
+
+  const { error: linkError } = await client.from('customer_properties').upsert(
+    {
+      customer_id: input.customerId,
+      property_id: property.id,
+      relationship: 'owner',
+      is_primary: (existingPropertyCount ?? 0) === 0,
+      start_date: new Date().toISOString().slice(0, 10),
+    },
+    { onConflict: 'customer_id,property_id' }
+  );
+
+  if (linkError) return err(ErrorCode.DB_ERROR, linkError.message);
+
+  return ok(property);
 }
 
 export async function listProperties(

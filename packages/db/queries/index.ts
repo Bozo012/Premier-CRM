@@ -92,10 +92,12 @@ export {
 } from './org-invites';
 export {
   createCustomer,
+  findCustomerByEmail,
   getCustomer360,
   getCustomerById,
   listCustomers,
   type Customer,
+  type CustomerEmailMatch,
   type Customer360,
   type Customer360Invoice,
   type Customer360Quote,
@@ -105,6 +107,7 @@ export {
   type Property,
 } from './customers';
 export {
+  createPropertyForCustomer,
   getPropertyMemory,
   listProperties,
   type PropertyGeofence,

@@ -3,13 +3,21 @@
 import { revalidatePath } from 'next/cache';
 
 import {
+  CheckCustomerEmailInputSchema,
   CreateCustomerInputSchema,
+  CreatePropertyInputSchema,
   ErrorCode,
   err,
   ok,
   type Result,
 } from '@premier/shared';
-import { createCustomer, createServiceClient } from '@premier/db';
+import {
+  createCustomer,
+  createPropertyForCustomer,
+  createServiceClient,
+  findCustomerByEmail,
+  type CustomerEmailMatch,
+} from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -83,6 +91,79 @@ export async function createCustomerAction(
   }
 
   revalidatePath('/customers');
+
+  return ok({ id: result.data.id });
+}
+
+// ---------------------------------------------------------------------------
+// Dedupe check (soft — advisory only, never blocks creation)
+// ---------------------------------------------------------------------------
+
+export type CheckCustomerEmailActionState = Result<CustomerEmailMatch | null>;
+
+export async function checkCustomerEmailAction(
+  email: string
+): Promise<CheckCustomerEmailActionState> {
+  const access = await getCustomerActionContext();
+  if (!access.success) return access;
+
+  const parsed = CheckCustomerEmailInputSchema.safeParse({ email });
+  if (!parsed.success) {
+    // A malformed email can't match anything — treat as "no match" rather
+    // than surfacing a validation error from what is just a dedupe check.
+    return ok(null);
+  }
+
+  const serviceClient = createServiceClient();
+  return findCustomerByEmail(serviceClient, {
+    email: parsed.data.email,
+    orgId: access.data.orgId,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Property creation (customer detail page, /customers/[customerId])
+// ---------------------------------------------------------------------------
+
+export type CreatePropertyActionState = Result<{ id: string }>;
+
+export async function createPropertyForCustomerAction(
+  _previousState: CreatePropertyActionState | null,
+  formData: FormData
+): Promise<CreatePropertyActionState> {
+  const access = await getCustomerActionContext();
+  if (!access.success) return access;
+
+  const parsed = CreatePropertyInputSchema.safeParse({
+    customerId: formData.get('customerId'),
+    addressLine1: formData.get('addressLine1'),
+    addressLine2: formData.get('addressLine2') || undefined,
+    city: formData.get('city'),
+    state: formData.get('state'),
+    zip: formData.get('zip'),
+    country: formData.get('country') || undefined,
+    propertyType: formData.get('propertyType') || undefined,
+    accessNotes: formData.get('accessNotes') || undefined,
+    notes: formData.get('notes') || undefined,
+  });
+
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    return err(ErrorCode.VALIDATION_ERROR, firstIssue?.message ?? 'Invalid property details.');
+  }
+
+  const serviceClient = createServiceClient();
+  const result = await createPropertyForCustomer(serviceClient, {
+    input: parsed.data,
+    orgId: access.data.orgId,
+  });
+
+  if (!result.success) {
+    return result;
+  }
+
+  revalidatePath(`/customers/${parsed.data.customerId}`);
+  revalidatePath('/properties');
 
   return ok({ id: result.data.id });
 }

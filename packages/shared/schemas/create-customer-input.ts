@@ -44,3 +44,15 @@ export const CreateCustomerInputSchema = z
   });
 
 export type CreateCustomerInput = z.infer<typeof CreateCustomerInputSchema>;
+
+/**
+ * Input for the soft dedupe check on `/customers/new` — looks up an
+ * existing customer by exact email match before final submit (same match
+ * strategy as `createServiceRequest` and `ensureCustomerAccount`). Advisory
+ * only: a match surfaces a warning, it never blocks creation.
+ */
+export const CheckCustomerEmailInputSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Enter a valid email address.'),
+});
+
+export type CheckCustomerEmailInput = z.infer<typeof CheckCustomerEmailInputSchema>;

@@ -217,6 +217,47 @@ export async function createCustomer(
   return ok(data);
 }
 
+export interface CustomerEmailMatch {
+  displayName: string;
+  email: string | null;
+  id: string;
+  phonePrimary: string | null;
+}
+
+/**
+ * Soft dedupe lookup for `/customers/new` — exact email match within the
+ * org, same strategy `createServiceRequest` and `ensureCustomerAccount`
+ * already use to avoid creating duplicate customer rows. Returns `null`
+ * data (not a NOT_FOUND error) when nothing matches — "no match" is the
+ * expected, common case here, not a failure.
+ */
+export async function findCustomerByEmail(
+  client: DbClient,
+  args: { email: string; orgId: string }
+): Promise<Result<CustomerEmailMatch | null>> {
+  const { data, error } = await client
+    .from('customers')
+    .select('id, display_name, email, phone_primary')
+    .eq('org_id', args.orgId)
+    .eq('email', args.email)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+  if (!data) {
+    return ok(null);
+  }
+
+  return ok({
+    displayName: data.display_name || 'Unnamed customer',
+    email: data.email,
+    id: data.id,
+    phonePrimary: data.phone_primary,
+  });
+}
+
 /**
  * Load the customer detail payload through the `get_customer_360` RPC.
  *

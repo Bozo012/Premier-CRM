@@ -4,10 +4,18 @@ export {
   CreateCustomerInputSchema,
   CustomerTypeSchema,
   PreferredChannelSchema,
+  CheckCustomerEmailInputSchema,
   type CreateCustomerInput,
   type CustomerType,
   type PreferredChannel,
+  type CheckCustomerEmailInput,
 } from './create-customer-input';
+export {
+  CreatePropertyInputSchema,
+  PropertyTypeSchema,
+  type CreatePropertyInput,
+  type PropertyType,
+} from './create-property-input';
 export {
   JobStatusSchema,
   ListJobsArgsSchema,
