@@ -72,15 +72,42 @@ Invoices will mirror this exactly: `packages/db/queries/invoices.ts`, `apps/web/
 - `pnpm build` — **clean**, compiles successfully, 24 routes generated. No `/invoices` or `/i/[token]` routes exist yet (expected).
 - `pnpm lint` — **fails, but pre-existing and unrelated to invoices.** 333 errors, all in: generated PWA files (`apps/web/public/sw.js`, `workbox-*.js` — being linted as source when they should be ignored), `scripts/*.mjs` (missing Node globals — `no-undef` on `console`/`process`, an ESLint env config gap), and one trivial `import type` issue in `packages/shared/result.ts`. Plus pre-existing `any`-type warnings in `packages/automation/engine.ts` and one unused-var warning in `quotes/_components/line-item-editor.tsx`. None of this is caused by or blocks invoice work — documenting per instructions rather than silently fixing.
 
-## Migration plan (Phase 1-A) — awaiting approval before applying to `premier-crm-prod`
+## Migrations (Phase 1-A) — APPLIED to `premier-crm-prod` with explicit user approval
 
-One migration, `supabase/migrations/<timestamp>_invoice_foundation.sql`, covering:
-1. `invoice_number_seq` + `next_invoice_number()` (format `INV-000001`, matching the estimate pattern) as the column default, `NOT NULL`, unique constraint.
-2. `invoices.share_token` unique constraint.
-3. FK delete-behavior fixes: `invoices.job_id` → RESTRICT, `invoices.quote_id` → SET NULL, `payments.invoice_id` → RESTRICT, `quotes.job_id` CASCADE → SET NULL.
-4. `apply_payment_to_invoice()` trigger function (AFTER INSERT on `payments`): locks the invoice row, rejects payment against a `void` invoice, rejects non-positive amounts, rejects amounts that would exceed the invoice total (overpayment), then updates `amount_paid` and flips `status` to `partially_paid`/`paid` (stamping `paid_at` when fully paid) — all inside the same transaction as the insert, so it can't race.
+1. `supabase/migrations/20260722000000_invoice_foundation.sql` — invoice numbering (`invoice_number_seq` + `next_invoice_number()`, format `INV-000001`, matching the estimate pattern), `invoices.share_token` unique constraint, FK delete-behavior fixes (`invoices.job_id` → RESTRICT, `invoices.quote_id` → SET NULL, `payments.invoice_id` → RESTRICT, `quotes.job_id` CASCADE → SET NULL), and the `apply_payment_to_invoice()` AFTER INSERT trigger (row lock, rejects void-invoice/non-positive/overpayment, updates `amount_paid`, flips status to `partially_paid`/`paid`, stamps `paid_at`).
+2. `supabase/migrations/20260722000001_invoice_fk_indexes.sql` — covering indexes for `invoices.quote_id` and `invoice_line_items.quote_line_id` (performance advisor findings).
+3. `supabase/migrations/20260722000002_service_role_grants.sql` — **fixes a pre-existing production defect found during the dev smoke test:** `service_role` had table grants on only the handful of tables earlier migrations granted explicitly (0012/0017 pattern); `quotes`, `quote_line_items`, `invoices`, `invoice_line_items`, `payments`, `org_members`, `vault_items` and ~25 others had NONE, so every server action using the service-role client (the whole quote send/accept flow included) failed at runtime with `permission denied` (42501). Migration grants ALL on postgres-owned public tables + sequences to `service_role` and sets default privileges so future tables don't regress. Skips extension-owned `spatial_ref_sys`. Verified after apply: 50/51 tables granted; service client reads `invoices`/`quotes`/`payments` cleanly; `/i/[unknown-token]` now 404s instead of erroring.
 
-See the actual SQL presented separately for review — **not applied yet, per the hard override on migration approval.**
+Types regenerated (`pnpm db:types`) after the first two.
+
+## Dev smoke test (2026-07-22)
+
+- `apps/web/.env.local` did not exist — the repo-root `.env.local` (URL + service key) is not read by Next.js from a monorepo root. Created `apps/web/.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (fetched from the project), `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`. Gitignored; local dev now works.
+- Route checks: `/invoices`, `/invoices/[id]`, `/jobs` respond 200 (client-side session gate renders "Checking your session…" when unauthenticated); `/i/not-a-uuid` → 404 (format guard); `/i/<valid-uuid-unknown-token>` → 404 (NOT_FOUND path). An authenticated click-through (create → edit → send → record payment) still needs a human with staff credentials — flagged for the user.
+
+## Test setup + results (Phase 1-J)
+
+Vitest added at the workspace root (`vitest.config.ts` with `@premier/*` aliases mirroring tsconfig paths; `pnpm test` script). No test infra existed before — this is the lightest setup consistent with `CONVENTIONS.md` (Vitest, tests next to code).
+
+- **Unit tests (31, all passing):**
+  - `packages/shared/schemas/invoice.test.ts` — invoice-from-job requires a job id (uuid), kind defaults, payment schema rejects zero/negative/non-numeric amounts + unknown methods + missing dates, line-item schema rejects zero quantity/negative price/empty name, metadata schema bounds tax % and discount, list-args defaults.
+  - `packages/db/queries/invoices.test.ts` — `computeIsOverdue` (all status/date/balance branches) and `translatePaymentError` (trigger messages → VALIDATION_ERROR, everything else → DB_ERROR).
+- **DB-invariant verification (live DB, rollback-safe):** ran a single DO block against `premier-crm-prod` that force-rolled-back via a final `RAISE EXCEPTION` — zero rows persisted, no sequences consumed. All 7 checks passed:
+  - `amount_due` generated correctly (`total - amount_paid`);
+  - direct write to `amount_due` rejected by Postgres itself (SQLSTATE 428C9 — impossible to bypass from any client);
+  - partial payment → `amount_paid=50, amount_due=100, status=partially_paid`;
+  - completing payment → `amount_paid=150, amount_due=0, status=paid`;
+  - overpayment rejected by trigger;
+  - non-positive amount rejected by trigger;
+  - payment against a void invoice rejected by trigger.
+- **Covered by construction (code-level, single-org prod means no cross-org fixture exists):** cross-org job/invoice access is blocked because every query in `packages/db/queries/invoices.ts` filters `.eq('org_id', ...)` from the caller's membership, and `createDraftInvoiceFromJob` NOT-FOUNDs a job outside the org. Draft invoices 404 on the public `/i/[token]` route (explicit status guard); sent invoices resolve by token with race-safe first-view stamping.
+
+## Validation (final, after all Phase 1 work)
+
+- `pnpm typecheck` — clean, all 5 packages.
+- `pnpm test` — 31/31 passing.
+- `pnpm build` — clean; `/invoices`, `/invoices/[invoiceId]`, `/i/[token]` all in the route manifest; only pre-existing warning remains (`quotes/_components/line-item-editor.tsx` unused `formAction`).
+- `eslint` on all new/changed invoice files — clean.
 
 ## Checklist
 
@@ -90,16 +117,16 @@ See the actual SQL presented separately for review — **not applied yet, per th
 - [x] Inspect Supabase schema, migrations, RLS, triggers, indexes, row counts
 - [x] Audit existing invoice-adjacent code (none found) and the quotes reference pattern
 - [x] Run pnpm install/typecheck/lint/build baseline
-- [ ] Get migration approved and applied
-- [ ] Regenerate types, run advisors
-- [ ] Query layer (`packages/db/queries/invoices.ts`)
-- [ ] Server actions (`invoices/actions.ts`)
-- [ ] Invoice list page
-- [ ] Invoice creation (from job / from quote)
-- [ ] Invoice detail/edit page
-- [ ] Job detail integration (replace placeholder)
-- [ ] Payment recording UI
-- [ ] Public invoice view + send action
-- [ ] Tests
+- [x] Get migration approved and applied (both: foundation + FK indexes)
+- [x] Regenerate types, run advisors
+- [x] Query layer (`packages/db/queries/invoices.ts`)
+- [x] Server actions (`invoices/actions.ts`)
+- [x] Invoice list page
+- [x] Invoice creation (from job / from quote)
+- [x] Invoice detail/edit page
+- [x] Job detail integration (replace placeholder)
+- [x] Payment recording UI
+- [x] Public invoice view + send action
+- [x] Tests (Vitest unit + rollback-safe live-DB invariant checks)
 - [ ] Phase 2 (Customers/Properties/Requests/Estimates/Quotes/Jobs/Nav audit)
 - [ ] Phase 3 (UX/reliability/security/performance pass)
