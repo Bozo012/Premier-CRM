@@ -23,6 +23,11 @@ const navItems = [
     label: 'Quotes',
   },
   {
+    href: '/invoices',
+    isActive: (pathname: string) => pathname.startsWith('/invoices'),
+    label: 'Invoices',
+  },
+  {
     href: '/customers',
     isActive: (pathname: string) => pathname.startsWith('/customers'),
     label: 'Customers',
@@ -43,7 +48,7 @@ export function AppBottomNav({ requestsBadge }: AppBottomNavProps) {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <ul className="mx-auto grid w-full max-w-5xl grid-cols-5 text-xs">
+      <ul className="mx-auto grid w-full max-w-5xl grid-cols-6 text-xs">
         {navItems.map((item) => {
           const active = item.isActive(pathname);
 

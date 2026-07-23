@@ -8,6 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getBrowserSupabase } from '@/lib/supabase';
 
+interface TodayJob {
+  id: string;
+  scheduled_start: string | null;
+  title: string;
+}
+
 interface TodayState {
   canManageTeam: boolean;
   customerCount: number;
@@ -17,20 +23,21 @@ interface TodayState {
   orgName: string;
   orgRole: string;
   propertyCount: number;
+  todayJobs: TodayJob[];
   userEmail: string;
 }
 
 interface QuickAction {
-  href?: string;
+  href: string;
   id: string;
   label: string;
 }
 
 const quickActions: QuickAction[] = [
-  { id: 'capture-note', label: 'Capture note' },
   { id: 'new-customer', label: 'New customer', href: '/customers' },
-  { id: 'new-job', label: 'New job' },
   { id: 'new-estimate', label: 'New estimate', href: '/estimates/new' },
+  { id: 'new-invoice', label: 'New invoice', href: '/invoices' },
+  { id: 'review-quotes', label: 'Review quotes', href: '/quotes' },
 ] as const;
 
 function normalizePropertyAddressKey(property: {
@@ -53,7 +60,6 @@ export default function TodayPage() {
   const [data, setData] = useState<TodayState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [statusText, setStatusText] = useState<string | null>(null);
 
   const supabase = useMemo(
     () => getBrowserSupabase() as unknown as SupabaseClient,
@@ -102,8 +108,19 @@ export default function TodayPage() {
       const canManageTeam =
         membership.role === 'owner' || membership.role === 'admin';
 
-      const [customersResult, propertiesResult, jobsResult, profileResult, requestsResult] =
-        await Promise.all([
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setDate(endOfDay.getDate() + 1);
+
+      const [
+        customersResult,
+        propertiesResult,
+        jobsResult,
+        profileResult,
+        requestsResult,
+        todayJobsResult,
+      ] = await Promise.all([
           supabase
             .from('customers')
             .select('*', { count: 'exact', head: true })
@@ -126,6 +143,14 @@ export default function TodayPage() {
             .select('id', { count: 'exact', head: true })
             .eq('org_id', membership.org_id)
             .eq('status', 'new'),
+          supabase
+            .from('jobs')
+            .select('id, title, scheduled_start')
+            .eq('org_id', membership.org_id)
+            .gte('scheduled_start', startOfDay.toISOString())
+            .lt('scheduled_start', endOfDay.toISOString())
+            .order('scheduled_start', { ascending: true })
+            .limit(10),
         ]);
 
       if (customersResult.error || propertiesResult.error || jobsResult.error) {
@@ -161,6 +186,7 @@ export default function TodayPage() {
         orgName: orgNameValue,
         orgRole: membership.role,
         propertyCount: uniquePropertyCount,
+        todayJobs: (todayJobsResult.data as TodayJob[] | null) ?? [],
         userEmail: user.email || 'No email found',
       });
       setIsLoading(false);
@@ -172,10 +198,6 @@ export default function TodayPage() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
-  };
-
-  const handlePlaceholderAction = (label: string) => {
-    setStatusText(`${label} is unavailable in this preview.`);
   };
 
   const greeting = useMemo(() => {
@@ -254,32 +276,17 @@ export default function TodayPage() {
           Quick actions
         </h2>
         <div className="grid grid-cols-2 gap-3">
-          {quickActions.map((action) =>
-            action.href ? (
-              <Button
-                key={action.id}
-                asChild
-                variant="outline"
-                className="h-16 justify-start px-4 text-left text-sm sm:text-base"
-              >
-                <Link href={action.href}>{action.label}</Link>
-              </Button>
-            ) : (
-              <Button
-                key={action.id}
-                type="button"
-                variant="outline"
-                className="h-16 justify-start px-4 text-left text-sm sm:text-base"
-                onClick={() => handlePlaceholderAction(action.label)}
-              >
-                {action.label}
-              </Button>
-            )
-          )}
+          {quickActions.map((action) => (
+            <Button
+              key={action.id}
+              asChild
+              variant="outline"
+              className="h-16 justify-start px-4 text-left text-sm sm:text-base"
+            >
+              <Link href={action.href}>{action.label}</Link>
+            </Button>
+          ))}
         </div>
-        <p aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
-          {statusText ?? 'Actions are placeholders for this foundation pass.'}
-        </p>
       </section>
 
       <section className="space-y-3">
@@ -419,9 +426,27 @@ export default function TodayPage() {
             <CardTitle>Today&apos;s work</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              No jobs scheduled for today yet.
-            </p>
+            {data.todayJobs.length > 0 ? (
+              <ul className="divide-y">
+                {data.todayJobs.map((job) => (
+                  <li key={job.id}>
+                    <Link
+                      href={`/jobs/${job.id}`}
+                      className="flex items-center justify-between gap-2 py-2 text-sm"
+                    >
+                      <span className="font-medium text-foreground">{job.title}</span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {formatScheduledTime(job.scheduled_start)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No jobs scheduled for today yet.
+              </p>
+            )}
             <Button asChild variant="outline">
               <Link href="/jobs">Review jobs</Link>
             </Button>
@@ -436,46 +461,25 @@ export default function TodayPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Import your Jobber data or capture your first field note to start
-              building your business memory.
+              Import your Jobber data to start building your business memory.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button asChild type="button" variant="outline">
                 <Link href="/customers">Import customers</Link>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handlePlaceholderAction('Capture field note')}
-              >
-                Capture field note
               </Button>
             </div>
           </CardContent>
         </Card>
       </section>
 
-      <section>
-        <Card>
-          <CardHeader>
-            <CardTitle>Current phase</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Week 3 is focused on customer and property UI. The next useful step is validating the Jobber import by browsing those records in-app.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline">
-                <Link href="/customers">Review customers</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/properties">Review properties</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
     </main>
+  );
+}
+
+function formatScheduledTime(value: string | null): string {
+  if (!value) return 'Anytime';
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(
+    new Date(value)
   );
 }
 
