@@ -141,14 +141,13 @@ Requests/Estimates/Quotes/Jobs and portal RLS were already audited SOLID (above)
 
 ## Ranked remaining issues (for the user)
 
-1. **Authenticated click-through untested** — create invoice → edit line items → send → record payment needs a human with staff credentials in dev (`pnpm dev`, now works with `apps/web/.env.local`).
-2. **Team invites not implemented** — `/team` is read-only ("accounts created manually until owner invites land"); invite schemas exist in `packages/shared/schemas/` but nothing uses them. Real feature work (Supabase auth admin invite + email).
-3. **No create-customer form** — "New customer" quick action just opens the customer list; customers arrive only via Jobber import or portal signup.
-4. **Today page fetches client-side** (`getBrowserSupabase` in `useEffect`) — inconsistent with the server-component pattern everywhere else; works, but slower and untypical. Refactor candidate.
-5. **Migration history drift** — remote applied-migration names don't match local `NNNN_*.sql` filenames one-to-one (duplicate `0012`, mismatched `0014`); pre-existing, documented, untouched.
-6. **Lint debt** — 333 pre-existing errors (generated PWA files linted as source, `scripts/*.mjs` missing Node globals). Config fix, not code fix.
-7. **`/settings` has no landing page** (only `/settings/website`); nothing links to bare `/settings` so nothing is broken.
-8. **`jobs.customer_id`/`jobs.property_id`** still lack explicit `ON DELETE` behavior (pre-existing, flagged in Phase 1, out of scope).
+1. **Authenticated click-through untested** — create invoice → edit line items → send → record payment, and the new team-invite flow, need a human with staff credentials in dev (`pnpm dev`, now works with `apps/web/.env.local`).
+2. **No create-customer form** — "New customer" quick action just opens the customer list; customers arrive only via Jobber import or portal signup.
+3. **Today page fetches client-side** (`getBrowserSupabase` in `useEffect`) — inconsistent with the server-component pattern everywhere else; works, but slower and untypical. Refactor candidate.
+4. **Migration history drift** — remote applied-migration names don't match local `NNNN_*.sql` filenames one-to-one (duplicate `0012`, mismatched `0014`); pre-existing, documented, untouched.
+5. **Lint debt** — 333 pre-existing errors (generated PWA files linted as source, `scripts/*.mjs` missing Node globals). Config fix, not code fix.
+6. **`/settings` has no landing page** (only `/settings/website`); nothing links to bare `/settings` so nothing is broken.
+7. **`jobs.customer_id`/`jobs.property_id`** still lack explicit `ON DELETE` behavior (pre-existing, flagged in Phase 1, out of scope).
 
 ## Post-MVP amendment: standalone New Quote / New Job entry points (2026-07-23)
 
@@ -161,3 +160,18 @@ Kevin's amendment after using the built system: the request→estimate→quote�
 - Standalone-created quotes/jobs feed the existing pipeline unchanged: a standalone quote still requires `accepted` status before `createJobFromAcceptedQuoteAction` will create a job from it (same one-job-per-quote guard); a standalone-created job already supports invoice creation via the existing job-detail "Create invoice" button, since that was never gated on a quote.
 - Validation: `pnpm typecheck` clean, `pnpm test` 31/31, `pnpm build` clean (`/quotes/new`, `/jobs/new` both in the route manifest), `eslint` clean on all changed/new files, dev smoke test confirmed all four routes (`/quotes`, `/quotes/new`, `/jobs`, `/jobs/new`) and the refactored `/estimates/new` return 200.
 - No migration needed — this was pure application-layer work.
+
+## Feature: team invites (2026-07-23)
+
+Requested by Kevin: make `/team` functional (invite by email, Resend email, invitee accepts and gets a real Supabase Auth account, role field on `org_members`). `org_members.role` already existed (`user_role` enum: owner/admin/employee/subcontractor/viewer, from `0001_init.sql`) — no new role field was needed there; what was actually missing was a way to represent an invite *before* the invitee has an auth account, since `org_members.user_id` is a `NOT NULL` FK to `auth.users` (migration `0012` deliberately dropped the old pending-approval model — "account creation is controlled outside the app until invites land"). Built a dedicated `org_invites` table instead.
+
+- **Migrations**: `20260723000000_org_invites.sql` (table + RLS + `accept_org_invite()` atomic-accept function + the one-line data fix promoting `sommerskevin3@gmail.com` to owner, confirmed with Kevin first — exact UPDATE statement shown before approval) and `20260723000001_org_invites_function_hardening.sql` (the security advisor caught that Postgres grants `EXECUTE` to `PUBLIC` by default on `CREATE FUNCTION`, exposing `accept_org_invite` to `anon`/`authenticated` via the PostgREST RPC endpoint — revoked those, kept `service_role` only, added an `auth.uid() = p_user_id` check as defense in depth). Both applied to `premier-crm-prod` with explicit approval per the hard override. Types regenerated (`pnpm db:types`).
+- **Verified live** (rollback-safe DO block, nothing persisted): duplicate pending invite for the same email rejected (case-insensitive partial unique index); `role='owner'` rejected by CHECK; wrong-email accept rejected; unknown token rejected; revoked invite rejected. Confirmed post-migration: both `kevinsommers@ppmnky.com` and `sommerskevin3@gmail.com` are now `owner`.
+- **Query layer**: `packages/db/queries/org-invites.ts` — `createOrgInvite`, `listPendingInvites`, `revokeOrgInvite`, `getInviteByToken` (public accept-page lookup), `acceptOrgInvite` (wraps the RPC), `translateAcceptInviteError`.
+- **Schemas**: reused the existing-but-previously-unused `TeamMemberInviteSchema` (email/fullName/role, already excludes `owner`) instead of inventing a new shape — it was clearly built for this exact feature and shelved when the old approval flow was dropped. Added `AcceptTeamMemberInviteSchema` (token/fullName/password) alongside it.
+- **UI**: `/team` now has an `InviteMemberForm` (owner/admin only) and a pending-invites list with per-row `RevokeInviteButton`. `/invite/[token]` is a new top-level public route (same shape as `/q/[token]`/`/i/[token]`: UUID guard, service-role client) rendering distinct "expired"/"already used"/"revoked" states rather than a bare 404, with a set-password form for pending invites.
+- **Auth pattern**: mirrors the customer portal's self-serve signup exactly (`apps/web/app/portal/actions.ts` / `apps/web/app/portal/login/page.tsx`) since that's the only self-serve account-creation code that existed anywhere in the repo — a plain server-action-bound `<form>`, `getServerSupabase()` + `supabase.auth.signUp()`, then `acceptOrgInvite` (the atomic RPC) creates `org_members` + `user_profiles` and marks the invite accepted, then redirects to `/today`.
+- **Email**: `sendTeamInviteEmail` in `apps/web/lib/email.ts`, identical Resend pattern to `sendQuoteEmail`/`sendInvoiceEmail` (best-effort, `{sent: boolean}`, invite creation never blocked on delivery failure).
+- **Tests**: 14 new (45 total) — `TeamMemberInviteSchema`/`AcceptTeamMemberInviteSchema` validation (including "owner" rejected as an invite role) and `translateAcceptInviteError` message-mapping.
+- Validation: `pnpm typecheck` clean, `pnpm test` 45/45, `pnpm build` clean (`/team`, `/invite/[token]` in the route manifest), `eslint` clean on all new/changed files. Dev smoke test: `/invite/not-a-uuid` and `/invite/<unknown-token>` both 404; a real pending invite (created and deleted directly in prod, no auth user created) rendered the accept form correctly with the invitee's email/role.
+- **Not verified**: an actual authenticated click-through (invite → email → accept → land on `/today` as a new org member) — needs a human with real credentials; I don't have Kevin's password to log in and trigger this from the UI myself.
