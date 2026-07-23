@@ -87,7 +87,18 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
   const { quotes, total } = result.data;
 
   return (
-    <PageShell search={search} status={status} newQuoteSlot={<NewQuoteDialog />}>
+    <PageShell
+      search={search}
+      status={status}
+      newQuoteSlot={
+        <div className="flex shrink-0 items-center gap-2">
+          <Button asChild size="sm">
+            <Link href="/quotes/new">New quote</Link>
+          </Button>
+          <NewQuoteDialog />
+        </div>
+      }
+    >
       <p className="text-sm text-muted-foreground">
         {formatTotal(total, search, status)}
       </p>

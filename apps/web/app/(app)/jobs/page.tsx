@@ -160,11 +160,16 @@ function PageShell({
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
       <header className="space-y-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Jobs</h1>
-          <p className="text-sm text-muted-foreground">
-            Review active work, schedule visibility, and linked customer/property context.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Jobs</h1>
+            <p className="text-sm text-muted-foreground">
+              Review active work, schedule visibility, and linked customer/property context.
+            </p>
+          </div>
+          <Button asChild size="sm" className="shrink-0">
+            <Link href="/jobs/new">New job</Link>
+          </Button>
         </div>
 
         <form action="/jobs" className="flex flex-col gap-2 lg:flex-row">

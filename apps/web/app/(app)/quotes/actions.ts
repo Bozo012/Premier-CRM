@@ -446,6 +446,96 @@ export async function createDraftQuoteAction(
   return ok({ quoteId: result.data.id });
 }
 
+// ---------------------------------------------------------------------------
+// Standalone quote creation (customer + property, no prior job/estimate) —
+// per the post-MVP amendment, this is a second door alongside the
+// request→estimate→quote pipeline and the "quote an existing job" dialog
+// above. A quote can't exist with neither job_id nor estimate_id
+// (quotes_has_job_or_estimate CHECK), so this creates a backing estimate
+// (status 'quoted', since it's being quoted immediately) the same way the
+// manual estimate path does, then a draft quote linked to it.
+// ---------------------------------------------------------------------------
+
+export type CreateStandaloneQuoteActionState = Result<{ id: string }>;
+
+export async function createStandaloneQuoteAction(
+  _prevState: CreateStandaloneQuoteActionState | null,
+  formData: FormData
+): Promise<CreateStandaloneQuoteActionState> {
+  const contextResult = await getQuoteActionContext();
+  if (!contextResult.success) {
+    return contextResult;
+  }
+  const { orgId, userId } = contextResult.data;
+
+  const customerId = readString(formData, 'customerId');
+  const propertyId = readString(formData, 'propertyId');
+  const title = readString(formData, 'title');
+  const description = readOptionalString(formData, 'description');
+
+  if (!customerId) return err(ErrorCode.VALIDATION_ERROR, 'A customer is required.');
+  if (!propertyId) return err(ErrorCode.VALIDATION_ERROR, 'A property is required.');
+  if (!title) return err(ErrorCode.VALIDATION_ERROR, 'A title is required.');
+
+  const client = createServiceClient();
+
+  const { data: customer, error: customerError } = await client
+    .from('customers')
+    .select('id')
+    .eq('id', customerId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (customerError) return err(ErrorCode.DB_ERROR, customerError.message);
+  if (!customer) return err(ErrorCode.NOT_FOUND, 'Customer not found.');
+
+  const { data: link, error: linkError } = await client
+    .from('customer_properties')
+    .select('property_id')
+    .eq('customer_id', customerId)
+    .eq('property_id', propertyId)
+    .maybeSingle();
+
+  if (linkError) return err(ErrorCode.DB_ERROR, linkError.message);
+  if (!link) {
+    return err(ErrorCode.VALIDATION_ERROR, 'The selected property is not linked to this customer.');
+  }
+
+  const { data: estimate, error: estimateError } = await client
+    .from('estimates')
+    .insert({
+      org_id: orgId,
+      customer_id: customerId,
+      property_id: propertyId,
+      title,
+      description: description ?? null,
+      status: 'quoted',
+      created_by: userId,
+    })
+    .select('id')
+    .single();
+
+  if (estimateError || !estimate) {
+    return err(ErrorCode.DB_ERROR, estimateError?.message ?? 'Failed to create the backing estimate.');
+  }
+
+  const quoteResult = await createDraftQuote(client, {
+    createdBy: userId,
+    estimateId: estimate.id,
+    orgId,
+    title,
+  });
+
+  if (!quoteResult.success) {
+    return quoteResult;
+  }
+
+  revalidatePath('/quotes');
+  revalidatePath('/estimates');
+
+  return ok({ id: quoteResult.data.id });
+}
+
 export async function addLineItemAction(
   _prevState: LineItemActionState | null,
   formData: FormData

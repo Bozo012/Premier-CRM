@@ -59,8 +59,8 @@ export function NewQuoteDialog() {
 
   if (!isOpen) {
     return (
-      <Button onClick={handleOpen} size="sm">
-        New quote
+      <Button onClick={handleOpen} size="sm" variant="outline">
+        Quote an existing job
       </Button>
     );
   }
