@@ -5,7 +5,6 @@ import {
   type AddInvoiceLineItemInput,
   type CreateInvoiceFromJobInput,
   type CreateInvoiceFromQuoteInput,
-  type InvoiceKind,
   type ListInvoicesArgs,
   type RecordPaymentInput,
   type RemoveInvoiceLineItemInput,
@@ -134,7 +133,7 @@ function toPropertySummary(
  * VALIDATION_ERROR results instead of raw DB_ERROR — those messages are
  * already written for a human reader.
  */
-function translatePaymentError(message: string): Result<never> {
+export function translatePaymentError(message: string): Result<never> {
   if (
     message.includes('void invoice') ||
     message.includes('greater than zero') ||
@@ -255,7 +254,9 @@ export interface InvoiceListPage {
 // terminal/non-collectible state.
 const NON_OVERDUE_ELIGIBLE_STATUSES = new Set(['paid', 'void', 'refunded', 'draft']);
 
-function computeIsOverdue(invoice: Pick<Invoice, 'due_date' | 'amount_due' | 'status'>): boolean {
+export function computeIsOverdue(
+  invoice: Pick<Invoice, 'due_date' | 'amount_due' | 'status'>
+): boolean {
   if (!invoice.due_date) return false;
   if (NON_OVERDUE_ELIGIBLE_STATUSES.has(invoice.status)) return false;
   if ((invoice.amount_due ?? 0) <= 0) return false;
