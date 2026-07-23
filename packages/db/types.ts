@@ -1224,7 +1224,7 @@ export type Database = {
           discount_amount: number | null
           due_date: string | null
           id: string
-          invoice_number: string | null
+          invoice_number: string
           issued_date: string
           job_id: string
           jobber_id: string | null
@@ -1253,7 +1253,7 @@ export type Database = {
           discount_amount?: number | null
           due_date?: string | null
           id?: string
-          invoice_number?: string | null
+          invoice_number?: string
           issued_date?: string
           job_id: string
           jobber_id?: string | null
@@ -1282,7 +1282,7 @@ export type Database = {
           discount_amount?: number | null
           due_date?: string | null
           id?: string
-          invoice_number?: string | null
+          invoice_number?: string
           issued_date?: string
           job_id?: string
           jobber_id?: string | null
@@ -4268,6 +4268,7 @@ export type Database = {
       gettransactionid: { Args: never; Returns: unknown }
       longtransactionsenabled: { Args: never; Returns: boolean }
       next_estimate_number: { Args: never; Returns: string }
+      next_invoice_number: { Args: never; Returns: string }
       next_service_request_number: { Args: never; Returns: string }
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }

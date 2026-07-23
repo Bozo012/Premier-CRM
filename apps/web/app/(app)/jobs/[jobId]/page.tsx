@@ -4,7 +4,10 @@ import { notFound, redirect } from 'next/navigation';
 import {
   createServiceClient,
   getJobById,
+  getJobInvoiceTotals,
+  listInvoicesForJob,
   listQuotesForJob,
+  type JobInvoiceSummary,
   type JobPhaseSummary,
   type JobQuoteSummary,
 } from '@premier/db';
@@ -15,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { CreateDraftQuoteButton } from '../_components/create-draft-quote-button';
+import { CreateInvoiceButton } from '../_components/create-invoice-button';
 
 interface JobDetailPageProps {
   params: Promise<{ jobId: string }>;
@@ -67,22 +71,31 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
 
   const serviceClient = createServiceClient();
 
-  const [result, quotesResult, sourceEstimateResult] = await Promise.all([
-    getJobById(supabase, {
-      jobId,
-      orgId: membership.org_id,
-    }),
-    listQuotesForJob(supabase, {
-      jobId,
-      orgId: membership.org_id,
-    }),
-    serviceClient
-      .from('estimates')
-      .select('id, title, estimate_number')
-      .eq('converted_job_id', jobId)
-      .eq('org_id', membership.org_id)
-      .maybeSingle(),
-  ]);
+  const [result, quotesResult, sourceEstimateResult, invoicesResult, invoiceTotalsResult] =
+    await Promise.all([
+      getJobById(supabase, {
+        jobId,
+        orgId: membership.org_id,
+      }),
+      listQuotesForJob(supabase, {
+        jobId,
+        orgId: membership.org_id,
+      }),
+      serviceClient
+        .from('estimates')
+        .select('id, title, estimate_number')
+        .eq('converted_job_id', jobId)
+        .eq('org_id', membership.org_id)
+        .maybeSingle(),
+      listInvoicesForJob(supabase, {
+        jobId,
+        orgId: membership.org_id,
+      }),
+      getJobInvoiceTotals(supabase, {
+        jobId,
+        orgId: membership.org_id,
+      }),
+    ]);
 
   if (!result.success) {
     if (result.code === ErrorCode.NOT_FOUND) {
@@ -104,9 +117,21 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     );
   }
 
+  if (!invoicesResult.success) {
+    return (
+      <PageShell>
+        <ErrorPanel>Failed to load job invoices: {invoicesResult.error}</ErrorPanel>
+      </PageShell>
+    );
+  }
+
   const { category, customer, job, phases, property } = result.data;
   const quotes = quotesResult.data;
   const sourceEstimate = sourceEstimateResult.data ?? null;
+  const invoices = invoicesResult.data;
+  // Live aggregate, not the stale jobs.invoiced_total/paid_total columns —
+  // those have no maintaining trigger and would silently drift from reality.
+  const invoiceTotals = invoiceTotalsResult.success ? invoiceTotalsResult.data : null;
 
   return (
     <PageShell>
@@ -209,8 +234,18 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
               value={formatDuration(job.estimated_duration_minutes)}
             />
             <DetailRow label="Quoted total" value={formatMoney(job.quoted_total)} />
-            <DetailRow label="Invoiced total" value={formatMoney(job.invoiced_total)} />
-            <DetailRow label="Paid total" value={formatMoney(job.paid_total)} />
+            <DetailRow
+              label="Invoiced total"
+              value={invoiceTotals ? formatMoney(invoiceTotals.invoicedTotal) : 'Not available'}
+            />
+            <DetailRow
+              label="Paid total"
+              value={invoiceTotals ? formatMoney(invoiceTotals.paidTotal) : 'Not available'}
+            />
+            <DetailRow
+              label="Amount remaining"
+              value={invoiceTotals ? formatMoney(invoiceTotals.amountDueTotal) : 'Not available'}
+            />
             <DetailRow label="Cost total" value={formatMoney(job.cost_total)} />
             <DetailRow
               label="Closed at"
@@ -345,10 +380,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <JobQuotesCard jobId={job.id} quotes={quotes} />
-        <FutureSectionCard
-          title="Invoices"
-          description="Invoice generation and payment status will live here."
-        />
+        <JobInvoicesCard jobId={job.id} invoices={invoices} />
         <FutureSectionCard
           title="Time entries"
           description="Tracked labor and drive time will attach to this job here."
@@ -421,6 +453,70 @@ function JobQuotesCard({
               <Link href={`/quotes/${quotes[0]?.quote.id}`}>Open latest quote</Link>
             </Button>
             <CreateDraftQuoteButton jobId={jobId} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function JobInvoicesCard({
+  invoices,
+  jobId,
+}: {
+  invoices: JobInvoiceSummary[];
+  jobId: string;
+}) {
+  return (
+    <Card className="md:col-span-2 xl:col-span-1">
+      <CardHeader>
+        <CardTitle>Invoices</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {invoices.length === 0 ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              No invoices are attached to this job yet.
+            </p>
+            <CreateInvoiceButton jobId={jobId} />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <ul className="space-y-3">
+              {invoices.map(({ invoice, lineItemCount }) => (
+                <li key={invoice.id} className="rounded-md border p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/invoices/${invoice.id}`}
+                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      {invoice.title?.trim() || invoice.invoice_number || 'Untitled invoice'}
+                    </Link>
+                    <InvoiceStatusBadge status={invoice.status} />
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {[
+                      formatEnumLabel(invoice.kind),
+                      formatMoney(invoice.total),
+                      `Due ${formatMoney(invoice.amount_due)}`,
+                      `${lineItemCount} ${lineItemCount === 1 ? 'line item' : 'line items'}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  {invoice.due_date ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Due {formatScheduledAt(invoice.due_date)}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+
+            <Button asChild variant="outline">
+              <Link href={`/invoices/${invoices[0]?.invoice.id}`}>Open latest invoice</Link>
+            </Button>
+            <CreateInvoiceButton jobId={jobId} />
           </div>
         )}
       </CardContent>
@@ -516,6 +612,26 @@ function FutureSectionCard({
 function QuoteStatusBadge({ status }: { status: string }) {
   return (
     <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+      {formatEnumLabel(status)}
+    </span>
+  );
+}
+
+const INVOICE_STATUS_BADGE_COLORS: Record<string, string> = {
+  draft: 'bg-slate-100 text-slate-700',
+  sent: 'bg-violet-50 text-violet-700',
+  viewed: 'bg-indigo-50 text-indigo-700',
+  partially_paid: 'bg-amber-50 text-amber-700',
+  paid: 'bg-green-50 text-green-700',
+  overdue: 'bg-red-50 text-red-700',
+  void: 'bg-slate-100 text-slate-500',
+  refunded: 'bg-orange-50 text-orange-700',
+};
+
+function InvoiceStatusBadge({ status }: { status: string }) {
+  const colorClass = INVOICE_STATUS_BADGE_COLORS[status] ?? 'bg-slate-100 text-slate-700';
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
       {formatEnumLabel(status)}
     </span>
   );

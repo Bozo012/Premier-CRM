@@ -1,17 +1,19 @@
 'use server';
 
 import {
+  CreateInvoiceFromJobInputSchema,
   CreateQuoteFromJobInputSchema,
   ErrorCode,
   err,
   ok,
   type Result,
 } from '@premier/shared';
-import { createDraftQuote, createServiceClient } from '@premier/db';
+import { createDraftInvoiceFromJob, createDraftQuote, createServiceClient } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
 export type CreateDraftQuoteActionState = Result<{ quoteId: string }>;
+export type CreateInvoiceFromJobPageActionState = Result<{ invoiceId: string }>;
 
 async function getJobActionContext(): Promise<
   Result<{ orgId: string; userId: string }>
@@ -87,4 +89,41 @@ export async function createDraftQuoteAction(
   }
 
   return ok({ quoteId: result.data.id });
+}
+
+export async function createInvoiceFromJobPageAction(
+  _previousState: CreateInvoiceFromJobPageActionState | null,
+  formData: FormData
+): Promise<CreateInvoiceFromJobPageActionState> {
+  const access = await getJobActionContext();
+
+  if (!access.success) {
+    return access;
+  }
+
+  const parsed = CreateInvoiceFromJobInputSchema.safeParse({
+    jobId: formData.get('jobId'),
+    kind: formData.get('kind') ?? 'standalone',
+  });
+
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      firstIssue?.message ?? 'Invalid invoice creation payload.'
+    );
+  }
+
+  const serviceClient = createServiceClient();
+  const result = await createDraftInvoiceFromJob(serviceClient, {
+    createdBy: access.data.userId,
+    input: parsed.data,
+    orgId: access.data.orgId,
+  });
+
+  if (!result.success) {
+    return result;
+  }
+
+  return ok({ invoiceId: result.data.id });
 }
