@@ -39,3 +39,37 @@ export function testInvoiceMemo(): string {
 export function isTestData(value: string | null | undefined): boolean {
   return !!value && value.includes(E2E_TEST_PREFIX);
 }
+
+/** A fixed, greppable marker for the notes field — not unique, since it's a label, not an identifier. */
+export const CUSTOMER_CRUD_NOTES_MARKER = 'E2E_TEST_CREATED_BY_PLAYWRIGHT';
+
+export interface CustomerCrudTestFixture {
+  /** Unique identifying marker — used as the customer's company name (the
+   *  most reliable field: display_name = COALESCE(company_name, first+last),
+   *  so setting company_name guarantees the full marker shows everywhere the
+   *  app renders display_name — the customers list, search results, and the
+   *  detail page heading). */
+  marker: string;
+  email: string;
+  phone: string;
+  notes: string;
+}
+
+/**
+ * Builds a full set of test values for one customer-crud-bot run, all
+ * derived from a single unique suffix so marker/email/phone stay correlated
+ * to the same test run.
+ */
+export function buildCustomerCrudTestFixture(): CustomerCrudTestFixture {
+  const timestamp = Date.now();
+  const shortId = Math.random().toString(36).slice(2, 8);
+  const suffix = `${timestamp}_${shortId}`;
+  const last4Digits = String(timestamp).slice(-4);
+
+  return {
+    marker: `${E2E_TEST_PREFIX}CUSTOMER_CRUD_${suffix}`,
+    email: `e2e.customer.crud.${suffix}@example.com`,
+    phone: `555-010-${last4Digits}`,
+    notes: CUSTOMER_CRUD_NOTES_MARKER,
+  };
+}

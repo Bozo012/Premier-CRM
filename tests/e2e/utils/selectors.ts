@@ -43,6 +43,36 @@ export const customers = {
   searchInput: (page: Page) => page.getByPlaceholder(/search/i),
 };
 
+/**
+ * `/customers/new` form (apps/web/app/(app)/customers/_components/new-customer-form.tsx).
+ * No fields are HTML-`required`; the server action requires a first/last name
+ * OR a company name (see CreateCustomerInputSchema in packages/shared) — this
+ * suite always fills companyName, which satisfies that and doubles as the
+ * most reliable identifying field (see CustomerCrudTestFixture in test-data.ts).
+ */
+export const newCustomerForm = {
+  companyNameInput: (page: Page) => page.locator('#new-customer-companyName'),
+  emailInput: (page: Page) => page.locator('#new-customer-email'),
+  phonePrimaryInput: (page: Page) => page.locator('#new-customer-phonePrimary'),
+  notesInput: (page: Page) => page.locator('#new-customer-notes'),
+  submitButton: (page: Page) => page.getByRole('button', { name: /create customer/i }),
+};
+
+/**
+ * `/customers/[customerId]` detail page — read-only today (no edit or
+ * delete/archive UI exists; see tests/e2e/customer-crud-bot.spec.ts's
+ * "edit" test, which documents that as TODO rather than inventing a flow).
+ */
+export const customerDetail = {
+  heading: (page: Page, name: string) => page.getByRole('heading', { name }),
+  emailRow: (page: Page, email: string) => page.getByText(email, { exact: false }),
+};
+
+/** Matches `/customers/<uuid>` for a specific customer id. */
+export function isCustomerDetailUrl(page: Page, customerId: string): boolean {
+  return new URL(page.url()).pathname === `/customers/${customerId}`;
+}
+
 export const invoices = {
   heading: (page: Page) => page.getByRole('heading', { name: 'Invoices' }),
 };
