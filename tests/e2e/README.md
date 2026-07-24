@@ -14,7 +14,8 @@ adding real coverage bot-by-bot over time.
 |---|---|
 | `auth-bot.spec.ts` | App loads, login form renders, bad creds error, admin login |
 | `customer-crud-bot.spec.ts` | **Active**: create, search, detail view, service-role cleanup. Edit is TODO (no edit UI exists) |
-| `customer-command-center-bot.spec.ts` | Customer detail page scaffold; full coverage is TODO |
+| `customer-command-center-bot.spec.ts` | **Active**: stats, contact, notes card, properties tile navigate-and-back. Jobs/invoices/estimates "filtered navigation", payments, notes-editing, and documents are TODO (don't exist in the app) |
+| `operator-workflow-bot.spec.ts` | **Active**: one realistic owner workday — dashboard → find customer → open property → review history → create job/estimate/invoice → back to dashboard, verified. Recording a note and uploading a document are TODO (don't exist in the app) |
 | `invoice-management-bot.spec.ts` | Invoices list auth-gating + reachability; create/pay/void/send are TODO |
 | `mobile-simplicity-bot.spec.ts` | Phone/tablet viewport smoke checks on login; authenticated mobile checks are TODO |
 | `permissions-bot.spec.ts` | Route-level auth gating (real); cross-account data isolation is TODO |
@@ -24,6 +25,34 @@ adding real coverage bot-by-bot over time.
 `cleanup-safety.spec.ts` isn't a bot — it's a small set of unit-style checks
 on `utils/cleanup.ts`'s safety guards (bad marker, non-local Supabase URL
 without opt-in). No browser or real Supabase connection needed.
+
+## Known CRM limitations (found while building this suite)
+
+None of these are things this suite invented workarounds for — they're
+documented as TODO in the relevant bot instead:
+
+- **No edit or delete/archive UI for customers.** Verified: no
+  `updateCustomer`/`archiveCustomer`/`deleteCustomer` anywhere in
+  `packages/db` or `apps/web`; the detail page is entirely read-only.
+- **No customer-scoped "filtered list" views.** `/jobs`, `/properties`,
+  `/estimates`, and `/invoices` only support free-text search (`q`, plus
+  `status` on `/jobs`) — none accept a `customerId` filter. The customer
+  detail page's own "Recent jobs"/"Open quotes" lists aren't links either.
+- **No Estimates, Payments, Notes-editing, or Documents surface on the
+  customer detail page.** Estimates and invoices don't have a customer-level
+  view at all; notes are read-only display of `customer.notes`; there's no
+  documents/photo-upload feature anywhere in the app yet.
+- **Estimate → job conversion requires the customer portal.** The real path
+  is estimate → quote (staff-side, automatable) → quote sent and **accepted
+  by the customer via their magic-link portal** → job created from the
+  accepted quote. This suite automates the first step only — see the
+  scenario builder's `convertEstimateToJob` option above.
+- **Invoices can't be created standalone.** There's no `/invoices/new` page —
+  every invoice comes from picking an existing job in a dialog on `/invoices`.
+- **A fresh invoice has no payable balance.** `total: 0` until at least one
+  line item is added — `record-payment-form.tsx` shows "no remaining
+  balance" instead of its fields until then (see `context/invoice.ts`'s
+  `addInvoiceLineItem`/`payInvoiceInFull`).
 
 ## Install
 
@@ -90,7 +119,11 @@ immediately after install, before you've wired up test accounts.
 configured, deletes it afterward using a service-role Supabase client
 (`tests/e2e/utils/cleanup.ts`'s `cleanupTestCustomerByMarker`) — Premier CRM
 has no delete/archive UI for customers yet, so there's no UI-driven way to do
-this instead.
+this instead. `context/session.ts`'s `session.finish()` uses this exact same
+guarded function under the hood for every bot built on the shared context
+(customer-command-center-bot, operator-workflow-bot, and any future ones) —
+it's the one cleanup mechanism the whole suite shares, not something specific
+to customer-crud-bot.
 
 This bypasses RLS, so it's guarded tightly:
 
@@ -159,6 +192,7 @@ pnpm test:e2e:mobile
 pnpm test:e2e:permissions
 pnpm test:e2e:data
 pnpm test:e2e:future
+pnpm test:e2e:operator
 ```
 
 Or run the full suite including anything skipped/TODO (skipped tests still
@@ -179,30 +213,200 @@ tests include a screenshot; retried failures include a trace you can step
 through with `pnpm exec playwright show-trace <path>`. Failed tests also
 retain video (`test-results/`).
 
+## Shared Test Context (Phase 2)
+
+`tests/e2e/context/` is a reusable fixture layer so new bots don't each
+reimplement customer/property/estimate/job/invoice creation. Every fixture
+method **creates on first call and reuses on later calls within the same
+session** — "shared" here means shared for the lifetime of one `TestSession`
+instance (typically one spec file's `test.describe.serial(...)` block), not a
+cross-file or cross-worker singleton — see `session.ts`'s doc comment for why
+(Playwright runs spec files in parallel worker processes; a true "once per
+whole run" session would need `storageState` + a `globalSetup` script, which
+is a reasonable next step once enough bots exist to justify it, not built
+prematurely here).
+
+```
+tests/e2e/context/
+  session.ts      TestSession class + createTestSession(page) — the lifecycle
+  auth.ts         loginAsAdmin(session), loginAsCustomer(session)
+  customer.ts     createTestCustomer(page) → CustomerFixture
+  property.ts     createTestProperty(page, customer) → PropertyFixture
+  estimate.ts     createTestEstimate(page, customer, property?) → EstimateFixture
+  job.ts          createTestJob(page, customer, property?) → JobFixture
+  invoice.ts      createTestInvoice(page, job) → InvoiceFixture
+                  addInvoiceLineItem, payInvoiceInFull
+  scenario.ts     createScenario(session, options) → Scenario
+  navigation.ts   gotoDashboard/gotoCustomers/gotoCustomer/gotoProperties/
+                  gotoJobs/gotoEstimates/gotoInvoices — each waits for a
+                  stable, distinctive element before returning
+```
+
+### Session lifecycle
+
+```
+Initialize → Login → Shared fixtures → Bot execution → Cleanup
+```
+
+```ts
+import { createTestSession } from './context/session';
+import { loginAsAdmin } from './context/auth';
+
+test('some workflow', async ({ page }) => {
+  const session = createTestSession(page);   // Initialize
+
+  await loginAsAdmin(session);               // Login
+
+  const customer = await session.customer(); // Shared fixtures — created
+  const customer2 = await session.customer();// once; this just returns the same one
+  const property = await session.property(customer);
+
+  // ... bot execution: drive the UI, assert things ...
+
+  await session.finish();                    // Cleanup + prints metrics
+});
+```
+
+`session.finish()` flushes `session.cleanup` (dependency-ordered, marker-
+guarded — see "Customer CRUD cleanup" above, which the session reuses under
+the hood) and prints the metrics report (see "Performance metrics" below).
+Cleanup failures never fail the test they run after; they log a warning.
+
+### Scenario builder
+
+For a bot that needs a known business state rather than individual pieces:
+
+```ts
+import { createScenario } from './context/scenario';
+
+const scenario = await createScenario(session, {
+  property: true,
+  estimate: true,
+  invoice: true,
+  paid: true, // adds a line item and records a full payment
+});
+
+scenario.customer   // always created if anything else is requested
+scenario.property
+scenario.estimate
+scenario.job        // only if job: true or invoice: true was requested
+scenario.invoice
+scenario.warnings   // non-fatal notes — e.g. convertEstimateToJob's real limit
+```
+
+`convertEstimateToJob: true` is intentionally partial: it creates a real
+draft quote from the estimate (a genuine staff-side action), but stops there
+— accepting a quote and turning it into a job requires the customer portal's
+magic-link flow, which this suite doesn't drive yet. Requesting it adds a
+warning to `scenario.warnings` rather than faking a job that was never
+actually converted. Extend `scenario.ts` by adding one boolean option and one
+`if` block; the real work lives in `session.ts`'s fixture methods.
+
+### Navigation helpers
+
+```ts
+import { gotoCustomer, gotoDashboard } from './context/navigation';
+
+await gotoDashboard(page);           // waits for "Business snapshot" heading
+await gotoCustomer(page, customer);  // waits for the customer's marker heading
+```
+
+Each helper waits for a real, distinctive element specific to that page
+before returning — not a fixed timeout or `networkidle` — so callers never
+race the page's own data fetch.
+
+### Performance metrics
+
+`session.metrics` (a `MetricsCollector`, `tests/e2e/utils/metrics.ts`) times
+whatever you wrap in `.measure(label, fn)` and never fails a test over
+timing — it's for long-term regression detection ("login used to take 1s,
+now it takes 4s"), not a pass/fail gate:
+
+```ts
+const customer = await session.metrics.measure('Create Customer', () =>
+  session.customer()
+);
+```
+
+`session.finish()` prints a report automatically; call `session.metrics.print()`
+directly for a mid-test snapshot. Output looks like:
+
+```
+Login................1.1s
+Create Customer......2.3s
+Open Customer........0.5s
+Cleanup..............0.3s
+```
+
+### Customer Command Center bot
+
+`customer-command-center-bot.spec.ts` covers the customer detail page. Real,
+active coverage: the 4 stat cards, Contact card, Account notes card, and the
+Properties tile (create → click through to the property's own detail page →
+back). Everything else the original brief for this bot asked about turned out
+not to exist when checked against the actual page
+(`apps/web/app/(app)/customers/[customerId]/page.tsx`) — documented as TODO
+rather than invented:
+
+- "Recent jobs" and "Open quotes" list items are plain text, not links
+  (`ListCard`'s `item.href` is never set for either) — there's no "navigate to
+  filtered jobs/quotes for this customer" flow to test, and neither `/jobs`
+  nor `/quotes` accepts a customer-scoping query param.
+- No "Estimates" tile/section exists on this page at all.
+- No "Invoices" tile/list exists — "Outstanding invoices" is a bare stat
+  number, not a link.
+- No Payments section exists anywhere on this page (payments are only
+  recordable per-invoice — see `context/invoice.ts`'s `payInvoiceInFull`).
+- "Account notes" is read-only — no add/edit-note UI exists anywhere.
+- No Documents section or upload UI exists anywhere in the app.
+
+### Operator Workflow bot
+
+`operator-workflow-bot.spec.ts` simulates a realistic owner workday — one
+cohesive script (not exhaustive per-feature coverage) using the scenario
+builder and navigation helpers: dashboard → find a customer (real search) →
+open them → open their property → review job history → create a job,
+estimate, and invoice → back to the dashboard → verify the dashboard's Jobs
+count actually moved. Recording a note and uploading a document/photo are
+both TODO — see "Customer Command Center bot" above for why (no such UI
+exists in the app yet).
+
 ## Add new tests
 
 1. Pick the bot file that matches the feature area (or add a new bot file +
    package script if it's a genuinely new area — follow the existing naming
    pattern: `<area>-bot.spec.ts`).
-2. Use the shared utils rather than re-inventing them:
-   - `utils/auth.ts` — `loginAsAdmin(page)`, `hasAdminCredentials()`, etc.
+2. **Reach for the shared context first** (see above) — `createTestSession`,
+   `loginAsAdmin`/`loginAsCustomer`, `session.customer()`/`.property()`/
+   `.estimate()`/`.job()`/`.invoice()`, `createScenario`, and the `goto*`
+   navigation helpers cover most of what a new bot needs to set up before it
+   can start actually testing something. Only fall back to driving a create
+   flow by hand (like `context/customer.ts` does internally) if the shared
+   context doesn't cover it yet — then consider adding it there for the next
+   bot.
+3. Use the other shared utils rather than re-inventing them:
+   - `utils/auth.ts` — the underlying `loginAsAdmin(page)`, `hasAdminCredentials()`,
+     etc. that `context/auth.ts` wraps.
    - `utils/selectors.ts` — route paths and locators. Add new ones here
      rather than inlining CSS selectors in a spec.
-   - `utils/test-data.ts` — generates `E2E_TEST_`-prefixed names/emails so
+   - `utils/test-data.ts` — generates `E2E_TEST_`-prefixed markers/emails so
      data is always identifiable.
    - `utils/mobile.ts` — shared viewport profiles for mobile checks.
+   - `utils/metrics.ts` — the `MetricsCollector` behind `session.metrics`.
    - `utils/cleanup.ts` — `CleanupRegistry` for UI-driven teardown (scaffolded,
      not wired up yet — no bot has a delete UI to drive), plus
      `cleanupTestCustomerByMarker` for tightly-guarded service-role cleanup,
-     used by `customer-crud-bot` (see "Customer CRUD cleanup" above).
-3. Un-skip a `test.skip(...)` TODO by implementing its body, or add a new
+     used by both `customer-crud-bot` directly and `context/session.ts`
+     under the hood (see "Customer CRUD cleanup" above).
+4. Un-skip a `test.skip(...)` TODO by implementing its body, or add a new
    test — either is fine. Keep tests independent where the feature allows it:
    don't rely on execution order or state left behind by a previous test. The
-   one deliberate exception is a CRUD flow where steps are inherently
-   sequential (create → search → detail → cleanup) — see
-   `customer-crud-bot.spec.ts`'s `test.describe.serial(...)` block, which
-   documents that ordering explicitly rather than faking independence.
-4. Run just that bot (`pnpm test:e2e:<area>`) while iterating; run the full
+   one deliberate exception is a flow where steps are inherently sequential
+   (create → search → detail → cleanup) — see `customer-crud-bot.spec.ts`'s
+   and `customer-command-center-bot.spec.ts`'s `test.describe.serial(...)`
+   blocks, which document that ordering explicitly rather than faking
+   independence.
+5. Run just that bot (`pnpm test:e2e:<area>`) while iterating; run the full
    suite before considering the work done.
 
 ## What's currently skipped / TODO

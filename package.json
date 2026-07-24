@@ -19,6 +19,7 @@
     "test:e2e:permissions": "playwright test permissions-bot --project=chromium",
     "test:e2e:data": "playwright test data-consistency-bot --project=chromium",
     "test:e2e:future": "playwright test future-automation-readiness-bot --project=chromium",
+    "test:e2e:operator": "playwright test operator-workflow-bot --project=chromium",
     "test:e2e:full": "playwright test",
     "test:e2e:report": "playwright show-report"
   },

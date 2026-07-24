@@ -185,12 +185,13 @@ function createCleanupServiceClient(): SupabaseClient<Database> {
 }
 
 /**
- * Deletes rows in tables with a real FK on customers.id that would otherwise
- * block the customer delete (ON DELETE RESTRICT / no cascade), in dependency
- * order. Tables with ON DELETE CASCADE from customers — customer_properties,
- * customer_accounts, customer_location_prefs (see 0002_crm_core.sql,
+ * Deletes rows in tables with a real FK on customers.id (directly or, for
+ * properties, via customer_properties) that would otherwise block the
+ * customer delete, in dependency order. Tables with ON DELETE CASCADE
+ * directly from customers — customer_properties itself, customer_accounts,
+ * customer_location_prefs (see 0002_crm_core.sql,
  * 0012_service_requests_and_customer_accounts.sql,
- * 0005_location_and_automation.sql) — are deliberately NOT touched here:
+ * 0005_location_and_automation.sql) — are deliberately NOT deleted here:
  * Postgres removes those automatically when the customer row is deleted.
  *
  * FK sources for this order: jobs.customer_id and estimates.customer_id have
@@ -201,7 +202,10 @@ function createCleanupServiceClient(): SupabaseClient<Database> {
  * user_prompts.customer_id are nullable with no cascade (0003_vault_and_comms.sql,
  * 0005_location_and_automation.sql). quotes.job_id is ON DELETE SET NULL, so
  * quotes tied to a deleted job survive as orphaned rows rather than blocking
- * this delete — acceptable debris, not a real-data risk.
+ * this delete — acceptable debris, not a real-data risk. Properties are swept
+ * last (see deleteE2ETestProperties below) since jobs/estimates must be gone
+ * first — see that function's doc comment for why properties need their own
+ * additional safety check beyond "linked to this customer".
  */
 async function deleteDependentRecords(
   client: SupabaseClient<Database>,
@@ -230,6 +234,45 @@ async function deleteDependentRecords(
   await client.from('vault_items').delete().in('customer_id', customerIds);
   await client.from('tasks').delete().in('customer_id', customerIds);
   await client.from('user_prompts').delete().in('customer_id', customerIds);
+
+  await deleteE2ETestProperties(client, customerIds);
+}
+
+/**
+ * Deletes properties linked to the given customers via `customer_properties`
+ * — but ONLY those whose `address_line_1` is itself `E2E_TEST_`-prefixed (see
+ * `buildPropertyTestFixture` in `utils/test-data.ts`). Properties are shared/
+ * first-class ("Properties are first-class. They survive customer changes" —
+ * 0002_crm_core.sql) — a real property could in principle be linked to a test
+ * customer, so this never deletes a property just because it was linked to
+ * one; it also requires the property row itself to be tagged as test data.
+ *
+ * Must run after jobs and estimates are deleted above: both `jobs.property_id`
+ * and `estimates.property_id` have no cascade (ON DELETE RESTRICT-equivalent)
+ * and would otherwise block this delete.
+ */
+async function deleteE2ETestProperties(
+  client: SupabaseClient<Database>,
+  customerIds: string[]
+): Promise<void> {
+  const { data: links } = await client
+    .from('customer_properties')
+    .select('property_id')
+    .in('customer_id', customerIds);
+  const propertyIds = [...new Set((links ?? []).map((link) => link.property_id))];
+  if (propertyIds.length === 0) return;
+
+  const { data: properties } = await client
+    .from('properties')
+    .select('id')
+    .in('id', propertyIds)
+    .like('address_line_1', `${E2E_TEST_PREFIX}%`);
+  const testPropertyIds = (properties ?? []).map((property) => property.id);
+  if (testPropertyIds.length === 0) return;
+
+  // The customer_properties junction row cascades automatically (ON DELETE
+  // CASCADE from both customer_id and property_id).
+  await client.from('properties').delete().in('id', testPropertyIds);
 }
 
 /**
