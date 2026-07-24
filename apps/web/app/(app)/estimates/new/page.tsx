@@ -41,7 +41,7 @@ export default async function NewEstimatePage() {
           New estimate
         </h1>
         <p className="text-sm text-muted-foreground">
-          Select a customer and property, then describe the work.
+          Describe it first — details after.
         </p>
       </header>
 
