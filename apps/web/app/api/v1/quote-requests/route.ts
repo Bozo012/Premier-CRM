@@ -44,7 +44,7 @@ const PREMIER_ORG_ID =
 const ALLOWED_ORIGINS_PROD = [
   'https://ppmnky.com',
   'https://www.ppmnky.com',
-  'https://app.ppmnky.com',
+  'https://premier-property-maintenance.vercel.app',
 ];
 
 const ALLOWED_ORIGINS_DEV = [
