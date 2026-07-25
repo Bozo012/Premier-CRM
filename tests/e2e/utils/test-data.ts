@@ -73,3 +73,53 @@ export function buildCustomerCrudTestFixture(): CustomerCrudTestFixture {
     notes: CUSTOMER_CRUD_NOTES_MARKER,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Shared context fixture builders (tests/e2e/context/*) — Phase 2
+// ---------------------------------------------------------------------------
+
+/** A unique, greppable marker for any entity kind, e.g. buildMarker('PROPERTY'). */
+export function buildMarker(kind: string): string {
+  return `${E2E_TEST_PREFIX}${kind}_${uniqueSuffix()}`;
+}
+
+export interface PropertyTestFixture {
+  /** Contains the marker — the only field the properties table exposes for
+   *  identifying a row directly (see CleanupPropertyMatch in utils/cleanup.ts). */
+  addressLine1: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+export function buildPropertyTestFixture(): PropertyTestFixture {
+  return {
+    addressLine1: `${buildMarker('PROPERTY')} Test Fixture Way`,
+    city: 'Florence',
+    state: 'KY',
+    zip: '41042',
+  };
+}
+
+export interface WorkItemTestFixture {
+  /** Used as the record's title — both estimates and jobs render `title` as
+   *  their detail-page heading, so this marker is always visible there. */
+  title: string;
+  description: string;
+}
+
+export function buildEstimateTestFixture(): WorkItemTestFixture {
+  const marker = buildMarker('ESTIMATE');
+  return {
+    title: marker,
+    description: `${marker} — created by the Playwright E2E suite. Safe to delete.`,
+  };
+}
+
+export function buildJobTestFixture(): WorkItemTestFixture {
+  const marker = buildMarker('JOB');
+  return {
+    title: marker,
+    description: `${marker} — created by the Playwright E2E suite. Safe to delete.`,
+  };
+}

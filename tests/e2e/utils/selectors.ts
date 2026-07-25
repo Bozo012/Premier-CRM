@@ -20,9 +20,11 @@ export const routes = {
   newCustomer: '/customers/new',
   invoices: '/invoices',
   jobs: '/jobs',
+  newJob: '/jobs/new',
   properties: '/properties',
   quotes: '/quotes',
   estimates: '/estimates',
+  newEstimate: '/estimates/new',
   requests: '/requests',
   services: '/services',
   settings: '/settings/website',
@@ -76,6 +78,134 @@ export function isCustomerDetailUrl(page: Page, customerId: string): boolean {
 export const invoices = {
   heading: (page: Page) => page.getByRole('heading', { name: 'Invoices' }),
 };
+
+export const properties = {
+  heading: (page: Page) => page.getByRole('heading', { name: 'Properties' }),
+};
+
+export const jobsList = {
+  heading: (page: Page) => page.getByRole('heading', { name: 'Jobs' }),
+};
+
+export const estimatesList = {
+  heading: (page: Page) => page.getByRole('heading', { name: 'Estimates' }),
+};
+
+/**
+ * `/today` — the app's dashboard/home page (see tests/e2e/README.md "Dashboard").
+ * The `<h1>` is a dynamic greeting ("Good morning, Kevin") so it can't anchor a
+ * stable-load wait; "Business snapshot" is the first stable heading that only
+ * renders once the page's client-side data fetch resolves.
+ */
+export const today = {
+  loadedMarker: (page: Page) => page.getByRole('heading', { name: 'Business snapshot' }),
+  /**
+   * SnapshotCard's whole tile is one `<a>` (label + big number + helper text
+   * all inside), so `getByRole('link', { name })` would match against that
+   * combined text rather than just the count — a scoped CSS locator on the
+   * count paragraph within the known `href` is more precise here than trying
+   * to force a role-based match onto a card that isn't structured for it.
+   */
+  jobsCount: (page: Page) => page.locator('a[href="/jobs"] p.text-4xl'),
+};
+
+/**
+ * Inline "Properties" card on the customer detail page
+ * (apps/web/app/(app)/customers/_components/properties-card.tsx). Distinct
+ * field ids from `newCustomerForm` above and from `customerPropertyPicker`
+ * below — no collisions.
+ */
+export const propertiesCard = {
+  addPropertyToggle: (page: Page) => page.getByRole('button', { name: '+ Add property' }),
+  addressLine1Input: (page: Page) => page.locator('#new-property-addressLine1'),
+  cityInput: (page: Page) => page.locator('#new-property-city'),
+  stateInput: (page: Page) => page.locator('#new-property-state'),
+  zipInput: (page: Page) => page.locator('#new-property-zip'),
+  submitButton: (page: Page) => page.getByRole('button', { name: 'Add property', exact: true }),
+  propertyLink: (page: Page, addressLine1: string) =>
+    page.getByRole('link', { name: new RegExp(escapeRegExp(addressLine1)) }),
+};
+
+/**
+ * Shared customer + property resolver widget
+ * (apps/web/components/forms/customer-property-section.tsx,
+ * use-customer-property-resolver.ts) — used by New Estimate, New Quote, and
+ * New Job. Defaults to "Search existing" mode, which is all this suite uses
+ * (it always searches for a customer this suite already created via the real
+ * /customers/new flow, rather than creating one inline here too).
+ */
+export const customerPropertyPicker = {
+  searchInput: (page: Page) => page.getByPlaceholder('Search by name…'),
+  searchButton: (page: Page) => page.getByRole('button', { name: 'Search', exact: true }),
+  // Not exact: true — the result button's accessible name is the
+  // concatenation of BOTH its child <p>s (display name AND email, per
+  // customer-property-section.tsx), not just the display name alone.
+  customerResult: (page: Page, displayName: string) =>
+    page.getByRole('button', { name: new RegExp(escapeRegExp(displayName)) }),
+  addPropertyToggle: (page: Page) => page.getByRole('button', { name: '+ Add a property' }),
+  propertyResult: (page: Page, addressLine1: string) =>
+    page.getByRole('button', { name: new RegExp(escapeRegExp(addressLine1)) }),
+  // "Add a property" inline form fields — distinct ids (`prop-*`) from both
+  // newCustomerForm's `new-property-*` and the picker's own customer-side
+  // `manual-*` fields, so all three can coexist on one page without collision.
+  newPropertyAddressLine1Input: (page: Page) => page.locator('#prop-addressLine1'),
+  newPropertyCityInput: (page: Page) => page.locator('#prop-city'),
+  newPropertyStateInput: (page: Page) => page.locator('#prop-state'),
+  newPropertyZipInput: (page: Page) => page.locator('#prop-zip'),
+  newPropertySubmitButton: (page: Page) => page.getByRole('button', { name: 'Add property', exact: true }),
+};
+
+/** `/estimates/new` (apps/web/app/(app)/estimates/_components/new-estimate-form.tsx). */
+export const newEstimateForm = {
+  descriptionInput: (page: Page) => page.locator('#description'),
+  titleInput: (page: Page) => page.locator('#title'),
+  submitButton: (page: Page) => page.getByRole('button', { name: /create estimate/i }),
+};
+
+/**
+ * `/jobs/new` (apps/web/components/forms/customer-property-work-form.tsx,
+ * shared with New Quote). Same `#title`/`#description` ids as the estimate
+ * form, but never both on screen in the same test — each context module
+ * navigates to one page at a time.
+ */
+export const newJobForm = {
+  titleInput: (page: Page) => page.locator('#title'),
+  descriptionInput: (page: Page) => page.locator('#description'),
+  submitButton: (page: Page) => page.getByRole('button', { name: /create job/i }),
+};
+
+/** `/invoices` list page's "Create invoice" dialog (new-invoice-dialog.tsx). */
+export const invoicesDialog = {
+  createInvoiceButton: (page: Page) => page.getByRole('button', { name: 'Create invoice' }),
+  searchInput: (page: Page) => page.getByPlaceholder(/search by title or job number/i),
+  searchButton: (page: Page) => page.getByRole('button', { name: 'Search', exact: true }),
+  jobRow: (page: Page, jobTitle: string) =>
+    page.locator('li', { hasText: jobTitle }),
+  selectButtonForJob: (page: Page, jobTitle: string) =>
+    page.locator('li', { hasText: jobTitle }).getByRole('button', { name: 'Select' }),
+};
+
+/** Invoice detail page's line item editor (invoices/_components/line-item-editor.tsx). */
+export const lineItemEditor = {
+  addLineItemToggle: (page: Page) => page.getByRole('button', { name: '+ Add line item' }),
+  nameInput: (page: Page) => page.locator('#ili-name'),
+  quantityInput: (page: Page) => page.locator('#ili-quantity'),
+  unitInput: (page: Page) => page.locator('#ili-unit'),
+  unitPriceInput: (page: Page) => page.locator('#ili-unit-price'),
+  submitButton: (page: Page) => page.getByRole('button', { name: 'Add line item', exact: true }),
+};
+
+/** Invoice detail page's record-payment-form.tsx. */
+export const recordPaymentForm = {
+  amountInput: (page: Page) => page.locator('#pay-amount'),
+  methodSelect: (page: Page) => page.locator('#pay-method'),
+  paidAtInput: (page: Page) => page.locator('#pay-date'),
+  submitButton: (page: Page) => page.getByRole('button', { name: /record payment/i }),
+};
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
  * The (app) route group wraps everything behind AuthGuard, a client component
