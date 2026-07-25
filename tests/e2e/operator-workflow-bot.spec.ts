@@ -16,7 +16,6 @@ import { hasAdminCredentials } from './utils/auth';
 import { loginAsAdmin } from './context/auth';
 import { createTestSession } from './context/session';
 import { gotoCustomers, gotoDashboard } from './context/navigation';
-import { createTestCustomer } from './context/customer';
 import { customers as customersSelectors, today } from './utils/selectors';
 
 test.describe('operator workflow bot', () => {
@@ -35,11 +34,14 @@ test.describe('operator workflow bot', () => {
     const jobsCountBefore = await readJobsCount(page);
 
     // A customer needs to exist before the owner can "find" them — created
-    // here via the real /customers/new flow (context/customer.ts), standing
-    // in for a customer already on file from a previous day.
-    const customer = await session.metrics.measure('Seed: Create Customer', () =>
-      createTestCustomer(page)
-    );
+    // here via session.customer() (the real /customers/new flow under the
+    // hood, context/customer.ts), standing in for a customer already on file
+    // from a previous day. Must go through session.customer() rather than
+    // calling createTestCustomer() directly — only the session method
+    // registers the customer for cleanup; a direct call leaves it orphaned
+    // (found live: a customer + job created this way survived session.finish()
+    // untouched, since cleanup only ever removes what was registered).
+    const customer = await session.customer();
 
     // ---- Locate customer (real search, not a direct id lookup) ----
     await session.metrics.measure('Search Customer', async () => {
@@ -58,15 +60,20 @@ test.describe('operator workflow bot', () => {
     });
 
     // ---- Open property ----
-    const property = await session.metrics.measure('Create Property', () =>
-      session.property(customer)
-    );
+    // session.property() already times itself as "Create Property" — don't
+    // wrap it again here, or the metrics report double-counts it.
+    const property = await session.property(customer);
     await session.metrics.measure('Open Property', async () => {
       // session.property() left us on the customer detail page after
       // creating it (properties-card.tsx uses router.refresh(), not
       // navigation) — the new property's link is already on screen.
       await page.getByRole('link', { name: new RegExp(property.addressLine1) }).click();
-      await expect(page.getByText(property.addressLine1)).toBeVisible();
+      // Scoped to the heading — the property detail page's <h1> and its own
+      // address text both contain this string (strict-mode violation
+      // otherwise; see customer-command-center-bot.spec.ts's same fix).
+      await expect(
+        page.getByRole('heading', { name: new RegExp(property.addressLine1) })
+      ).toBeVisible();
     });
 
     // ---- Review history ----
@@ -75,19 +82,17 @@ test.describe('operator workflow bot', () => {
     await expect(page.getByText(/job history/i)).toBeVisible();
 
     // ---- Create job ----
-    const job = await session.metrics.measure('Create Job', () =>
-      session.job(customer, property)
-    );
+    // Same as above — session.job()/.estimate()/.invoice() each time
+    // themselves internally (see context/session.ts).
+    const job = await session.job(customer, property);
     await expect(page.getByRole('heading', { name: job.title })).toBeVisible();
 
     // ---- Create estimate ----
-    const estimate = await session.metrics.measure('Create Estimate', () =>
-      session.estimate(customer, property)
-    );
+    const estimate = await session.estimate(customer, property);
     await expect(page.getByRole('heading', { name: estimate.title })).toBeVisible();
 
     // ---- Create invoice (from the job) ----
-    const invoice = await session.metrics.measure('Create Invoice', () => session.invoice(job));
+    const invoice = await session.invoice(job);
     await expect(page).toHaveURL(new RegExp(`/invoices/${invoice.id}$`));
 
     // ---- Record note ---- NOT IMPLEMENTED, see README "Notes"

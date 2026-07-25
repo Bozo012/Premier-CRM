@@ -1,4 +1,6 @@
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
 
 /**
  * Premier CRM — Playwright config for the repeatable QA bot suite.
@@ -12,6 +14,14 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * See tests/e2e/README.md for how to run this suite.
  */
+
+// Load tests/e2e/README.md's documented `.env.test` — @playwright/test does
+// NOT auto-load this (unlike some frameworks); without this, every credential-
+// gated test silently and "successfully" test.skip()s regardless of whether
+// .env.test was ever filled in, which is exactly as convincing as actually
+// working. `override: false` keeps real environment variables (e.g. CI
+// secrets) taking precedence over the file.
+dotenv.config({ path: path.resolve(__dirname, '.env.test'), override: false });
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const IS_CI = !!process.env.CI;

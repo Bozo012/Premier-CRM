@@ -137,8 +137,11 @@ export const propertiesCard = {
 export const customerPropertyPicker = {
   searchInput: (page: Page) => page.getByPlaceholder('Search by name…'),
   searchButton: (page: Page) => page.getByRole('button', { name: 'Search', exact: true }),
+  // Not exact: true — the result button's accessible name is the
+  // concatenation of BOTH its child <p>s (display name AND email, per
+  // customer-property-section.tsx), not just the display name alone.
   customerResult: (page: Page, displayName: string) =>
-    page.getByRole('button', { name: displayName, exact: true }),
+    page.getByRole('button', { name: new RegExp(escapeRegExp(displayName)) }),
   addPropertyToggle: (page: Page) => page.getByRole('button', { name: '+ Add a property' }),
   propertyResult: (page: Page, addressLine1: string) =>
     page.getByRole('button', { name: new RegExp(escapeRegExp(addressLine1)) }),
