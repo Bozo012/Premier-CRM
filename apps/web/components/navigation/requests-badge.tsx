@@ -1,3 +1,5 @@
+import { getActiveOrgContext } from '@premier/db';
+
 import { getServerSupabase } from '@/lib/supabase-server';
 
 export async function RequestsBadge() {
@@ -8,19 +10,13 @@ export async function RequestsBadge() {
     } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data: membership } = await supabase
-      .from('org_members')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (!membership?.org_id) return null;
+    const orgContextResult = await getActiveOrgContext(supabase, user.id);
+    if (!orgContextResult.success) return null;
 
     const { count } = await supabase
       .from('service_requests')
       .select('id', { count: 'exact', head: true })
-      .eq('org_id', membership.org_id)
+      .eq('org_id', orgContextResult.data.orgId)
       .eq('status', 'new');
 
     if (!count || count === 0) return null;

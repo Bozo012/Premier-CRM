@@ -257,6 +257,8 @@ export const team = {
     page.getByTestId(`pending-invite-${email}`),
   copyInviteLinkButton: (page: Page, email: string) =>
     team.pendingInviteCard(page, email).getByRole('button', { name: 'Copy invite link' }),
+  resendButton: (page: Page, email: string) =>
+    team.pendingInviteCard(page, email).getByRole('button', { name: /resend/i }),
   revokeButton: (page: Page, email: string) =>
     team.pendingInviteCard(page, email).getByRole('button', { name: /revoke/i }),
 };

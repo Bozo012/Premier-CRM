@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { getRequestById, type RequestDetail } from '@premier/db';
+import { getActiveOrgContext, getRequestById, type RequestDetail } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 import { CreateEstimateButton } from '../_components/create-estimate-button';
@@ -24,26 +24,14 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
     redirect(`/login?redirectTo=/requests/${taskId}`);
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
 
-  if (membershipError) {
-    return (
-      <ErrorPage>
-        Could not load your organization membership: {membershipError.message}
-      </ErrorPage>
-    );
+  if (!orgContextResult.success) {
+    return <ErrorPage>{orgContextResult.error}</ErrorPage>;
   }
+  const { orgId } = orgContextResult.data;
 
-  if (!membership?.org_id) {
-    return <ErrorPage>You don&apos;t have an active organization membership yet.</ErrorPage>;
-  }
-
-  const result = await getRequestById(supabase, { taskId, orgId: membership.org_id });
+  const result = await getRequestById(supabase, { taskId, orgId });
 
   if (!result.success) {
     return (

@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { getActiveOrgContext } from '@premier/db';
+
 import { getServerSupabase } from '@/lib/supabase-server';
 import { CustomerPropertyWorkForm } from '@/components/forms/customer-property-work-form';
 
@@ -17,14 +19,8 @@ export default async function NewQuotePage() {
     redirect('/login?redirectTo=/quotes/new');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError || !membership?.org_id) {
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
     redirect('/quotes');
   }
 

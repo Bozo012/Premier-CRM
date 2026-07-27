@@ -71,6 +71,73 @@ export async function listPendingInvites(
   return ok(data ?? []);
 }
 
+/**
+ * Minimum time between resends of the same invite (PR C0, Phase 5) — a
+ * simple per-invite cooldown rather than a separate rate-limit table, since
+ * this only needs to stop rapid repeated clicks/abuse of one button, not
+ * track usage across invites or users.
+ */
+const RESEND_COOLDOWN_SECONDS = 60;
+
+/**
+ * Marks a pending invite as resent (bumping `last_resent_at`) if it's
+ * eligible — the caller (resendInviteAction in
+ * apps/web/app/(app)/team/actions.ts) sends the actual email afterward.
+ * Enforces, in order: invite belongs to this org, is still pending, isn't
+ * expired, and hasn't been resent within RESEND_COOLDOWN_SECONDS (falling
+ * back to `created_at` if it has never been resent before).
+ */
+export async function resendOrgInvite(
+  client: DbClient,
+  args: { inviteId: string; orgId: string }
+): Promise<Result<OrgInvite>> {
+  const { data: invite, error: fetchError } = await client
+    .from('org_invites')
+    .select('*')
+    .eq('id', args.inviteId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return err(ErrorCode.DB_ERROR, fetchError.message);
+  }
+  if (!invite) {
+    return err(ErrorCode.NOT_FOUND, 'Invite not found.');
+  }
+  if (invite.status !== 'pending') {
+    return err(ErrorCode.VALIDATION_ERROR, 'Only a pending invite can be resent.');
+  }
+  if (new Date(invite.expires_at) < new Date()) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      'This invite has expired. Revoke it and send a new one instead.'
+    );
+  }
+
+  const lastSentAt = invite.last_resent_at ?? invite.created_at;
+  const secondsSinceLastSend = (Date.now() - new Date(lastSentAt).getTime()) / 1000;
+  if (secondsSinceLastSend < RESEND_COOLDOWN_SECONDS) {
+    const waitSeconds = Math.ceil(RESEND_COOLDOWN_SECONDS - secondsSinceLastSend);
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      `Please wait ${waitSeconds}s before resending this invite again.`
+    );
+  }
+
+  const { data: updated, error: updateError } = await client
+    .from('org_invites')
+    .update({ last_resent_at: new Date().toISOString() })
+    .eq('id', args.inviteId)
+    .select('*')
+    .single();
+
+  if (updateError) {
+    return err(ErrorCode.DB_ERROR, updateError.message);
+  }
+
+  return ok(updated);
+}
+
 export async function revokeOrgInvite(
   client: DbClient,
   args: { inviteId: string; orgId: string }

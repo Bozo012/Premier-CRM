@@ -23,6 +23,7 @@
     "test:e2e:employee": "playwright test employee-invite-bot --project=chromium",
     "test:e2e:staff": "playwright test staff-permissions-bot --project=chromium",
     "test:e2e:employee-estimate": "playwright test employee-estimate-workflow-bot --project=chromium",
+    "test:e2e:dashboard-org": "playwright test dashboard-org-resolution-bot --project=chromium",
     "test:e2e:full": "playwright test",
     "test:e2e:report": "playwright show-report"
   },

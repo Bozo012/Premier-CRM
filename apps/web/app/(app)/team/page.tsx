@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { createServiceClient, type Database, type OrgInvite } from '@premier/db';
+import { createServiceClient, getActiveOrgContext, type Database, type OrgInvite } from '@premier/db';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { CopyInviteLinkButton } from './_components/copy-invite-link-button';
 import { InviteMemberForm } from './_components/invite-member-form';
+import { ResendInviteButton } from './_components/resend-invite-button';
 import { RevokeInviteButton } from './_components/revoke-invite-button';
 
 type OrgMember = Database['public']['Tables']['org_members']['Row'];
@@ -35,31 +36,18 @@ export default async function TeamPage() {
     redirect('/login?redirectTo=/team');
   }
 
-  const { data: currentMembership, error: currentMembershipError } =
-    await supabase
-      .from('org_members')
-      .select('org_id, role')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle();
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
 
-  if (currentMembershipError) {
+  if (!orgContextResult.success) {
     return (
       <TeamPageShell>
-        <ErrorCard message={currentMembershipError.message} />
+        <ErrorCard message={orgContextResult.error} />
       </TeamPageShell>
     );
   }
+  const { orgId, role } = orgContextResult.data;
 
-  if (!currentMembership) {
-    return (
-      <TeamPageShell>
-        <ErrorCard message="No organization membership was found for your account." />
-      </TeamPageShell>
-    );
-  }
-
-  if (!canManageTeam(currentMembership.role)) {
+  if (!canManageTeam(role)) {
     return (
       <TeamPageShell>
         <Card>
@@ -82,7 +70,7 @@ export default async function TeamPage() {
   const { data: members, error: membersError } = await supabase
     .from('org_members')
     .select('id, user_id, role, joined_at, org_id')
-    .eq('org_id', currentMembership.org_id)
+    .eq('org_id', orgId)
     .order('joined_at', { ascending: false });
 
   if (membersError) {
@@ -125,7 +113,7 @@ export default async function TeamPage() {
   const { data: pendingInvites } = await supabase
     .from('org_invites')
     .select('*')
-    .eq('org_id', currentMembership.org_id)
+    .eq('org_id', orgId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
@@ -169,6 +157,7 @@ export default async function TeamPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <CopyInviteLinkButton token={invite.token} />
+                    <ResendInviteButton inviteId={invite.id} />
                     <RevokeInviteButton inviteId={invite.id} />
                   </div>
                 </CardContent>

@@ -10,7 +10,7 @@ import {
   ok,
   type Result,
 } from '@premier/shared';
-import { createDraftInvoiceFromJob, createDraftQuote, createServiceClient } from '@premier/db';
+import { createDraftInvoiceFromJob, createDraftQuote, createServiceClient, getActiveOrgContext } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -33,26 +33,13 @@ async function getJobActionContext(): Promise<
     );
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError) {
-    return err(ErrorCode.DB_ERROR, membershipError.message);
-  }
-
-  if (!membership?.org_id) {
-    return err(
-      ErrorCode.FORBIDDEN,
-      'No organization membership was found for this user.'
-    );
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
   }
 
   return ok({
-    orgId: membership.org_id,
+    orgId: orgContextResult.data.orgId,
     userId: user.id,
   });
 }

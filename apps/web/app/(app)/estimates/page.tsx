@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { listEstimates, type EstimateListItem, type EstimateStatus } from '@premier/db';
+import { getActiveOrgContext, listEstimates, type EstimateListItem, type EstimateStatus } from '@premier/db';
 
+import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 interface EstimatesPageProps {
@@ -32,35 +33,19 @@ export default async function EstimatesPage({ searchParams }: EstimatesPageProps
     redirect('/login?redirectTo=/estimates');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
 
-  if (membershipError) {
+  if (!orgContextResult.success) {
     return (
       <PageShell view={view}>
-        <ErrorPanel>
-          Could not load your organization membership: {membershipError.message}
-        </ErrorPanel>
+        <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
       </PageShell>
     );
   }
-
-  if (!membership?.org_id) {
-    return (
-      <PageShell view={view}>
-        <WarningPanel>
-          You don&apos;t have an active organization membership yet.
-        </WarningPanel>
-      </PageShell>
-    );
-  }
+  const { orgId } = orgContextResult.data;
 
   const result = await listEstimates(supabase, {
-    orgId: membership.org_id,
+    orgId,
     statuses: view === 'active' ? ACTIVE_STATUSES : undefined,
     limit: 100,
     offset: 0,
@@ -290,13 +275,6 @@ function ErrorPanel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function WarningPanel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-      {children}
-    </p>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Helpers

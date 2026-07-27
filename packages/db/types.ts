@@ -1997,6 +1997,7 @@ export type Database = {
           full_name: string
           id: string
           invited_by: string | null
+          last_resent_at: string | null
           org_id: string
           role: Database["public"]["Enums"]["user_role"]
           status: Database["public"]["Enums"]["org_invite_status"]
@@ -2011,6 +2012,7 @@ export type Database = {
           full_name: string
           id?: string
           invited_by?: string | null
+          last_resent_at?: string | null
           org_id: string
           role?: Database["public"]["Enums"]["user_role"]
           status?: Database["public"]["Enums"]["org_invite_status"]
@@ -2025,6 +2027,7 @@ export type Database = {
           full_name?: string
           id?: string
           invited_by?: string | null
+          last_resent_at?: string | null
           org_id?: string
           role?: Database["public"]["Enums"]["user_role"]
           status?: Database["public"]["Enums"]["org_invite_status"]

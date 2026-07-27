@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { ErrorCode, err, ok, type Result } from '@premier/shared';
-import { createDraftQuote, createServiceClient } from '@premier/db';
+import { createDraftQuote, createServiceClient, getActiveOrgContext } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -38,22 +38,12 @@ async function getEstimateActionContext(): Promise<
     return err(ErrorCode.FORBIDDEN, 'You must be signed in.');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError) {
-    return err(ErrorCode.DB_ERROR, membershipError.message);
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
   }
 
-  if (!membership?.org_id) {
-    return err(ErrorCode.FORBIDDEN, 'No active organization membership found.');
-  }
-
-  return ok({ orgId: membership.org_id, userId: user.id });
+  return ok({ orgId: orgContextResult.data.orgId, userId: user.id });
 }
 
 // ---------------------------------------------------------------------------
