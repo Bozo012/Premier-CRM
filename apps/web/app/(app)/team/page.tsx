@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { CopyInviteLinkButton } from './_components/copy-invite-link-button';
 import { InviteMemberForm } from './_components/invite-member-form';
 import { RevokeInviteButton } from './_components/revoke-invite-button';
 
@@ -146,7 +147,9 @@ export default async function TeamPage() {
         <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">Invite a team member</h2>
           <p className="text-sm text-muted-foreground">
-            They&apos;ll get an email with a link to set up their account.
+            They&apos;ll get an email with a link to set up their account. If
+            the email doesn&apos;t arrive, copy the link from their pending
+            invite below and send it yourself.
           </p>
         </div>
         <InviteMemberForm />
@@ -157,14 +160,17 @@ export default async function TeamPage() {
           <h2 className="text-lg font-semibold tracking-tight">Pending invites</h2>
           <div className="space-y-3">
             {(pendingInvites as OrgInvite[]).map((invite) => (
-              <Card key={invite.id}>
+              <Card key={invite.id} data-testid={`pending-invite-${invite.email}`}>
                 <CardContent className="flex flex-col gap-1 pt-6 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
                     <p className="font-medium text-foreground">{invite.full_name}</p>
                     <p className="text-sm text-muted-foreground">{invite.email}</p>
                     <p className="text-sm capitalize text-muted-foreground">{invite.role}</p>
                   </div>
-                  <RevokeInviteButton inviteId={invite.id} />
+                  <div className="flex items-center gap-2">
+                    <CopyInviteLinkButton token={invite.token} />
+                    <RevokeInviteButton inviteId={invite.id} />
+                  </div>
                 </CardContent>
               </Card>
             ))}

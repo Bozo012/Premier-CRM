@@ -3,8 +3,9 @@
 import { redirect } from 'next/navigation';
 
 import { AcceptTeamMemberInviteSchema } from '@premier/shared';
-import { acceptOrgInvite, createServiceClient, getInviteByToken } from '@premier/db';
+import { createServiceClient, getInviteByToken } from '@premier/db';
 
+import { getAppUrl } from '@/lib/email';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 function readRequiredString(formData: FormData, key: string): string | null {
@@ -57,6 +58,14 @@ export async function acceptInviteAction(formData: FormData): Promise<void> {
         full_name: parsed.data.fullName,
         account_type: 'staff',
       },
+      // Carried through Supabase's confirmation email as the `next` param
+      // (see the "Confirm signup" email template and apps/web/app/auth/confirm/route.ts)
+      // so the invite token survives the confirmation round-trip. Actually
+      // joining the org (accept_org_invite) happens at this continue route,
+      // once a real confirmed session exists — not here, immediately after
+      // signUp() — since email confirmation is required on this project and
+      // signUp() returns no usable session until it's completed.
+      emailRedirectTo: `${getAppUrl()}/invite/${token}/continue`,
     },
   });
 
@@ -67,18 +76,5 @@ export async function acceptInviteAction(formData: FormData): Promise<void> {
     );
   }
 
-  const acceptResult = await acceptOrgInvite(serviceClient, {
-    token,
-    userId: data.user.id,
-    fullName: parsed.data.fullName,
-  });
-
-  if (!acceptResult.success) {
-    redirectWithMessage(
-      token,
-      `Your account was created, but we couldn't finish joining the team: ${acceptResult.error}. Contact an owner or admin.`
-    );
-  }
-
-  redirect('/today');
+  redirect(`/invite/${token}?pending=1`);
 }

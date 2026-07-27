@@ -28,6 +28,7 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
   const { token } = await params;
   const query = await searchParams;
   const message = readMessage(query.message);
+  const isPendingConfirmation = query.pending === '1';
 
   if (!isUuid(token)) {
     notFound();
@@ -59,7 +60,17 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
         </p>
       ) : null}
 
-      {!isUsable ? (
+      {isPendingConfirmation ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Check your email</CardTitle>
+            <CardDescription>
+              We sent a confirmation link to {invite.email}. Click it to finish setting up your
+              account.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : !isUsable ? (
         <Card>
           <CardHeader>
             <CardTitle>

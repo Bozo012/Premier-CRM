@@ -51,6 +51,18 @@ export function getCustomerTwoAccount(): TestAccount {
   };
 }
 
+/** Dedicated E2E employee account — see employee-invite-bot.spec.ts. */
+export function getEmployeeAccount(): TestAccount {
+  return {
+    email: requireEnv('TEST_EMPLOYEE_EMAIL'),
+    password: requireEnv('TEST_EMPLOYEE_PASSWORD'),
+  };
+}
+
+export function getEmployeeName(): string {
+  return requireEnv('TEST_EMPLOYEE_NAME');
+}
+
 /**
  * Returns true if all admin credentials are present in the environment.
  * Bots that need real auth should skip (not fail) when this is false, so the
@@ -66,6 +78,14 @@ export function hasCustomerCredentials(): boolean {
 
 export function hasCustomerTwoCredentials(): boolean {
   return !!process.env.TEST_CUSTOMER_2_EMAIL && !!process.env.TEST_CUSTOMER_2_PASSWORD;
+}
+
+export function hasEmployeeCredentials(): boolean {
+  return (
+    !!process.env.TEST_EMPLOYEE_EMAIL &&
+    !!process.env.TEST_EMPLOYEE_PASSWORD &&
+    !!process.env.TEST_EMPLOYEE_NAME
+  );
 }
 
 /**
