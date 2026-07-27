@@ -5,10 +5,15 @@
  * implemented once.
  */
 
-import { getCustomerAccount, loginAs, loginAsAdmin as loginAsAdminDirect } from '../utils/auth';
+import {
+  getCustomerAccount,
+  getStaffAccount,
+  loginAs,
+  loginAsAdmin as loginAsAdminDirect,
+} from '../utils/auth';
 import type { TestSession } from './session';
 
-export { hasAdminCredentials, hasCustomerCredentials } from '../utils/auth';
+export { hasAdminCredentials, hasCustomerCredentials, hasStaffCredentials } from '../utils/auth';
 
 /** Logs the session's page in as the admin/owner test account. */
 export async function loginAsAdmin(session: TestSession): Promise<void> {
@@ -20,4 +25,14 @@ export async function loginAsAdmin(session: TestSession): Promise<void> {
 export async function loginAsCustomer(session: TestSession): Promise<void> {
   await session.metrics.measure('Login', () => loginAs(session.page, getCustomerAccount()));
   session.isCustomerLoggedIn = true;
+}
+
+/**
+ * Logs the session's page in as the persistent E2E staff (employee) account
+ * — see utils/auth.ts's getStaffAccount() for why this is a separate
+ * identity from the employee-invite-bot's own account.
+ */
+export async function loginAsStaff(session: TestSession): Promise<void> {
+  await session.metrics.measure('Login', () => loginAs(session.page, getStaffAccount()));
+  session.isStaffLoggedIn = true;
 }

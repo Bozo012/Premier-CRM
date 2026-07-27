@@ -44,6 +44,8 @@ export interface EstimateDetail extends EstimateListItem {
   siteVisitNotes: string | null;
   convertedAt: string | null;
   createdBy: string | null;
+  /** Resolved from user_profiles — null if createdBy is null or has no profile. */
+  createdByName: string | null;
 }
 
 export interface EstimateListPage {
@@ -210,6 +212,22 @@ export async function getEstimateById(
   const cust = Array.isArray(row.customers) ? row.customers[0] : row.customers;
   const prop = Array.isArray(row.properties) ? row.properties[0] : row.properties;
 
+  // No direct FK from estimates to user_profiles (created_by references
+  // auth.users; user_profiles.id also references auth.users, but separately)
+  // — PostgREST can't embed this in one query, so it's a small follow-up
+  // lookup. RLS ("Users see profiles in shared orgs") allows any co-member
+  // to read this, so it resolves correctly for both owner and employee
+  // viewers.
+  let createdByName: string | null = null;
+  if (row.created_by) {
+    const { data: profile } = await client
+      .from('user_profiles')
+      .select('full_name')
+      .eq('id', row.created_by)
+      .maybeSingle();
+    createdByName = profile?.full_name?.trim() || null;
+  }
+
   return ok({
     id: row.id,
     estimateNumber: row.estimate_number,
@@ -225,6 +243,7 @@ export async function getEstimateById(
     siteVisitNotes: row.site_visit_notes ?? null,
     convertedAt: row.converted_at ?? null,
     createdBy: row.created_by ?? null,
+    createdByName,
     customer: cust
       ? {
           id: cust.id,
