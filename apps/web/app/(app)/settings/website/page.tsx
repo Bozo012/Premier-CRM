@@ -3,12 +3,14 @@ import { redirect } from 'next/navigation';
 
 import {
   createServiceClient,
+  getActiveOrgContext,
   getWebsiteSettingsForOrg,
   listWebsitePromotionsForOrg,
   listWebsiteServiceHighlightsForOrg,
 } from '@premier/db';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { WebsiteHighlightList } from './_components/website-highlight-list';
@@ -26,34 +28,18 @@ export default async function WebsiteSettingsPage() {
     redirect('/login?redirectTo=/settings/website');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id, role')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
 
-  if (membershipError) {
+  if (!orgContextResult.success) {
     return (
       <PageShell>
-        <ErrorPanel>
-          Could not load your organization membership: {membershipError.message}
-        </ErrorPanel>
+        <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
       </PageShell>
     );
   }
+  const { orgId, role } = orgContextResult.data;
 
-  if (!membership) {
-    return (
-      <PageShell>
-        <ErrorPanel>
-          No organization membership was found for this user.
-        </ErrorPanel>
-      </PageShell>
-    );
-  }
-
-  if (membership.role !== 'owner' && membership.role !== 'admin') {
+  if (role !== 'owner' && role !== 'admin') {
     return (
       <PageShell>
         <ErrorPanel>
@@ -65,10 +51,10 @@ export default async function WebsiteSettingsPage() {
 
   const serviceClient = createServiceClient();
   const [settingsResult, promotionsResult, highlightsResult] = await Promise.all([
-    getWebsiteSettingsForOrg(serviceClient, { orgId: membership.org_id }),
-    listWebsitePromotionsForOrg(serviceClient, { orgId: membership.org_id }),
+    getWebsiteSettingsForOrg(serviceClient, { orgId }),
+    listWebsitePromotionsForOrg(serviceClient, { orgId }),
     listWebsiteServiceHighlightsForOrg(serviceClient, {
-      orgId: membership.org_id,
+      orgId,
     }),
   ]);
 

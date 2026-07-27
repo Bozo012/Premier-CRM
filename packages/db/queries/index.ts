@@ -86,10 +86,12 @@ export {
   createOrgInvite,
   getInviteByToken,
   listPendingInvites,
+  resendOrgInvite,
   revokeOrgInvite,
   translateAcceptInviteError,
   type OrgInvite,
 } from './org-invites';
+export { getActiveOrgContext, type ActiveOrgContext, type OrgMemberRole } from './org-context';
 export {
   createCustomer,
   findCustomerByEmail,

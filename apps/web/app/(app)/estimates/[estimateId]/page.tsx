@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { createServiceClient, getEstimateById, listQuotesForEstimate } from '@premier/db';
+import { createServiceClient, getActiveOrgContext, getEstimateById, listQuotesForEstimate } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -25,19 +25,13 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
     redirect(`/login?redirectTo=/estimates/${estimateId}`);
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError || !membership?.org_id) {
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
     redirect('/estimates');
   }
 
   const serviceClient = createServiceClient();
-  const orgId = membership.org_id;
+  const { orgId } = orgContextResult.data;
 
   const [result, quotesResult] = await Promise.all([
     getEstimateById(supabase, { estimateId, orgId }),

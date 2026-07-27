@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { getActiveOrgContext } from '@premier/db';
+
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { NewEstimateForm } from '../_components/new-estimate-form';
@@ -16,14 +18,8 @@ export default async function NewEstimatePage() {
     redirect('/login?redirectTo=/estimates/new');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError || !membership?.org_id) {
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
     redirect('/estimates');
   }
 

@@ -15,6 +15,12 @@ export enum ErrorCode {
   VALIDATION_ERROR = 'VALIDATION_ERROR',
   /** Database returned an error (constraint violation, RLS denial, etc.). */
   DB_ERROR = 'DB_ERROR',
+  /**
+   * State that requires a human decision rather than an automatic pick —
+   * e.g. a user with more than one active org_members row, where silently
+   * choosing one would be unsafe. See packages/db/queries/org-context.ts.
+   */
+  CONFLICT = 'CONFLICT',
   /** Catch-all for unexpected failures. Prefer a more specific code when possible. */
   UNKNOWN = 'UNKNOWN',
 }

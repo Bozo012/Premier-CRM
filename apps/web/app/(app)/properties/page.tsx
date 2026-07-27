@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { listProperties } from '@premier/db';
+import { getActiveOrgContext, listProperties } from '@premier/db';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 interface PropertiesPageProps {
@@ -27,38 +28,21 @@ export default async function PropertiesPage({
     redirect('/login?redirectTo=/properties');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
 
-  if (membershipError) {
+  if (!orgContextResult.success) {
     return (
       <PageShell search={search}>
-        <ErrorPanel>
-          Could not load your organization membership: {membershipError.message}
-        </ErrorPanel>
+        <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
       </PageShell>
     );
   }
-
-  if (!membership?.org_id) {
-    return (
-      <PageShell search={search}>
-        <WarningPanel>
-          You don&apos;t have an active organization membership yet. Ask the
-          owner to approve your account, or contact Kevin.
-        </WarningPanel>
-      </PageShell>
-    );
-  }
+  const { orgId } = orgContextResult.data;
 
   const result = await listProperties(supabase, {
     limit: 100,
     offset: 0,
-    orgId: membership.org_id,
+    orgId,
     search,
   });
 
@@ -179,13 +163,6 @@ function ErrorPanel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function WarningPanel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-      {children}
-    </p>
-  );
-}
 
 function readStringParam(
   value: string | string[] | undefined

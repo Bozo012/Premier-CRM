@@ -17,6 +17,7 @@ import {
 import {
   addQuoteLineItem,
   createDraftQuote,
+  getActiveOrgContext,
   getQuoteById,
   listJobs,
   removeQuoteLineItem,
@@ -46,22 +47,12 @@ async function getQuoteActionContext(): Promise<Result<QuoteActionContext>> {
     return err(ErrorCode.FORBIDDEN, 'You must be signed in to edit quotes.');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError) {
-    return err(ErrorCode.DB_ERROR, membershipError.message);
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
   }
 
-  if (!membership?.org_id) {
-    return err(ErrorCode.FORBIDDEN, 'No active organization membership found.');
-  }
-
-  return ok({ orgId: membership.org_id, userId: user.id });
+  return ok({ orgId: orgContextResult.data.orgId, userId: user.id });
 }
 
 function readString(formData: FormData, key: string): string {

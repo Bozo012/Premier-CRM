@@ -15,6 +15,7 @@ import {
   createServiceClient,
   deleteWebsitePromotion,
   deleteWebsiteServiceHighlight,
+  getActiveOrgContext,
   saveWebsitePromotion,
   saveWebsiteServiceHighlight,
   upsertWebsiteSettings,
@@ -54,32 +55,20 @@ async function getWebsiteAdminContext(): Promise<Result<WebsiteAdminContext>> {
     );
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id, role')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError) {
-    return err(ErrorCode.DB_ERROR, membershipError.message);
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
   }
+  const { orgId, role } = orgContextResult.data;
 
-  if (!membership) {
-    return err(
-      ErrorCode.FORBIDDEN,
-      'No organization membership was found for this user.'
-    );
-  }
-
-  if (membership.role !== 'owner' && membership.role !== 'admin') {
+  if (role !== 'owner' && role !== 'admin') {
     return err(
       ErrorCode.FORBIDDEN,
       'Only owners and admins can manage website content.'
     );
   }
 
-  return ok({ orgId: membership.org_id });
+  return ok({ orgId });
 }
 
 export async function saveWebsiteSettingsAction(

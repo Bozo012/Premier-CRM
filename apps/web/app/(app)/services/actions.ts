@@ -12,6 +12,7 @@ import {
 } from '@premier/shared';
 import {
   createServiceClient,
+  getActiveOrgContext,
   saveServiceCategory,
   saveServiceItem,
 } from '@premier/db';
@@ -51,25 +52,12 @@ async function getServiceCatalogAdminContext(): Promise<
     );
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError) {
-    return err(ErrorCode.DB_ERROR, membershipError.message);
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
   }
 
-  if (!membership?.org_id) {
-    return err(
-      ErrorCode.FORBIDDEN,
-      'No organization membership was found for this user.'
-    );
-  }
-
-  return ok({ orgId: membership.org_id });
+  return ok({ orgId: orgContextResult.data.orgId });
 }
 
 export async function saveServiceCategoryAction(

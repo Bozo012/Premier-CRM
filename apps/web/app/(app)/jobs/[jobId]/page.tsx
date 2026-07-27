@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import {
   createServiceClient,
+  getActiveOrgContext,
   getJobById,
   getJobInvoiceTotals,
   listInvoicesForJob,
@@ -15,6 +16,7 @@ import { ErrorCode } from '@premier/shared';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { CreateDraftQuoteButton } from '../_components/create-draft-quote-button';
@@ -41,33 +43,16 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     redirect(`/login?redirectTo=${encodeURIComponent(`/jobs/${jobId}`)}`);
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
 
-  if (membershipError) {
+  if (!orgContextResult.success) {
     return (
       <PageShell>
-        <ErrorPanel>
-          Could not load your organization membership: {membershipError.message}
-        </ErrorPanel>
+        <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
       </PageShell>
     );
   }
-
-  if (!membership?.org_id) {
-    return (
-      <PageShell>
-        <WarningPanel>
-          You don&apos;t have an active organization membership yet. Ask the owner
-          to approve your account, or contact Kevin.
-        </WarningPanel>
-      </PageShell>
-    );
-  }
+  const { orgId } = orgContextResult.data;
 
   const serviceClient = createServiceClient();
 
@@ -75,25 +60,25 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     await Promise.all([
       getJobById(supabase, {
         jobId,
-        orgId: membership.org_id,
+        orgId,
       }),
       listQuotesForJob(supabase, {
         jobId,
-        orgId: membership.org_id,
+        orgId,
       }),
       serviceClient
         .from('estimates')
         .select('id, title, estimate_number')
         .eq('converted_job_id', jobId)
-        .eq('org_id', membership.org_id)
+        .eq('org_id', orgId)
         .maybeSingle(),
       listInvoicesForJob(supabase, {
         jobId,
-        orgId: membership.org_id,
+        orgId,
       }),
       getJobInvoiceTotals(supabase, {
         jobId,
-        orgId: membership.org_id,
+        orgId,
       }),
     ]);
 
@@ -674,13 +659,6 @@ function ErrorPanel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function WarningPanel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-      {children}
-    </p>
-  );
-}
 
 function formatPropertyAddress(property: {
   addressLine1: string;

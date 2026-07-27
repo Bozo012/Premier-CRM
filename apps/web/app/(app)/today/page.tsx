@@ -1,30 +1,19 @@
-'use client'; // Client component required for session-aware Supabase reads and sign-out interactions.
-
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { redirect } from 'next/navigation';
+
+import { getActiveOrgContext } from '@premier/db';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getBrowserSupabase } from '@/lib/supabase';
+import { OrgContextError } from '@/components/org-context-error';
+import { getServerSupabase } from '@/lib/supabase-server';
+
+import { signOutAction } from './actions';
 
 interface TodayJob {
   id: string;
   scheduled_start: string | null;
   title: string;
-}
-
-interface TodayState {
-  canManageTeam: boolean;
-  customerCount: number;
-  firstName: string;
-  jobCount: number;
-  newRequestCount: number;
-  orgName: string;
-  orgRole: string;
-  propertyCount: number;
-  todayJobs: TodayJob[];
-  userEmail: string;
 }
 
 interface QuickAction {
@@ -56,188 +45,126 @@ function normalizePropertyAddressKey(property: {
     .join('|');
 }
 
-export default function TodayPage() {
-  const [data, setData] = useState<TodayState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const supabase = useMemo(
-    () => getBrowserSupabase() as unknown as SupabaseClient,
-    []
+function formatScheduledTime(value: string | null): string {
+  if (!value) return 'Anytime';
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(
+    new Date(value)
   );
+}
 
-  useEffect(() => {
-    const loadDashboard = async () => {
-      setIsLoading(true);
-      setError(null);
+/**
+ * Dashboard — server component (PR C0). Previously a client component that
+ * resolved the user's org via its own browser-side `.limit(1).maybeSingle()`
+ * query with no `status = 'active'` filter (see this file's prior git
+ * history), which is exactly what produced the "Unknown org • Employee" bug:
+ * a user whose only org_members row is `pending` still has a readable
+ * org_id/role (that row's own RLS policy — "Users can read their own
+ * membership" — has no status check), but the embedded
+ * `organizations(name)` join silently returns null because `organizations`'
+ * RLS policy calls `user_is_in_org()`, which DOES require `status = 'active'`
+ * (see supabase/migrations — `user_is_in_org()`). The mismatch between those
+ * two checks is what let a broken org name render next to a real-looking
+ * role. Resolving through `getActiveOrgContext()` server-side (PR C0's
+ * shared helper) closes that gap for good: it requires an active membership
+ * for BOTH the id and the name in the same query, so this page either shows
+ * the real values or an honest "no active organization" state — never a
+ * placeholder string next to a role that looks legitimate.
+ */
+export default async function TodayPage() {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const user = sessionData.session?.user;
-
-      if (!user) {
-        setError('No active session found. Please sign in again.');
-        setIsLoading(false);
-        return;
-      }
-
-      const { data: membership, error: membershipError } = await supabase
-        .from('org_members')
-        .select('org_id, role, organizations(name)')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (membershipError) {
-        setError(membershipError.message);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!membership?.org_id) {
-        setError('No organization membership found for this user.');
-        setIsLoading(false);
-        return;
-      }
-
-      const orgNameValue =
-        typeof membership.organizations === 'object' &&
-        membership.organizations !== null &&
-        'name' in membership.organizations
-          ? String(membership.organizations.name)
-          : 'Unknown org';
-      const canManageTeam =
-        membership.role === 'owner' || membership.role === 'admin';
-
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(startOfDay);
-      endOfDay.setDate(endOfDay.getDate() + 1);
-
-      const [
-        customersResult,
-        propertiesResult,
-        jobsResult,
-        profileResult,
-        requestsResult,
-        todayJobsResult,
-      ] = await Promise.all([
-          supabase
-            .from('customers')
-            .select('*', { count: 'exact', head: true })
-            .eq('org_id', membership.org_id),
-          supabase
-            .from('properties')
-            .select('address_line_1, city, state, zip')
-            .eq('org_id', membership.org_id),
-          supabase
-            .from('jobs')
-            .select('*', { count: 'exact', head: true })
-            .eq('org_id', membership.org_id),
-          supabase
-            .from('user_profiles')
-            .select('full_name')
-            .eq('id', user.id)
-            .maybeSingle(),
-          supabase
-            .from('service_requests')
-            .select('id', { count: 'exact', head: true })
-            .eq('org_id', membership.org_id)
-            .eq('status', 'new'),
-          supabase
-            .from('jobs')
-            .select('id, title, scheduled_start')
-            .eq('org_id', membership.org_id)
-            .gte('scheduled_start', startOfDay.toISOString())
-            .lt('scheduled_start', endOfDay.toISOString())
-            .order('scheduled_start', { ascending: true })
-            .limit(10),
-        ]);
-
-      if (customersResult.error || propertiesResult.error || jobsResult.error) {
-        setError(
-          customersResult.error?.message ||
-            propertiesResult.error?.message ||
-            jobsResult.error?.message ||
-            'Failed to load dashboard counts.'
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      const newRequestCount = requestsResult.count ?? 0;
-
-      const uniquePropertyCount = new Set(
-        (propertiesResult.data || []).map((property) =>
-          normalizePropertyAddressKey(property)
-        )
-      ).size;
-
-      const fullName = profileResult.data?.full_name ?? null;
-      const firstNameFromProfile = fullName ? fullName.split(' ')[0] : null;
-      const firstNameFromEmail = user.email ? user.email.split('@')[0] : null;
-      const resolvedFirstName = firstNameFromProfile ?? firstNameFromEmail ?? 'there';
-
-      setData({
-        canManageTeam,
-        customerCount: customersResult.count || 0,
-        firstName: resolvedFirstName,
-        jobCount: jobsResult.count || 0,
-        newRequestCount,
-        orgName: orgNameValue,
-        orgRole: membership.role,
-        propertyCount: uniquePropertyCount,
-        todayJobs: (todayJobsResult.data as TodayJob[] | null) ?? [],
-        userEmail: user.email || 'No email found',
-      });
-      setIsLoading(false);
-    };
-
-    void loadDashboard();
-  }, [supabase]);
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
-  const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  }, []);
-
-  const formattedDate = useMemo(
-    () =>
-      new Date().toLocaleDateString(undefined, {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      }),
-    []
-  );
-
-  if (isLoading) {
-    return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
-      </main>
-    );
+  if (userError || !user) {
+    redirect('/login?redirectTo=/today');
   }
 
-  if (error) {
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+
+  if (!orgContextResult.success) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center gap-4 p-6">
-        <p className="text-sm text-red-600">{error}</p>
-        <Button onClick={() => window.location.reload()}>Retry</Button>
+        <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
+        <form action={signOutAction}>
+          <Button type="submit" variant="outline">
+            Sign out
+          </Button>
+        </form>
       </main>
     );
   }
 
-  if (!data) {
-    return null;
+  const { orgId, orgName, role } = orgContextResult.data;
+  const canManageTeam = role === 'owner' || role === 'admin';
+
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(startOfDay);
+  endOfDay.setDate(endOfDay.getDate() + 1);
+
+  const [
+    customersResult,
+    propertiesResult,
+    jobsResult,
+    profileResult,
+    requestsResult,
+    todayJobsResult,
+  ] = await Promise.all([
+    supabase.from('customers').select('*', { count: 'exact', head: true }).eq('org_id', orgId),
+    supabase.from('properties').select('address_line_1, city, state, zip').eq('org_id', orgId),
+    supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('org_id', orgId),
+    supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle(),
+    supabase
+      .from('service_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('status', 'new'),
+    supabase
+      .from('jobs')
+      .select('id, title, scheduled_start')
+      .eq('org_id', orgId)
+      .gte('scheduled_start', startOfDay.toISOString())
+      .lt('scheduled_start', endOfDay.toISOString())
+      .order('scheduled_start', { ascending: true })
+      .limit(10),
+  ]);
+
+  if (customersResult.error || propertiesResult.error || jobsResult.error) {
+    const message =
+      customersResult.error?.message ||
+      propertiesResult.error?.message ||
+      jobsResult.error?.message ||
+      'Failed to load dashboard counts.';
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center gap-4 p-6">
+        <p className="text-sm text-red-600">{message}</p>
+      </main>
+    );
   }
+
+  const newRequestCount = requestsResult.count ?? 0;
+  const uniquePropertyCount = new Set(
+    (propertiesResult.data || []).map((property) => normalizePropertyAddressKey(property))
+  ).size;
+
+  const fullName = profileResult.data?.full_name ?? null;
+  const firstNameFromProfile = fullName ? fullName.split(' ')[0] : null;
+  const firstNameFromEmail = user.email ? user.email.split('@')[0] : null;
+  const firstName = firstNameFromProfile ?? firstNameFromEmail ?? 'there';
+  const userEmail = user.email || 'No email found';
+  const customerCount = customersResult.count || 0;
+  const jobCount = jobsResult.count || 0;
+  const todayJobs = (todayJobsResult.data as TodayJob[] | null) ?? [];
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const formattedDate = new Date().toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
@@ -245,30 +172,32 @@ export default function TodayPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              {greeting}, {data?.firstName}
+              {greeting}, {firstName}
             </h1>
             <p className="text-sm text-muted-foreground">{formattedDate}</p>
           </div>
           <div className="rounded-xl border bg-muted/30 px-3 py-2 text-right">
-            <p className="text-xs font-medium text-foreground">{data?.firstName}</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto px-0 py-0 text-xs font-normal text-muted-foreground hover:text-foreground"
-              onClick={handleSignOut}
-            >
-              Sign out
-            </Button>
+            <p className="text-xs font-medium text-foreground">{firstName}</p>
+            <form action={signOutAction}>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="h-auto px-0 py-0 text-xs font-normal text-muted-foreground hover:text-foreground"
+              >
+                Sign out
+              </Button>
+            </form>
           </div>
         </div>
 
         <div className="inline-flex max-w-full items-center rounded-full border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
           <span className="truncate">
-            {data?.orgName} • <span className="capitalize">{data?.orgRole}</span>
+            {orgName} • <span className="capitalize">{role}</span>
           </span>
         </div>
 
-        <p className="text-xs text-muted-foreground">Signed in as {data?.userEmail}</p>
+        <p className="text-xs text-muted-foreground">Signed in as {userEmail}</p>
       </header>
 
       <section className="space-y-3">
@@ -298,25 +227,25 @@ export default function TodayPage() {
             helper="Review imported records"
             href="/customers"
             label="Customers"
-            value={String(data?.customerCount ?? 0)}
+            value={String(customerCount)}
           />
           <SnapshotCard
             helper="Browse addresses and owners"
             href="/properties"
             label="Properties"
-            value={String(data?.propertyCount ?? 0)}
+            value={String(uniquePropertyCount)}
           />
           <SnapshotCard
             helper="Jobs imported or created"
             href="/jobs"
             label="Jobs"
-            value={String(data?.jobCount ?? 0)}
+            value={String(jobCount)}
           />
           <SnapshotCard
             helper="Unreviewed website inquiries"
             href="/requests"
             label="New requests"
-            value={String(data?.newRequestCount ?? 0)}
+            value={String(newRequestCount)}
           />
         </div>
       </section>
@@ -384,7 +313,7 @@ export default function TodayPage() {
         </div>
       </section>
 
-      {data?.canManageTeam ? (
+      {canManageTeam ? (
         <section>
           <Card>
             <CardHeader>
@@ -402,7 +331,7 @@ export default function TodayPage() {
         </section>
       ) : null}
 
-      {data?.canManageTeam ? (
+      {canManageTeam ? (
         <section>
           <Card>
             <CardHeader>
@@ -426,9 +355,9 @@ export default function TodayPage() {
             <CardTitle>Today&apos;s work</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {data.todayJobs.length > 0 ? (
+            {todayJobs.length > 0 ? (
               <ul className="divide-y">
-                {data.todayJobs.map((job) => (
+                {todayJobs.map((job) => (
                   <li key={job.id}>
                     <Link
                       href={`/jobs/${job.id}`}
@@ -471,15 +400,7 @@ export default function TodayPage() {
           </CardContent>
         </Card>
       </section>
-
     </main>
-  );
-}
-
-function formatScheduledTime(value: string | null): string {
-  if (!value) return 'Anytime';
-  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(
-    new Date(value)
   );
 }
 

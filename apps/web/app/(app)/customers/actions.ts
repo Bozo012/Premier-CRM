@@ -16,6 +16,7 @@ import {
   createPropertyForCustomer,
   createServiceClient,
   findCustomerByEmail,
+  getActiveOrgContext,
   type CustomerEmailMatch,
 } from '@premier/db';
 
@@ -37,21 +38,12 @@ async function getCustomerActionContext(): Promise<Result<CustomerActionContext>
     return err(ErrorCode.FORBIDDEN, 'You must be signed in to create a customer.');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError) {
-    return err(ErrorCode.DB_ERROR, membershipError.message);
-  }
-  if (!membership?.org_id) {
-    return err(ErrorCode.FORBIDDEN, 'No organization membership was found for this user.');
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
   }
 
-  return ok({ orgId: membership.org_id, userId: user.id });
+  return ok({ orgId: orgContextResult.data.orgId, userId: user.id });
 }
 
 export type CreateCustomerActionState = Result<{ id: string }>;

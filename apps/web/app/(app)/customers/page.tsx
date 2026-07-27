@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { listCustomers, type Customer } from '@premier/db';
+import { getActiveOrgContext, listCustomers, type Customer } from '@premier/db';
 import { CustomerArchetypeSchema } from '@premier/shared';
 
 import { Button } from '@/components/ui/button';
+import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { ArchetypeBadge } from './_components/archetype-badge';
@@ -41,36 +42,19 @@ export default async function CustomersPage({
     redirect('/login?redirectTo=/customers');
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('org_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
 
-  if (membershipError) {
+  if (!orgContextResult.success) {
     return (
       <PageShell>
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          Could not load your organization membership: {membershipError.message}
-        </p>
+        <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
       </PageShell>
     );
   }
-
-  if (!membership?.org_id) {
-    return (
-      <PageShell>
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-          You don&apos;t have an active organization membership yet. Ask the
-          owner to approve your account, or contact Kevin.
-        </p>
-      </PageShell>
-    );
-  }
+  const { orgId } = orgContextResult.data;
 
   const result = await listCustomers(supabase, {
-    orgId: membership.org_id,
+    orgId,
     search,
     archetype,
     limit: 50,
