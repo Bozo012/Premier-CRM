@@ -39,6 +39,7 @@ export class TestSession {
 
   isAdminLoggedIn = false;
   isCustomerLoggedIn = false;
+  isStaffLoggedIn = false;
 
   private customerFixture?: CustomerFixture;
   private propertyFixture?: PropertyFixture;

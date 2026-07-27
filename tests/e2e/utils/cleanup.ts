@@ -212,10 +212,24 @@ function createCleanupServiceClient(): SupabaseClient<Database> {
  * service_requests.customer_id is ON DELETE RESTRICT
  * (20260510180000_service_requests.sql); communications/vault_items/tasks/
  * user_prompts.customer_id are nullable with no cascade (0003_vault_and_comms.sql,
- * 0005_location_and_automation.sql). quotes.job_id is ON DELETE SET NULL, so
- * quotes tied to a deleted job survive as orphaned rows rather than blocking
- * this delete — acceptable debris, not a real-data risk. Properties are swept
- * last (see deleteE2ETestProperties below) since jobs/estimates must be gone
+ * 0005_location_and_automation.sql). quotes.job_id is ON DELETE CASCADE, so a
+ * quote created from a job is removed automatically once its job is deleted
+ * above. quotes.estimate_id is only ON DELETE SET NULL though (0002_crm_core.sql,
+ * 20260511131122_add_estimate_id_to_quotes.sql) — a quote created directly
+ * from an estimate (job_id left null — see createDraftQuote's "Estimate path"
+ * in packages/db/queries/quotes.ts) has NO job to cascade from, so deleting
+ * the estimate would just null out its estimate_id too, leaving both job_id
+ * AND estimate_id null. That violates the `quotes_has_job_or_estimate` CHECK
+ * constraint (confirmed via a direct diagnostic delete during PR B's
+ * employee-estimate-workflow-bot development: Postgres error 23514, "new row
+ * for relation quotes violates check constraint quotes_has_job_or_estimate"),
+ * which fails the whole DELETE statement — the estimate silently survives
+ * (this call's error isn't checked), and the customer delete two steps later
+ * fails on it instead with a confusing FK-violation message that doesn't
+ * mention quotes at all. So estimate-linked quotes must be deleted explicitly
+ * before the estimates delete below; their own quote_line_items cascade via
+ * `quote_id ON DELETE CASCADE` (0002_crm_core.sql). Properties are swept last
+ * (see deleteE2ETestProperties below) since jobs/estimates must be gone
  * first — see that function's doc comment for why properties need their own
  * additional safety check beyond "linked to this customer".
  */
@@ -238,6 +252,12 @@ async function deleteDependentRecords(
     }
 
     await client.from('jobs').delete().in('id', jobIds);
+  }
+
+  const { data: estimates } = await client.from('estimates').select('id').in('customer_id', customerIds);
+  const estimateIds = (estimates ?? []).map((estimate) => estimate.id);
+  if (estimateIds.length > 0) {
+    await client.from('quotes').delete().in('estimate_id', estimateIds);
   }
 
   await client.from('estimates').delete().in('customer_id', customerIds);

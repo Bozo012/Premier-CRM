@@ -196,6 +196,21 @@ export const lineItemEditor = {
   submitButton: (page: Page) => page.getByRole('button', { name: 'Add line item', exact: true }),
 };
 
+/**
+ * Quote detail page's line item editor
+ * (apps/web/app/(app)/quotes/_components/line-item-editor.tsx). Distinct
+ * `li-*` ids from invoices' `ili-*` line-item-editor above — never both on
+ * screen at once, but kept visibly distinct regardless.
+ */
+export const quoteLineItemEditor = {
+  addLineItemToggle: (page: Page) => page.getByRole('button', { name: '+ Add line item' }),
+  nameInput: (page: Page) => page.locator('#li-name'),
+  unitInput: (page: Page) => page.locator('#li-unit'),
+  quantityInput: (page: Page) => page.locator('#li-quantity'),
+  unitPriceInput: (page: Page) => page.locator('#li-unit-price'),
+  submitButton: (page: Page) => page.getByRole('button', { name: 'Add line item', exact: true }),
+};
+
 /** Invoice detail page's record-payment-form.tsx. */
 export const recordPaymentForm = {
   amountInput: (page: Page) => page.locator('#pay-amount'),

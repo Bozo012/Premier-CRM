@@ -80,6 +80,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
         </h1>
         <p className="text-sm text-muted-foreground">
           Created {formatDate(estimate.createdAt)}
+          {estimate.createdByName ? ` by ${estimate.createdByName}` : ''}
         </p>
       </header>
 
