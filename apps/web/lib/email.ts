@@ -26,7 +26,7 @@ function getFromAddress(): string {
   return process.env.RESEND_FROM_EMAIL ?? 'quotes@ppmnky.com';
 }
 
-function getAppUrl(): string {
+export function getAppUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 }
 

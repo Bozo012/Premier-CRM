@@ -166,6 +166,18 @@ function assertMarkerIsSafe(marker: string): void {
   }
 }
 
+/**
+ * Exported for bots that need a guarded service-role client for something
+ * beyond a plain row delete (e.g. employee-invite-bot's use of
+ * `auth.admin.generateLink()` to obtain a real confirmation link without an
+ * inbox — see tests/e2e/README.md "Employee invite bot"). Carries the same
+ * non-local-URL guard as the rest of this file; callers are still
+ * responsible for their own marker/email safety checks before using it.
+ */
+export function createGuardedServiceClient(): SupabaseClient<Database> {
+  return createCleanupServiceClient();
+}
+
 function createCleanupServiceClient(): SupabaseClient<Database> {
   const url = resolveSupabaseUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -347,5 +359,174 @@ export async function cleanupTestCustomerByMarker(
     ranCleanup: true,
     deletedCustomerIds: customerIds,
     message: `Deleted ${customerIds.length} test customer(s) matching marker "${marker}".`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Test-only Supabase Auth user cleanup (employee-invite-bot)
+// ---------------------------------------------------------------------------
+//
+// Employee-invite-bot creates real Supabase Auth users (via the real
+// signup-through-invite flow) that regular row-deletion can't clean up —
+// auth.users isn't reachable through cleanupTestCustomerByMarker's ordinary
+// table deletes. This is a materially more dangerous operation than deleting
+// customer rows (it removes a real login), so it's guarded more tightly
+// still: the target email itself must look like dedicated test data, not
+// just the marker passed alongside it.
+
+const TEST_ONLY_EMAIL_DOMAINS = ['example.com', 'example.invalid'];
+
+/**
+ * Resend hard-rejects sending to @example.com/@example.invalid recipients
+ * (confirmed via Auth logs: "550 Invalid `to` field. Please use our testing
+ * email address instead of domains like `example.com`") — so any test
+ * account that needs a REAL confirmation email delivered (i.e. goes through
+ * actual Supabase Auth signUp(), not just DB rows) can't use those domains.
+ * `delivered+<label>@resend.dev` is Resend's own documented, reserved test
+ * address — always accepted regardless of domain-verification state — with
+ * the `+label` free for per-run uniqueness. Narrow on purpose: only this
+ * exact reserved local-part prefix on this exact domain, not all of
+ * resend.dev generally.
+ */
+const RESEND_TEST_ADDRESS_PATTERN = /^delivered\+[a-z0-9._-]+@resend\.dev$/;
+
+/**
+ * True only for emails matching this suite's own test-account convention:
+ * either an "e2e"-prefixed local part on a domain that can never resolve to
+ * a real inbox (e2e-admin-bot@example.com, e2e.customer.crud.<x>@example.com),
+ * or Resend's reserved delivered+<label>@resend.dev test address (see above).
+ * Deliberately stricter than isTestData()/E2E_TEST_PREFIX (which only checks
+ * for a substring) since this guards actual account deletion, not a delete
+ * scoped to org_id + a unique marker.
+ */
+export function isTestOnlyEmail(email: string): boolean {
+  const lower = email.toLowerCase();
+  if (RESEND_TEST_ADDRESS_PATTERN.test(lower)) return true;
+
+  const [localPart, domain] = lower.split('@');
+  if (!localPart || !domain) return false;
+  return /^e2e[._-]/.test(localPart) && TEST_ONLY_EMAIL_DOMAINS.includes(domain);
+}
+
+function assertEmailIsTestOnly(email: string): void {
+  if (!isTestOnlyEmail(email)) {
+    throw new Error(
+      `Refusing to delete auth user "${email}" — it doesn't match this suite's test-only ` +
+        `email convention (e2e[.-_]-prefixed @${TEST_ONLY_EMAIL_DOMAINS.join(' or @')}, or ` +
+        `delivered+<label>@resend.dev). This guard exists so cleanup can never delete a real ` +
+        `login, including Kevin's or Brandon's real accounts.`
+    );
+  }
+}
+
+export interface DeleteTestAuthUserResult {
+  /** False when cleanup was skipped because credentials aren't configured (not a failure). */
+  ranCleanup: boolean;
+  deleted: boolean;
+  message: string;
+}
+
+/**
+ * Deletes a Supabase Auth user by email, deleting their org_members row
+ * first (FK references auth.users). Guards, in order:
+ *  1. `email` must match isTestOnlyEmail() — throws otherwise, always
+ *     enforced regardless of credentials.
+ *  2. Same credential/URL guards as cleanupTestCustomerByMarker (no-ops
+ *     without service-role creds; refuses a non-local Supabase URL unless
+ *     E2E_ALLOW_REMOTE_SUPABASE_CLEANUP=true).
+ *  3. Looks the user up by email via auth.admin.listUsers() (paginated) —
+ *     never by a caller-supplied id — so the email guard above is what's
+ *     actually authoritative, not something a caller could bypass by
+ *     passing an arbitrary user id alongside an innocuous-looking email.
+ */
+export async function deleteTestAuthUserByEmail(
+  email: string
+): Promise<DeleteTestAuthUserResult> {
+  assertEmailIsTestOnly(email);
+
+  if (!hasServiceRoleCleanupCredentials()) {
+    return {
+      ranCleanup: false,
+      deleted: false,
+      message:
+        'Skipped auth user cleanup: SUPABASE_SERVICE_ROLE_KEY (and/or NEXT_PUBLIC_SUPABASE_URL) ' +
+        'is not set in .env.test.',
+    };
+  }
+
+  const client = createCleanupServiceClient();
+  const lowerEmail = email.toLowerCase();
+
+  let userId: string | undefined;
+  for (let page = 1; page <= 20 && !userId; page += 1) {
+    const { data, error } = await client.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) {
+      throw new Error(`Auth user lookup failed: ${error.message}`);
+    }
+    userId = data.users.find((u) => u.email?.toLowerCase() === lowerEmail)?.id;
+    if (data.users.length < 200) break; // last page
+  }
+
+  if (!userId) {
+    return {
+      ranCleanup: true,
+      deleted: false,
+      message: `No auth user found for "${email}" — nothing to clean up.`,
+    };
+  }
+
+  await client.from('org_members').delete().eq('user_id', userId);
+
+  const { error: deleteError } = await client.auth.admin.deleteUser(userId);
+  if (deleteError) {
+    throw new Error(`Auth user delete failed: ${deleteError.message}`);
+  }
+
+  return { ranCleanup: true, deleted: true, message: `Deleted auth user "${email}".` };
+}
+
+export interface CleanupOrgInvitesResult {
+  ranCleanup: boolean;
+  deletedCount: number;
+  message: string;
+}
+
+/**
+ * Deletes org_invites rows for a test-only email (see isTestOnlyEmail) —
+ * regardless of status (pending/accepted/revoked/expired), so a bot can
+ * re-invite the same dedicated test address on the next run without
+ * tripping the partial-unique-index "already a pending invite" guard.
+ */
+export async function cleanupTestOrgInvitesByEmail(
+  email: string
+): Promise<CleanupOrgInvitesResult> {
+  assertEmailIsTestOnly(email);
+
+  if (!hasServiceRoleCleanupCredentials()) {
+    return {
+      ranCleanup: false,
+      deletedCount: 0,
+      message:
+        'Skipped invite cleanup: SUPABASE_SERVICE_ROLE_KEY (and/or NEXT_PUBLIC_SUPABASE_URL) ' +
+        'is not set in .env.test.',
+    };
+  }
+
+  const client = createCleanupServiceClient();
+  const { data, error } = await client
+    .from('org_invites')
+    .delete()
+    .ilike('email', email.toLowerCase())
+    .select('id');
+
+  if (error) {
+    throw new Error(`Invite cleanup failed: ${error.message}`);
+  }
+
+  const deletedCount = data?.length ?? 0;
+  return {
+    ranCleanup: true,
+    deletedCount,
+    message: `Deleted ${deletedCount} invite(s) for "${email}".`,
   };
 }

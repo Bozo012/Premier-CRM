@@ -138,8 +138,9 @@ function LoginForm() {
       </form>
 
       <p className="text-sm text-muted-foreground">
-        Need a contractor or staff account? Ask an owner or admin to create one
-        manually while invites are being rebuilt.
+        Need a contractor or staff account? Ask an owner or admin to send you
+        an invite from Team settings, then use the link in that invite to set
+        up your account.
       </p>
 
       {status ? <p className="text-sm text-red-600">{status}</p> : null}
