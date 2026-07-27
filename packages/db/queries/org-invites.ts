@@ -192,6 +192,17 @@ export async function getInviteByToken(
  * Delegates to accept_org_invite() (SQL function, service_role-only) for
  * atomicity — creates org_members + user_profiles and marks the invite
  * accepted in a single transaction.
+ *
+ * Known future concern (deliberately not addressed in the Auth Reset PR):
+ * the underlying SQL's `ON CONFLICT (org_id, user_id) DO UPDATE SET status =
+ * 'active'` reactivates a stale org_members row without touching `role`, so
+ * if a user is ever removed and re-invited with a DIFFERENT role than they
+ * held before, accepting that new invite keeps their old role rather than
+ * applying the invite's. Nothing in the app currently produces that stale
+ * row (there is no "change role" or "remove member" flow yet), so this is
+ * unreachable today — but the first role-management feature that removes or
+ * changes a member's role must also update this ON CONFLICT clause to set
+ * `role = EXCLUDED.role`.
  */
 export async function acceptOrgInvite(
   client: DbClient,

@@ -11,10 +11,16 @@ interface CopyInviteLinkButtonProps {
 }
 
 /**
- * Fallback for sharing an invite link manually. Exists because invite email
- * delivery (Resend) silently no-ops when RESEND_API_KEY isn't configured —
- * without this, an owner has no way to get the invite link to the invitee at
- * all. Uses window.location.origin rather than NEXT_PUBLIC_APP_URL so it's
+ * Fallback for sharing the join link manually (Auth Reset architecture —
+ * see team/actions.ts's createInviteAction). Only meaningful for the
+ * existing-confirmed-user join path: /invite/[token]/continue requires the
+ * visitor to already have a password to sign in with, so this link only
+ * ever works for someone who already has an account. A brand-new invitee
+ * has no such fallback — their only valid link is the one Supabase itself
+ * emails via admin.inviteUserByEmail(), which this app never sees or
+ * stores, so there is nothing else for this button to copy for them.
+ *
+ * Uses window.location.origin rather than NEXT_PUBLIC_APP_URL so it's
  * correct in any environment (local dev, preview deploys) without needing
  * that env var threaded through as a prop.
  */
@@ -22,7 +28,7 @@ export function CopyInviteLinkButton({ token }: CopyInviteLinkButtonProps) {
   const [justCopied, setJustCopied] = useState(false);
 
   async function handleCopy() {
-    const url = `${window.location.origin}/invite/${token}`;
+    const url = `${window.location.origin}/invite/${token}/continue`;
     try {
       await navigator.clipboard.writeText(url);
       setJustCopied(true);

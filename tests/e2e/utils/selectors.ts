@@ -29,7 +29,6 @@ export const routes = {
   services: '/services',
   settings: '/settings/website',
   team: '/team',
-  invite: '/invite',
 } as const;
 
 export const login = {
@@ -261,16 +260,4 @@ export const team = {
     team.pendingInviteCard(page, email).getByRole('button', { name: /resend/i }),
   revokeButton: (page: Page, email: string) =>
     team.pendingInviteCard(page, email).getByRole('button', { name: /revoke/i }),
-};
-
-/** `/invite/[token]` accept page (apps/web/app/invite/[token]/page.tsx). */
-export const inviteAcceptPage = {
-  setUpAccountHeading: (page: Page) => page.getByRole('heading', { name: 'Set up your account' }),
-  checkEmailHeading: (page: Page) => page.getByRole('heading', { name: 'Check your email' }),
-  invalidHeading: (page: Page) =>
-    page.getByRole('heading', { name: /invite expired|invite no longer valid/i }),
-  fullNameInput: (page: Page) => page.locator('#accept-fullName'),
-  passwordInput: (page: Page) => page.locator('#accept-password'),
-  createAccountButton: (page: Page) => page.getByRole('button', { name: 'Create account' }),
-  goToSignInLink: (page: Page) => page.getByRole('link', { name: /go to sign in/i }),
 };

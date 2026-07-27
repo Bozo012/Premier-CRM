@@ -53,23 +53,10 @@ export function getCustomerTwoAccount(): TestAccount {
   };
 }
 
-/** Dedicated E2E employee account — see employee-invite-bot.spec.ts. */
-export function getEmployeeAccount(): TestAccount {
-  return {
-    email: requireEnv('TEST_EMPLOYEE_EMAIL'),
-    password: requireEnv('TEST_EMPLOYEE_PASSWORD'),
-  };
-}
-
-export function getEmployeeName(): string {
-  return requireEnv('TEST_EMPLOYEE_NAME');
-}
-
 /**
- * Persistent E2E staff account — deliberately separate from
- * getEmployeeAccount() above (see .env.test.example's comment): that one is
- * deleted/recreated every employee-invite-bot run; this one stays active so
- * permissions/workflow bots can reuse it instead of re-provisioning per test.
+ * Persistent E2E staff account — stays active across runs so permissions/
+ * workflow bots can reuse it instead of re-provisioning per test (see
+ * .env.test.example's comment).
  */
 export function getStaffAccount(): TestAccount {
   return {
@@ -97,14 +84,6 @@ export function hasCustomerCredentials(): boolean {
 
 export function hasCustomerTwoCredentials(): boolean {
   return !!process.env.TEST_CUSTOMER_2_EMAIL && !!process.env.TEST_CUSTOMER_2_PASSWORD;
-}
-
-export function hasEmployeeCredentials(): boolean {
-  return (
-    !!process.env.TEST_EMPLOYEE_EMAIL &&
-    !!process.env.TEST_EMPLOYEE_PASSWORD &&
-    !!process.env.TEST_EMPLOYEE_NAME
-  );
 }
 
 export function hasStaffCredentials(): boolean {
