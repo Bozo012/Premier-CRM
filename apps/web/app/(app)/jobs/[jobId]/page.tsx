@@ -21,6 +21,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { CreateDraftQuoteButton } from '../_components/create-draft-quote-button';
 import { CreateInvoiceButton } from '../_components/create-invoice-button';
+import { ScheduleJobForm } from '../_components/schedule-job-form';
 
 interface JobDetailPageProps {
   params: Promise<{ jobId: string }>;
@@ -56,7 +57,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
 
   const serviceClient = createServiceClient();
 
-  const [result, quotesResult, sourceEstimateResult, invoicesResult, invoiceTotalsResult] =
+  const [result, quotesResult, sourceEstimateResult, sourceRequestResult, invoicesResult, invoiceTotalsResult] =
     await Promise.all([
       getJobById(supabase, {
         jobId,
@@ -70,6 +71,12 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         .from('estimates')
         .select('id, title, estimate_number')
         .eq('converted_job_id', jobId)
+        .eq('org_id', orgId)
+        .maybeSingle(),
+      serviceClient
+        .from('service_requests')
+        .select('id, request_number, service_title')
+        .eq('job_id', jobId)
         .eq('org_id', orgId)
         .maybeSingle(),
       listInvoicesForJob(supabase, {
@@ -113,6 +120,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const { category, customer, job, phases, property } = result.data;
   const quotes = quotesResult.data;
   const sourceEstimate = sourceEstimateResult.data ?? null;
+  const sourceRequest = sourceRequestResult.data ?? null;
   const invoices = invoicesResult.data;
   // Live aggregate, not the stale jobs.invoiced_total/paid_total columns —
   // those have no maintaining trigger and would silently drift from reality.
@@ -178,6 +186,14 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
             href={`/estimates/${sourceEstimate.id}`}
           />
         ) : null}
+        {sourceRequest ? (
+          <InfoCard
+            label="Source request"
+            value={sourceRequest.service_title?.trim() || sourceRequest.request_number || 'View request'}
+            helper={sourceRequest.request_number ?? 'Request'}
+            href={`/requests/${sourceRequest.id}`}
+          />
+        ) : null}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr,0.95fr]">
@@ -213,7 +229,18 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
           <CardHeader>
             <CardTitle>Schedule & financial snapshot</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
+            {job.status === 'approved' ? (
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-sm font-medium text-foreground">Ready to schedule</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Use this step to turn the approved work order into a scheduled job.
+                </p>
+                <div className="mt-3">
+                  <ScheduleJobForm jobId={job.id} />
+                </div>
+              </div>
+            ) : null}
             <DetailRow
               label="Estimated duration"
               value={formatDuration(job.estimated_duration_minutes)}

@@ -71,6 +71,29 @@ describe('email lifecycle templates', () => {
     expect(sendMock.mock.calls[0]?.[0]?.text).toContain('Lawn cleanup');
   });
 
+  it('sends the job-scheduled email with the work window', async () => {
+    const { sendJobScheduledEmail } = await import('./email');
+
+    const result = await sendJobScheduledEmail({
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Smith',
+      jobTitle: 'Fence repair',
+      propertyAddress: '123 Main St, Nashville, TN 37201',
+      scheduledEnd: '2026-08-08T15:00:00.000Z',
+      scheduledStart: '2026-08-08T13:30:00.000Z',
+    });
+
+    expect(result).toEqual({ sent: true });
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.stringContaining('Your work is scheduled'),
+        to: 'customer@example.com',
+      })
+    );
+    expect(sendMock.mock.calls[0]?.[0]?.text).toContain('Fence repair');
+    expect(sendMock.mock.calls[0]?.[0]?.text).toContain('123 Main St, Nashville, TN 37201');
+  });
+
   it('sends the payment receipt email with the payment summary', async () => {
     const { sendPaymentReceiptEmail } = await import('./email');
 

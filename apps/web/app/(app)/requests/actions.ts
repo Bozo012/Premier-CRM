@@ -40,32 +40,36 @@ function readString(formData: FormData, key: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-// ---------------------------------------------------------------------------
-// Create estimate from request
-// ---------------------------------------------------------------------------
-
-export type CreateEstimateFromRequestActionState = Result<{ estimateId: string }>;
-
-export async function createEstimateFromRequestAction(
-  _prevState: CreateEstimateFromRequestActionState | null,
-  formData: FormData
-): Promise<CreateEstimateFromRequestActionState> {
-  const contextResult = await getRequestActionContext();
-  if (!contextResult.success) return contextResult;
-  const { orgId, userId } = contextResult.data;
-
-  const requestId = readString(formData, 'requestId');
-  if (!requestId) {
-    return err(ErrorCode.VALIDATION_ERROR, 'Missing request ID.');
-  }
-
+async function getRequestConversionContext(args: {
+  orgId: string;
+  requestId: string;
+}): Promise<
+  Result<{
+    customerId: string;
+    estimateTitle: string;
+    orgId: string;
+    propertyId: string;
+    request: {
+      id: string;
+      customer_id: string | null;
+      estimate_id: string | null;
+      job_id: string | null;
+      property_id: string | null;
+      service_category: string | null;
+      service_description: string | null;
+      service_title: string;
+    };
+  }>
+> {
   const client = createServiceClient();
 
   const { data: request, error: fetchError } = await client
     .from('service_requests')
-    .select('id, service_title, service_category, customer_id, property_id, estimate_id')
-    .eq('id', requestId)
-    .eq('org_id', orgId)
+    .select(
+      'id, service_title, service_category, service_description, customer_id, property_id, estimate_id, job_id'
+    )
+    .eq('id', args.requestId)
+    .eq('org_id', args.orgId)
     .maybeSingle();
 
   if (fetchError) {
@@ -78,6 +82,10 @@ export async function createEstimateFromRequestAction(
 
   if (request.estimate_id) {
     return err(ErrorCode.VALIDATION_ERROR, 'An estimate already exists for this request.');
+  }
+
+  if (request.job_id) {
+    return err(ErrorCode.VALIDATION_ERROR, 'A work order already exists for this request.');
   }
 
   if (!request.customer_id) {
@@ -108,15 +116,48 @@ export async function createEstimateFromRequestAction(
     );
   }
 
-  const estimateTitle = request.service_category ?? request.service_title;
+  return ok({
+    customerId: request.customer_id,
+    estimateTitle: request.service_category ?? request.service_title,
+    orgId: args.orgId,
+    propertyId,
+    request,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Create estimate from request
+// ---------------------------------------------------------------------------
+
+export type CreateEstimateFromRequestActionState = Result<{ estimateId: string }>;
+
+export async function createEstimateFromRequestAction(
+  _prevState: CreateEstimateFromRequestActionState | null,
+  formData: FormData
+): Promise<CreateEstimateFromRequestActionState> {
+  const contextResult = await getRequestActionContext();
+  if (!contextResult.success) return contextResult;
+  const { orgId, userId } = contextResult.data;
+
+  const requestId = readString(formData, 'requestId');
+  if (!requestId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Missing request ID.');
+  }
+
+  const conversionResult = await getRequestConversionContext({ orgId, requestId });
+  if (!conversionResult.success) return conversionResult;
+  const { customerId, estimateTitle, propertyId, request } = conversionResult.data;
+
+  const client = createServiceClient();
 
   const { data: newEstimate, error: insertError } = await client
     .from('estimates')
     .insert({
       org_id: orgId,
-      customer_id: request.customer_id,
+      customer_id: customerId,
       property_id: propertyId,
       service_request_id: requestId,
+      description: request.service_description ?? null,
       title: estimateTitle,
       status: 'draft',
       created_by: userId,
@@ -147,6 +188,71 @@ export async function createEstimateFromRequestAction(
   revalidatePath('/estimates');
 
   return ok({ estimateId: newEstimate.id });
+}
+
+// ---------------------------------------------------------------------------
+// Direct work-order job from request
+// ---------------------------------------------------------------------------
+
+export type CreateJobFromRequestActionState = Result<{ jobId: string }>;
+
+export async function createJobFromRequestAction(
+  _prevState: CreateJobFromRequestActionState | null,
+  formData: FormData
+): Promise<CreateJobFromRequestActionState> {
+  const contextResult = await getRequestActionContext();
+  if (!contextResult.success) return contextResult;
+  const { orgId, userId } = contextResult.data;
+
+  const requestId = readString(formData, 'requestId');
+  if (!requestId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Missing request ID.');
+  }
+
+  const conversionResult = await getRequestConversionContext({ orgId, requestId });
+  if (!conversionResult.success) return conversionResult;
+  const { customerId, estimateTitle, propertyId, request } = conversionResult.data;
+
+  const client = createServiceClient();
+
+  const { data: job, error: jobError } = await client
+    .from('jobs')
+    .insert({
+      org_id: orgId,
+      customer_id: customerId,
+      property_id: propertyId,
+      description: request.service_description ?? null,
+      title: estimateTitle,
+      status: 'approved',
+      created_by: userId,
+    })
+    .select('id')
+    .single();
+
+  if (jobError || !job) {
+    return err(ErrorCode.DB_ERROR, jobError?.message ?? 'Failed to create job.');
+  }
+
+  const { error: updateError } = await client
+    .from('service_requests')
+    .update({
+      job_id: job.id,
+      status: 'approved',
+      converted_at: new Date().toISOString(),
+    })
+    .eq('id', requestId)
+    .eq('org_id', orgId);
+
+  if (updateError) {
+    return err(ErrorCode.DB_ERROR, updateError.message);
+  }
+
+  revalidatePath(`/requests/${requestId}`);
+  revalidatePath('/requests');
+  revalidatePath(`/jobs/${job.id}`);
+  revalidatePath('/jobs');
+
+  return ok({ jobId: job.id });
 }
 
 // ---------------------------------------------------------------------------

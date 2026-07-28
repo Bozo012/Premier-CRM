@@ -9,6 +9,7 @@ exist as real app actions.
 | --- | --- | --- |
 | Service request submitted | `POST /api/v1/service-requests` | `service-request-confirmation` |
 | Site visit scheduled | `updateEstimateStatusAction` when `draft -> site_visit_scheduled` | `site-visit-scheduled` |
+| Work scheduled | `scheduleJobAction` when `approved -> scheduled` | `job-scheduled` |
 | Quote sent | `sendQuoteAction` | `quote-delivery` |
 | Invoice sent | `sendInvoiceAction` | `invoice-delivery` |
 | Payment recorded | `recordPaymentAction` | `payment-receipt` |
@@ -31,13 +32,11 @@ Current product decisions:
 - **request viewed** is a portal/dashboard status only, not an email
 - **estimate created** is not an email step; the customer email happens when the
   quote is actually sent
-- **work scheduled** should become its own customer email later, but only after
-  the app has a real staff-side scheduling mutation for jobs
 
 That keeps this branch compatible with the later two-path intake work:
 
 - **inspection-first path**: request → viewed (portal only) → site visit scheduled email → quote sent email
-- **fast path**: request → viewed (portal only) → quote/invoice flow as needed
+- **fast path**: request → viewed (portal only) → direct work order → work scheduled email → invoice/payment flow as needed
 
 ## Delivery behavior
 

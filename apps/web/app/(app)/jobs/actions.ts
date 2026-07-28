@@ -10,12 +10,26 @@ import {
   ok,
   type Result,
 } from '@premier/shared';
-import { createDraftInvoiceFromJob, createDraftQuote, createServiceClient, getActiveOrgContext } from '@premier/db';
+import {
+  createDraftInvoiceFromJob,
+  createDraftQuote,
+  createServiceClient,
+  getActiveOrgContext,
+  getJobById,
+} from '@premier/db';
 
+import { sendJobScheduledNotification } from '@/lib/customer-lifecycle-notifications';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 export type CreateDraftQuoteActionState = Result<{ quoteId: string }>;
 export type CreateInvoiceFromJobPageActionState = Result<{ invoiceId: string }>;
+export type ScheduleJobActionState = Result<{
+  jobId: string;
+  notificationSent: boolean;
+  scheduledEnd: string | null;
+  scheduledStart: string;
+  status: 'scheduled';
+}>;
 
 async function getJobActionContext(): Promise<
   Result<{ orgId: string; userId: string }>
@@ -42,6 +56,24 @@ async function getJobActionContext(): Promise<
     orgId: orgContextResult.data.orgId,
     userId: user.id,
   });
+}
+
+function readString(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function parseIsoDateTime(value: string, label: string): Result<string> {
+  if (!value) {
+    return err(ErrorCode.VALIDATION_ERROR, `${label} is required.`);
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return err(ErrorCode.VALIDATION_ERROR, `${label} is invalid.`);
+  }
+
+  return ok(parsed.toISOString());
 }
 
 export async function createDraftQuoteAction(
@@ -164,6 +196,127 @@ export async function createStandaloneJobAction(
   revalidatePath('/jobs');
 
   return ok({ id: newJob.id });
+}
+
+export async function scheduleJobAction(
+  _previousState: ScheduleJobActionState | null,
+  formData: FormData
+): Promise<ScheduleJobActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId } = access.data;
+
+  const jobId = readString(formData, 'jobId');
+  const scheduledStartInput = readString(formData, 'scheduledStart');
+  const scheduledEndInput = readString(formData, 'scheduledEnd');
+
+  if (!jobId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Job ID is required.');
+  }
+
+  const scheduledStartResult = parseIsoDateTime(scheduledStartInput, 'Scheduled start');
+  if (!scheduledStartResult.success) {
+    return scheduledStartResult;
+  }
+
+  const scheduledEndResult = scheduledEndInput
+    ? parseIsoDateTime(scheduledEndInput, 'Scheduled end')
+    : ok<string | null>(null);
+  if (!scheduledEndResult.success) {
+    return scheduledEndResult;
+  }
+
+  const scheduledStart = scheduledStartResult.data;
+  const scheduledEnd = scheduledEndResult.data;
+
+  if (scheduledEnd && new Date(scheduledEnd).getTime() < new Date(scheduledStart).getTime()) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      'Scheduled end must be after the scheduled start.'
+    );
+  }
+
+  const serviceClient = createServiceClient();
+
+  const { data: job, error: jobError } = await serviceClient
+    .from('jobs')
+    .select('id, status')
+    .eq('id', jobId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (jobError) {
+    return err(ErrorCode.DB_ERROR, jobError.message);
+  }
+
+  if (!job) {
+    return err(ErrorCode.NOT_FOUND, 'Job not found.');
+  }
+
+  if (job.status !== 'approved') {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      `Only approved jobs can be scheduled. This job is currently ${job.status}.`
+    );
+  }
+
+  const { error: updateError } = await serviceClient
+    .from('jobs')
+    .update({
+      scheduled_end: scheduledEnd,
+      scheduled_start: scheduledStart,
+      status: 'scheduled',
+    })
+    .eq('id', jobId)
+    .eq('org_id', orgId);
+
+  if (updateError) {
+    return err(ErrorCode.DB_ERROR, updateError.message);
+  }
+
+  const { data: linkedRequest, error: requestLookupError } = await serviceClient
+    .from('service_requests')
+    .select('id')
+    .eq('job_id', jobId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (requestLookupError) {
+    return err(ErrorCode.DB_ERROR, requestLookupError.message);
+  }
+
+  if (linkedRequest) {
+    const { error: requestUpdateError } = await serviceClient
+      .from('service_requests')
+      .update({ status: 'scheduled' })
+      .eq('id', linkedRequest.id)
+      .eq('org_id', orgId);
+
+    if (requestUpdateError) {
+      return err(ErrorCode.DB_ERROR, requestUpdateError.message);
+    }
+  }
+
+  const jobDetailResult = await getJobById(serviceClient, { jobId, orgId });
+  const notificationSent = jobDetailResult.success
+    ? (await sendJobScheduledNotification(jobDetailResult.data)).sent
+    : false;
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath('/jobs');
+  revalidatePath('/requests');
+
+  if (linkedRequest) {
+    revalidatePath(`/requests/${linkedRequest.id}`);
+  }
+
+  return ok({
+    jobId,
+    notificationSent,
+    scheduledEnd,
+    scheduledStart,
+    status: 'scheduled',
+  });
 }
 
 export async function createInvoiceFromJobPageAction(

@@ -1,17 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  sendJobScheduledNotification,
   sendEstimateSiteVisitScheduledNotification,
   sendPaymentRecordedNotification,
   sendServiceRequestSubmittedNotification,
 } from './customer-lifecycle-notifications';
 import {
+  sendJobScheduledEmail,
   sendPaymentReceiptEmail,
   sendServiceRequestConfirmationEmail,
   sendSiteVisitScheduledEmail,
 } from './email';
 
 vi.mock('./email', () => ({
+  sendJobScheduledEmail: vi.fn(),
   sendPaymentReceiptEmail: vi.fn(),
   sendServiceRequestConfirmationEmail: vi.fn(),
   sendSiteVisitScheduledEmail: vi.fn(),
@@ -20,6 +23,7 @@ vi.mock('./email', () => ({
 describe('customer lifecycle notifications', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(sendJobScheduledEmail).mockResolvedValue({ sent: true });
     vi.mocked(sendPaymentReceiptEmail).mockResolvedValue({ sent: true });
     vi.mocked(sendServiceRequestConfirmationEmail).mockResolvedValue({ sent: true });
     vi.mocked(sendSiteVisitScheduledEmail).mockResolvedValue({ sent: true });
@@ -101,6 +105,57 @@ describe('customer lifecycle notifications', () => {
 
     expect(result).toEqual({ sent: false });
     expect(sendSiteVisitScheduledEmail).not.toHaveBeenCalled();
+  });
+
+  it('sends job-scheduled email only for scheduled jobs with a customer email', async () => {
+    await sendJobScheduledNotification({
+      customer: {
+        displayName: 'Jane Smith',
+        email: 'customer@example.com',
+      },
+      job: {
+        job_number: 'JOB-1001',
+        scheduled_end: '2026-08-08T15:00:00.000Z',
+        scheduled_start: '2026-08-08T13:30:00.000Z',
+        status: 'scheduled',
+        title: 'Fence repair',
+      },
+      property: {
+        addressLine1: '123 Main St',
+        city: 'Nashville',
+        state: 'TN',
+        zip: '37201',
+      },
+    } as never);
+
+    expect(sendJobScheduledEmail).toHaveBeenCalledWith({
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Smith',
+      jobTitle: 'Fence repair',
+      propertyAddress: '123 Main St, Nashville, TN 37201',
+      scheduledEnd: '2026-08-08T15:00:00.000Z',
+      scheduledStart: '2026-08-08T13:30:00.000Z',
+    });
+  });
+
+  it('skips job-scheduled email when the job is not scheduled', async () => {
+    const result = await sendJobScheduledNotification({
+      customer: {
+        displayName: 'Jane Smith',
+        email: 'customer@example.com',
+      },
+      job: {
+        job_number: 'JOB-1001',
+        scheduled_end: null,
+        scheduled_start: null,
+        status: 'approved',
+        title: 'Fence repair',
+      },
+      property: null,
+    } as never);
+
+    expect(result).toEqual({ sent: false });
+    expect(sendJobScheduledEmail).not.toHaveBeenCalled();
   });
 
   it('sends payment receipt email with the recorded payment details', async () => {

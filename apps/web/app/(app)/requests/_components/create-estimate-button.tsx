@@ -23,10 +23,10 @@ export function CreateEstimateButton({ requestId }: CreateEstimateButtonProps) {
   useEffect(() => {
     if (!state) return;
     if (state.success) {
-      toast.success('Estimate created.');
+      toast.success('Inspection flow started.');
       router.push(`/estimates/${state.data.estimateId}`);
     } else {
-      toast.error(state.error ?? 'Could not create estimate.');
+      toast.error(state.error ?? 'Could not start inspection flow.');
     }
   }, [state, router]);
 
@@ -38,7 +38,7 @@ export function CreateEstimateButton({ requestId }: CreateEstimateButtonProps) {
         disabled={isPending}
         className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90 disabled:pointer-events-none disabled:opacity-50"
       >
-        {isPending ? 'Creating estimate…' : 'Create estimate'}
+        {isPending ? 'Starting flow…' : 'Start inspection flow'}
       </button>
     </form>
   );
