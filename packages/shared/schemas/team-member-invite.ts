@@ -13,15 +13,3 @@ export const TeamMemberInviteSchema = z.object({
 });
 
 export type TeamMemberInvite = z.infer<typeof TeamMemberInviteSchema>;
-
-export const AcceptTeamMemberInviteSchema = z.object({
-  token: z.string().uuid(),
-  fullName: z
-    .string()
-    .trim()
-    .min(1, 'Full name is required.')
-    .max(120, 'Full name must be 120 characters or fewer.'),
-  password: z.string().min(8, 'Use at least 8 characters for your password.'),
-});
-
-export type AcceptTeamMemberInvite = z.infer<typeof AcceptTeamMemberInviteSchema>;

@@ -27,11 +27,7 @@ export async function loginAsCustomer(session: TestSession): Promise<void> {
   session.isCustomerLoggedIn = true;
 }
 
-/**
- * Logs the session's page in as the persistent E2E staff (employee) account
- * — see utils/auth.ts's getStaffAccount() for why this is a separate
- * identity from the employee-invite-bot's own account.
- */
+/** Logs the session's page in as the persistent E2E staff (employee) account. */
 export async function loginAsStaff(session: TestSession): Promise<void> {
   await session.metrics.measure('Login', () => loginAs(session.page, getStaffAccount()));
   session.isStaffLoggedIn = true;

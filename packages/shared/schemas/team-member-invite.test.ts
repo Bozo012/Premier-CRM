@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { AcceptTeamMemberInviteSchema, TeamMemberInviteSchema } from './team-member-invite';
-
-const UUID = '9f0d1a34-2b7c-4e5f-8a9b-0c1d2e3f4a5b';
+import { TeamMemberInviteSchema } from './team-member-invite';
 
 describe('TeamMemberInviteSchema', () => {
   const valid = { email: 'jane@example.com', fullName: 'Jane Doe', role: 'employee' };
@@ -29,25 +27,5 @@ describe('TeamMemberInviteSchema', () => {
     for (const role of ['admin', 'subcontractor', 'viewer']) {
       expect(TeamMemberInviteSchema.safeParse({ ...valid, role }).success).toBe(true);
     }
-  });
-});
-
-describe('AcceptTeamMemberInviteSchema', () => {
-  const valid = { token: UUID, fullName: 'Jane Doe', password: 'longenoughpassword' };
-
-  it('accepts valid accept-invite input', () => {
-    expect(AcceptTeamMemberInviteSchema.safeParse(valid).success).toBe(true);
-  });
-
-  it('rejects a non-uuid token', () => {
-    expect(AcceptTeamMemberInviteSchema.safeParse({ ...valid, token: 'abc' }).success).toBe(
-      false
-    );
-  });
-
-  it('rejects a password shorter than 8 characters', () => {
-    expect(AcceptTeamMemberInviteSchema.safeParse({ ...valid, password: 'short' }).success).toBe(
-      false
-    );
   });
 });

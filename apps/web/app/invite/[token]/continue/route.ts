@@ -5,18 +5,25 @@ import { acceptOrgInvite, createServiceClient, getInviteByToken } from '@premier
 import { getServerSupabase } from '@/lib/supabase-server';
 
 /**
- * Reached after /auth/confirm establishes a session for a brand-new invitee
- * (see that route's doc comment for the full round-trip). By this point the
- * user's email is Supabase-confirmed, so it's safe to run accept_org_invite
- * — this is the actual "join the org" step, deferred until after
- * confirmation rather than running immediately post-signUp (see
- * apps/web/app/invite/actions.ts).
+ * Auth Reset architecture — this route is now ONLY the "existing confirmed
+ * user joins another organization" path (see team/actions.ts's
+ * createInviteAction and the app email it sends): a person who already has
+ * a confirmed Supabase Auth account, invited to join an org they don't yet
+ * belong to. Brand-new users no longer come through here at all — they go
+ * through Supabase's own "Invite user" email straight to
+ * /auth/accept-invite, which establishes their session itself.
+ *
+ * Because this route requires the visitor to already be signed in (there's
+ * no email link establishing a session here — the join email links
+ * straight to this URL), an unauthenticated visit redirects to /login with
+ * this URL as `redirectTo`, then lands back here once they've signed in
+ * with their existing password.
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
-  function redirectWithMessage(message: string) {
-    const url = new URL(`/invite/${token}`, request.url);
+  function redirectToLoginWithMessage(message: string) {
+    const url = new URL('/login', request.url);
     url.searchParams.set('message', message);
     return NextResponse.redirect(url);
   }
@@ -27,24 +34,39 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return redirectWithMessage('Please confirm your email to continue.');
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirectTo', `/invite/${token}/continue`);
+    return NextResponse.redirect(loginUrl);
   }
 
   const serviceClient = createServiceClient();
   const inviteResult = await getInviteByToken(serviceClient, { token });
   if (!inviteResult.success) {
-    return redirectWithMessage('This invite could not be found.');
+    return redirectToLoginWithMessage('This invite could not be found.');
   }
   const invite = inviteResult.data;
 
+  // Idempotent re-open: this exact user already completed this exact
+  // invite — never re-run acceptance or treat it as an error.
+  if (invite.status === 'accepted' && invite.accepted_user_id === user.id) {
+    return NextResponse.redirect(new URL('/today', request.url));
+  }
+
   if (invite.status !== 'pending') {
-    return redirectWithMessage('This invite has already been used or is no longer valid.');
+    await supabase.auth.signOut();
+    return redirectToLoginWithMessage('This invite has already been used or is no longer valid.');
   }
   if (new Date(invite.expires_at) < new Date()) {
-    return redirectWithMessage('This invite has expired. Ask an owner or admin to send a new one.');
+    await supabase.auth.signOut();
+    return redirectToLoginWithMessage(
+      'This invite has expired. Ask an owner or admin to send a new one.'
+    );
   }
   if (user.email?.toLowerCase() !== invite.email.toLowerCase()) {
-    return redirectWithMessage('This invite was issued to a different email address.');
+    await supabase.auth.signOut();
+    return redirectToLoginWithMessage(
+      `This invite was issued to ${invite.email}. Sign in with that email address instead.`
+    );
   }
 
   const fullName =
@@ -58,8 +80,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   });
 
   if (!acceptResult.success) {
-    return redirectWithMessage(
-      `Your account was confirmed, but we couldn't finish joining the team: ${acceptResult.error}. Contact an owner or admin.`
+    return redirectToLoginWithMessage(
+      `We couldn't finish joining the team: ${acceptResult.error}. Contact an owner or admin.`
     );
   }
 
