@@ -16,6 +16,8 @@ import {
 } from '@premier/shared';
 import { createServiceRequest, createServiceClient } from '@premier/db';
 
+import { sendServiceRequestSubmittedNotification } from '@/lib/customer-lifecycle-notifications';
+
 const PREMIER_ORG_ID =
   process.env.PREMIER_ORG_ID ?? 'a0000000-0000-0000-0000-000000000001';
 
@@ -262,6 +264,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 500, headers: corsHeaders }
     );
   }
+
+  await sendServiceRequestSubmittedNotification({
+    customerEmail: parsed.data.emailAddress,
+    customerName: `${parsed.data.firstName} ${parsed.data.lastName}`.trim(),
+    preferredDateTime: parsed.data.preferredDateTime || null,
+    propertyAddress: [parsed.data.addressLine1, `${parsed.data.city}, ${parsed.data.state} ${parsed.data.zipCode}`]
+      .filter(Boolean)
+      .join(', '),
+    requestNumber: result.data.requestNumber,
+    serviceTitle: parsed.data.serviceCategory,
+  });
 
   return NextResponse.json(
     {

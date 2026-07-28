@@ -34,6 +34,7 @@ import {
 } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
+import { sendPaymentRecordedNotification } from '@/lib/customer-lifecycle-notifications';
 import { sendInvoiceEmail } from '@/lib/email';
 
 export type LineItemActionState = Result<{ lineItemId: string }>;
@@ -450,6 +451,19 @@ export async function recordPaymentAction(
     .maybeSingle();
   if (invoice?.job_id) {
     revalidatePath(`/jobs/${invoice.job_id}`);
+  }
+
+  const invoiceDetail = await getInvoiceById(client, {
+    invoiceId: parsed.data.invoiceId,
+    orgId,
+  });
+  if (invoiceDetail.success) {
+    await sendPaymentRecordedNotification(invoiceDetail.data, {
+      amount: parsed.data.amount,
+      method: parsed.data.method,
+      paidAt: parsed.data.paidAt,
+      reference: parsed.data.reference ?? null,
+    });
   }
 
   return ok({ paymentId: result.data.id });
