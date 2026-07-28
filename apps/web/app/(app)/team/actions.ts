@@ -20,11 +20,65 @@ import {
 } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
-import { sendTeamInviteEmail } from '@/lib/email';
+import { getAppUrl, sendExistingUserJoinEmail } from '@/lib/email';
+import { findAuthUserByEmail } from '@/lib/auth-admin';
 
 /** "employee" -> "Employee" — for the invite email's human-readable role line. */
 function displayRoleLabel(role: string): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+/**
+ * Auth Reset architecture: exactly one email per invite, and which one
+ * depends entirely on whether the address already has a CONFIRMED Supabase
+ * Auth account.
+ *
+ *  - No account yet, or an account that was invited but never confirmed:
+ *    `admin.inviteUserByEmail()` — Supabase's own native invite email,
+ *    sent by Supabase itself. Never combined with a second, custom email
+ *    for the same new user.
+ *  - Already has a confirmed account (an existing employee/owner/etc being
+ *    invited into another org, or re-invited after their first invite
+ *    email was lost): our own application email
+ *    (sendExistingUserJoinEmail()) with a link to /invite/[token]/continue,
+ *    which requires them to actually sign in with their existing password
+ *    before it will activate anything — see that route's doc comment.
+ *
+ * Used by both createInviteAction (new invite) and resendInviteAction
+ * (still-pending invite) so a resend re-evaluates which path currently
+ * applies rather than assuming it hasn't changed.
+ */
+async function sendInvitationEmail(args: {
+  serviceClient: ReturnType<typeof createServiceClient>;
+  invite: OrgInvite;
+  fullName: string;
+  inviterName: string;
+  orgName: string;
+}): Promise<{ sent: boolean }> {
+  const { serviceClient, invite, fullName, inviterName, orgName } = args;
+
+  const existingUser = await findAuthUserByEmail(serviceClient, invite.email);
+
+  if (!existingUser || !existingUser.confirmedAt) {
+    const { error } = await serviceClient.auth.admin.inviteUserByEmail(invite.email, {
+      redirectTo: `${getAppUrl()}/auth/accept-invite`,
+      data: { full_name: fullName },
+    });
+    if (error) {
+      console.error('[team] Supabase inviteUserByEmail failed:', error.message);
+    }
+    return { sent: !error };
+  }
+
+  return sendExistingUserJoinEmail({
+    displayRole: displayRoleLabel(invite.role),
+    expiresAt: invite.expires_at,
+    fullName,
+    joinUrl: `/invite/${invite.token}/continue`,
+    inviterName,
+    orgName,
+    toEmail: invite.email,
+  });
 }
 
 interface TeamActionContext {
@@ -93,14 +147,12 @@ export async function createInviteAction(
     serviceClient.from('organizations').select('name').eq('id', orgId).maybeSingle(),
   ]);
 
-  const { sent } = await sendTeamInviteEmail({
-    displayRole: displayRoleLabel(inviteResult.data.role),
-    expiresAt: inviteResult.data.expires_at,
+  const { sent } = await sendInvitationEmail({
+    serviceClient,
+    invite: inviteResult.data,
     fullName: parsed.data.fullName,
-    inviteUrl: `/invite/${inviteResult.data.token}`,
     inviterName: inviterProfile?.full_name?.trim() || 'A team member',
     orgName: org?.name?.trim() || 'the team',
-    toEmail: parsed.data.email,
   });
 
   revalidatePath('/team');
@@ -142,14 +194,12 @@ export async function resendInviteAction(
     serviceClient.from('organizations').select('name').eq('id', orgId).maybeSingle(),
   ]);
 
-  const { sent } = await sendTeamInviteEmail({
-    displayRole: displayRoleLabel(invite.role),
-    expiresAt: invite.expires_at,
+  const { sent } = await sendInvitationEmail({
+    serviceClient,
+    invite,
     fullName: invite.full_name,
-    inviteUrl: `/invite/${invite.token}`,
     inviterName: inviterProfile?.full_name?.trim() || 'A team member',
     orgName: org?.name?.trim() || 'the team',
-    toEmail: invite.email,
   });
 
   revalidatePath('/team');

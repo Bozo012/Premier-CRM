@@ -24,6 +24,23 @@ function LoginForm() {
 
   const redirectTo = normalizeRedirectPath(searchParams.get('redirectTo'));
 
+  // Surfaces a message from a server-side redirect (e.g. /invite/[token]/
+  // continue's join-flow error states). Depends on `searchParams` rather
+  // than running once on mount: signing in from THIS page can itself
+  // redirect back to `/login?message=...` (e.g. /invite/[token]/continue
+  // refusing a revoked/expired/wrong-email invite) without unmounting this
+  // component, since it's the same route — an empty dependency array would
+  // silently never pick up that message. Re-running only when the
+  // searchParams object actually changes (a real navigation) still can't
+  // clobber a later sign-in attempt's own status update, since that's set
+  // by a direct user action, not a searchParams change.
+  useEffect(() => {
+    const message = searchParams.get('message');
+    if (message) {
+      setStatus(message);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     const supabase = getBrowserSupabase();
 

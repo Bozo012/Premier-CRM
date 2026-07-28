@@ -130,30 +130,42 @@ export async function sendInvoiceEmail(
 // Team invite email
 // ---------------------------------------------------------------------------
 
-export interface SendTeamInviteEmailArgs {
+export interface SendExistingUserJoinEmailArgs {
   /** Human-readable role label, e.g. "Employee", "Admin" — not the raw enum value. */
   displayRole: string;
   /** ISO timestamp — org_invites.expires_at. */
   expiresAt: string;
   fullName: string;
-  inviteUrl: string; // relative path, e.g. /invite/{token}
+  /** relative path — always /invite/{token}/continue for this flow. */
+  joinUrl: string;
   inviterName: string;
   /** The actual organization's name — never hardcode a business name here. */
   orgName: string;
   toEmail: string;
 }
 
-export async function sendTeamInviteEmail(
-  args: SendTeamInviteEmailArgs
+/**
+ * Auth Reset architecture (PR: "Auth Reset and Standard Supabase Invitation
+ * Architecture") — this is the ONLY custom application email in the
+ * onboarding flow, and it is used for exactly one scenario: an email that
+ * already has a confirmed Supabase Auth account being invited to join an
+ * (additional) organization. A genuinely new address never reaches this
+ * function — it gets Supabase's own native "Invite user" email instead
+ * (via `supabase.auth.admin.inviteUserByEmail()`), so there is never a
+ * double-send for the same new user. See team/actions.ts's
+ * createInviteAction for the branching logic.
+ */
+export async function sendExistingUserJoinEmail(
+  args: SendExistingUserJoinEmailArgs
 ): Promise<{ sent: boolean }> {
   const resend = getResendClient();
   if (!resend) return { sent: false };
 
-  const absoluteUrl = `${getAppUrl()}${args.inviteUrl}`;
+  const absoluteUrl = `${getAppUrl()}${args.joinUrl}`;
   const formattedExpiresAt = formatDate(args.expiresAt);
   const subject = `${args.inviterName} invited you to join ${args.orgName}`;
-  const html = buildTeamInviteEmailHtml({ ...args, absoluteUrl, formattedExpiresAt });
-  const text = buildTeamInviteEmailText({ ...args, absoluteUrl, formattedExpiresAt });
+  const html = buildExistingUserJoinEmailHtml({ ...args, absoluteUrl, formattedExpiresAt });
+  const text = buildExistingUserJoinEmailText({ ...args, absoluteUrl, formattedExpiresAt });
 
   const { error } = await resend.emails.send({
     from: getFromAddress(),
@@ -164,17 +176,17 @@ export async function sendTeamInviteEmail(
   });
 
   if (error) {
-    // Never log the raw invite URL/token — it's a live, unauthenticated
-    // acceptance link. Resend's own error object doesn't include it, but
-    // callers of this function must not add it to their own error logging.
-    console.error('[email] Resend delivery failed for team invite:', error.message);
+    // Never log the raw join URL/token — it's a live acceptance link.
+    // Resend's own error object doesn't include it, but callers of this
+    // function must not add it to their own error logging either.
+    console.error('[email] Resend delivery failed for existing-user join email:', error.message);
     return { sent: false };
   }
 
   return { sent: true };
 }
 
-interface TeamInviteEmailBodyArgs {
+interface ExistingUserJoinEmailBodyArgs {
   absoluteUrl: string;
   displayRole: string;
   formattedExpiresAt: string;
@@ -183,7 +195,7 @@ interface TeamInviteEmailBodyArgs {
   orgName: string;
 }
 
-function buildTeamInviteEmailHtml(args: TeamInviteEmailBodyArgs): string {
+function buildExistingUserJoinEmailHtml(args: ExistingUserJoinEmailBodyArgs): string {
   const { absoluteUrl, displayRole, formattedExpiresAt, fullName, inviterName, orgName } = args;
 
   return `<!DOCTYPE html>
@@ -202,11 +214,11 @@ function buildTeamInviteEmailHtml(args: TeamInviteEmailBodyArgs): string {
           <tr>
             <td style="padding:28px;">
               <p style="margin:0 0 16px;color:#111827;font-size:16px;">Hi ${escapeHtml(fullName)},</p>
-              <p style="margin:0 0 20px;color:#111827;font-size:16px;">${escapeHtml(inviterName)} invited you to join <strong>${escapeHtml(orgName)}</strong> as <strong>${escapeHtml(displayRole)}</strong>.</p>
+              <p style="margin:0 0 20px;color:#111827;font-size:16px;">${escapeHtml(inviterName)} invited you to join <strong>${escapeHtml(orgName)}</strong> as <strong>${escapeHtml(displayRole)}</strong>. You already have an account with us — sign in with your existing password to join.</p>
               <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
                 <tr>
                   <td style="background:#2563eb;border-radius:6px;">
-                    <a href="${absoluteUrl}" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">Accept invitation →</a>
+                    <a href="${absoluteUrl}" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">Sign in and join →</a>
                   </td>
                 </tr>
               </table>
@@ -227,13 +239,13 @@ function buildTeamInviteEmailHtml(args: TeamInviteEmailBodyArgs): string {
 </html>`;
 }
 
-function buildTeamInviteEmailText(args: TeamInviteEmailBodyArgs): string {
+function buildExistingUserJoinEmailText(args: ExistingUserJoinEmailBodyArgs): string {
   const { absoluteUrl, displayRole, formattedExpiresAt, fullName, inviterName, orgName } = args;
   return `Hi ${fullName},
 
-${inviterName} invited you to join ${orgName} as ${displayRole}.
+${inviterName} invited you to join ${orgName} as ${displayRole}. You already have an account with us — sign in with your existing password to join.
 
-Accept your invitation:
+Sign in and join:
 ${absoluteUrl}
 
 This invite expires on ${formattedExpiresAt}.

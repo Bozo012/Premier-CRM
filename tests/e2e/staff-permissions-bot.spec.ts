@@ -198,6 +198,24 @@ test.describe('staff permissions bot', () => {
       expect(after?.role).toBe('employee');
     });
 
+    test('5b. direct API: employee cannot insert an org_members row directly (Auth Reset architecture)', async () => {
+      test.skip(!canRunApiChecks(), API_SKIP_REASON);
+      const employeeApi = await createUserApiClient(getStaffAccount());
+
+      // org_members has no INSERT policy at all — every real membership row
+      // is created exclusively by SECURITY DEFINER functions
+      // (accept_org_invite(), handle_new_user()'s first-owner bootstrap),
+      // never by a direct client insert, regardless of role.
+      const { error } = await employeeApi.from('org_members').insert({
+        org_id: scenario.membership.orgId,
+        user_id: scenario.membership.userId,
+        role: 'admin',
+        status: 'active',
+      });
+
+      expect(error, 'expected the direct insert to be refused by RLS').not.toBeNull();
+    });
+
     test('6. direct API: employee cannot rename or delete the organization', async () => {
       test.skip(!canRunApiChecks(), API_SKIP_REASON);
       const employeeApi = await createUserApiClient(getStaffAccount());
