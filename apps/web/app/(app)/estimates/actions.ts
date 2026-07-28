@@ -3,8 +3,16 @@
 import { revalidatePath } from 'next/cache';
 
 import { ErrorCode, err, ok, type Result } from '@premier/shared';
-import { createDraftQuote, createServiceClient, getActiveOrgContext } from '@premier/db';
+import {
+  createDraftQuote,
+  createServiceClient,
+  getActiveOrgContext,
+  getEstimateById,
+} from '@premier/db';
 
+import {
+  sendEstimateSiteVisitScheduledNotification,
+} from '@/lib/customer-lifecycle-notifications';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 // ---------------------------------------------------------------------------
@@ -116,6 +124,13 @@ export async function updateEstimateStatusAction(
     .eq('org_id', orgId);
 
   if (updateError) return err(ErrorCode.DB_ERROR, updateError.message);
+
+  if (newStatus === 'site_visit_scheduled' && siteVisitAt) {
+    const estimateDetail = await getEstimateById(client, { estimateId, orgId });
+    if (estimateDetail.success) {
+      await sendEstimateSiteVisitScheduledNotification(estimateDetail.data);
+    }
+  }
 
   revalidatePath(`/estimates/${estimateId}`);
   revalidatePath('/estimates');

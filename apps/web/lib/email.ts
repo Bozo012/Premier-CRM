@@ -30,6 +30,133 @@ export function getAppUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 }
 
+async function deliverEmail(args: {
+  html: string;
+  subject: string;
+  text: string;
+  to: string;
+  errorLabel?: string;
+}): Promise<{ sent: boolean }> {
+  const resend = getResendClient();
+  if (!resend) return { sent: false };
+
+  try {
+    const { error } = await resend.emails.send({
+      from: getFromAddress(),
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+      text: args.text,
+    });
+
+    if (error) {
+      console.error(args.errorLabel ?? '[email] Resend delivery failed:', error);
+      return { sent: false };
+    }
+  } catch (error) {
+    console.error(args.errorLabel ?? '[email] Resend delivery failed:', error);
+    return { sent: false };
+  }
+
+  return { sent: true };
+}
+
+// ---------------------------------------------------------------------------
+// Customer lifecycle notifications
+// ---------------------------------------------------------------------------
+
+export interface SendServiceRequestConfirmationEmailArgs {
+  customerEmail: string;
+  customerName: string;
+  preferredDateTime: string | null;
+  propertyAddress: string;
+  requestNumber: string | null;
+  serviceTitle: string;
+}
+
+export async function sendServiceRequestConfirmationEmail(
+  args: SendServiceRequestConfirmationEmailArgs
+): Promise<{ sent: boolean }> {
+  const subject = args.requestNumber
+    ? `We received your request (${args.requestNumber})`
+    : 'We received your service request';
+  const html = buildServiceRequestConfirmationEmailHtml(args);
+  const text = buildServiceRequestConfirmationEmailText(args);
+
+  return deliverEmail({
+    to: args.customerEmail,
+    subject,
+    html,
+    text,
+  });
+}
+
+export interface SendSiteVisitScheduledEmailArgs {
+  customerEmail: string;
+  customerName: string;
+  propertyAddress: string | null;
+  siteVisitAt: string;
+  estimateTitle: string;
+}
+
+export async function sendSiteVisitScheduledEmail(
+  args: SendSiteVisitScheduledEmailArgs
+): Promise<{ sent: boolean }> {
+  const formattedSiteVisitAt = formatDateTime(args.siteVisitAt);
+  const subject = `Your site visit is scheduled for ${formattedSiteVisitAt}`;
+  const html = buildSiteVisitScheduledEmailHtml({
+    ...args,
+    formattedSiteVisitAt,
+  });
+  const text = buildSiteVisitScheduledEmailText({
+    ...args,
+    formattedSiteVisitAt,
+  });
+
+  return deliverEmail({
+    to: args.customerEmail,
+    subject,
+    html,
+    text,
+  });
+}
+
+export interface SendPaymentReceiptEmailArgs {
+  amount: number;
+  customerEmail: string;
+  customerName: string;
+  invoiceTitle: string;
+  paidAt: string;
+  paymentMethod: string;
+  propertyAddress: string | null;
+  reference: string | null;
+}
+
+export async function sendPaymentReceiptEmail(
+  args: SendPaymentReceiptEmailArgs
+): Promise<{ sent: boolean }> {
+  const formattedAmount = formatMoney(args.amount);
+  const formattedPaidAt = formatDateTime(args.paidAt);
+  const subject = `Payment received for ${args.invoiceTitle}`;
+  const html = buildPaymentReceiptEmailHtml({
+    ...args,
+    formattedAmount,
+    formattedPaidAt,
+  });
+  const text = buildPaymentReceiptEmailText({
+    ...args,
+    formattedAmount,
+    formattedPaidAt,
+  });
+
+  return deliverEmail({
+    to: args.customerEmail,
+    subject,
+    html,
+    text,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Quote delivery email
 // ---------------------------------------------------------------------------
@@ -46,9 +173,6 @@ export interface SendQuoteEmailArgs {
 export async function sendQuoteEmail(
   args: SendQuoteEmailArgs
 ): Promise<{ sent: boolean }> {
-  const resend = getResendClient();
-  if (!resend) return { sent: false };
-
   const absoluteUrl = `${getAppUrl()}${args.quoteUrl}`;
   const formattedTotal = formatMoney(args.quoteTotal);
   const formattedExpiry = args.validUntil ? formatDate(args.validUntil) : null;
@@ -57,20 +181,12 @@ export async function sendQuoteEmail(
   const html = buildQuoteEmailHtml({ ...args, absoluteUrl, formattedTotal, formattedExpiry });
   const text = buildQuoteEmailText({ ...args, absoluteUrl, formattedTotal, formattedExpiry });
 
-  const { error } = await resend.emails.send({
-    from: getFromAddress(),
+  return deliverEmail({
     to: args.customerEmail,
     subject,
     html,
     text,
   });
-
-  if (error) {
-    console.error('[email] Resend delivery failed:', error);
-    return { sent: false };
-  }
-
-  return { sent: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -89,9 +205,6 @@ export interface SendInvoiceEmailArgs {
 export async function sendInvoiceEmail(
   args: SendInvoiceEmailArgs
 ): Promise<{ sent: boolean }> {
-  const resend = getResendClient();
-  if (!resend) return { sent: false };
-
   const absoluteUrl = `${getAppUrl()}${args.invoiceUrl}`;
   const formattedTotal = formatMoney(args.invoiceTotal);
   const formattedDueDate = args.dueDate ? formatDate(args.dueDate) : null;
@@ -110,20 +223,12 @@ export async function sendInvoiceEmail(
     formattedDueDate,
   });
 
-  const { error } = await resend.emails.send({
-    from: getFromAddress(),
+  return deliverEmail({
     to: args.customerEmail,
     subject,
     html,
     text,
   });
-
-  if (error) {
-    console.error('[email] Resend delivery failed:', error);
-    return { sent: false };
-  }
-
-  return { sent: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -158,32 +263,19 @@ export interface SendExistingUserJoinEmailArgs {
 export async function sendExistingUserJoinEmail(
   args: SendExistingUserJoinEmailArgs
 ): Promise<{ sent: boolean }> {
-  const resend = getResendClient();
-  if (!resend) return { sent: false };
-
   const absoluteUrl = `${getAppUrl()}${args.joinUrl}`;
   const formattedExpiresAt = formatDate(args.expiresAt);
   const subject = `${args.inviterName} invited you to join ${args.orgName}`;
   const html = buildExistingUserJoinEmailHtml({ ...args, absoluteUrl, formattedExpiresAt });
   const text = buildExistingUserJoinEmailText({ ...args, absoluteUrl, formattedExpiresAt });
 
-  const { error } = await resend.emails.send({
-    from: getFromAddress(),
+  return deliverEmail({
     to: args.toEmail,
     subject,
     html,
     text,
+    errorLabel: '[email] Resend delivery failed for existing-user join email:',
   });
-
-  if (error) {
-    // Never log the raw join URL/token — it's a live acceptance link.
-    // Resend's own error object doesn't include it, but callers of this
-    // function must not add it to their own error logging either.
-    console.error('[email] Resend delivery failed for existing-user join email:', error.message);
-    return { sent: false };
-  }
-
-  return { sent: true };
 }
 
 interface ExistingUserJoinEmailBodyArgs {
@@ -252,6 +344,181 @@ This invite expires on ${formattedExpiresAt}.
 
 ${orgName}
 Questions? Reply to this email or contact us directly.`;
+}
+
+function buildServiceRequestConfirmationEmailHtml(
+  args: SendServiceRequestConfirmationEmailArgs
+): string {
+  const requestLine = args.requestNumber
+    ? `<p style="margin:0 0 12px;color:#6b7280;font-size:14px;">Reference: <strong>${escapeHtml(args.requestNumber)}</strong></p>`
+    : '';
+  const preferredDateLine = args.preferredDateTime
+    ? `<p style="margin:6px 0 0;color:#6b7280;font-size:14px;">Preferred timing: <strong>${escapeHtml(args.preferredDateTime)}</strong></p>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+    <tr>
+      <td>
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
+          <tr>
+            <td style="background:#1e293b;padding:20px 28px;">
+              <p style="margin:0;color:#f8fafc;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Premier Property Maintenance</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <p style="margin:0 0 16px;color:#111827;font-size:16px;">Hi ${escapeHtml(args.customerName)},</p>
+              <p style="margin:0 0 12px;color:#111827;font-size:16px;">We received your request for <strong>${escapeHtml(args.serviceTitle)}</strong>.</p>
+              ${requestLine}
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0;color:#374151;font-size:15px;font-weight:600;">Service location</p>
+                    <p style="margin:6px 0 0;color:#6b7280;font-size:14px;">${escapeHtml(args.propertyAddress)}</p>
+                    ${preferredDateLine}
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;color:#111827;font-size:15px;">We’ll review the request and follow up by email or phone with the next step.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;color:#9ca3af;font-size:12px;">Premier Property Maintenance · Questions? Reply to this email or contact us directly.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildServiceRequestConfirmationEmailText(
+  args: SendServiceRequestConfirmationEmailArgs
+): string {
+  return `Hi ${args.customerName},
+
+We received your request for ${args.serviceTitle}.
+${args.requestNumber ? `Reference: ${args.requestNumber}\n` : ''}Service location: ${args.propertyAddress}
+${args.preferredDateTime ? `Preferred timing: ${args.preferredDateTime}\n` : ''}We’ll review the request and follow up by email or phone with the next step.
+
+Premier Property Maintenance`;
+}
+
+interface SiteVisitScheduledEmailBodyArgs extends SendSiteVisitScheduledEmailArgs {
+  formattedSiteVisitAt: string;
+}
+
+function buildSiteVisitScheduledEmailHtml(args: SiteVisitScheduledEmailBodyArgs): string {
+  const propertyLine = args.propertyAddress
+    ? `<p style="margin:6px 0 0;color:#6b7280;font-size:14px;">Property: <strong>${escapeHtml(args.propertyAddress)}</strong></p>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+    <tr>
+      <td>
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
+          <tr>
+            <td style="background:#1e293b;padding:20px 28px;">
+              <p style="margin:0;color:#f8fafc;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Premier Property Maintenance</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <p style="margin:0 0 16px;color:#111827;font-size:16px;">Hi ${escapeHtml(args.customerName)},</p>
+              <p style="margin:0 0 8px;color:#111827;font-size:16px;">Your site visit is scheduled for <strong>${escapeHtml(args.formattedSiteVisitAt)}</strong>.</p>
+              <p style="margin:0;color:#111827;font-size:15px;">We’ll use this visit to review <strong>${escapeHtml(args.estimateTitle)}</strong> and confirm the next step with you.</p>
+              ${propertyLine}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;color:#9ca3af;font-size:12px;">Premier Property Maintenance · Questions? Reply to this email or contact us directly.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildSiteVisitScheduledEmailText(args: SiteVisitScheduledEmailBodyArgs): string {
+  return `Hi ${args.customerName},
+
+Your site visit is scheduled for ${args.formattedSiteVisitAt}.
+
+We’ll use this visit to review ${args.estimateTitle} and confirm the next step with you.
+${args.propertyAddress ? `Property: ${args.propertyAddress}\n` : ''}
+Premier Property Maintenance`;
+}
+
+interface PaymentReceiptEmailBodyArgs extends SendPaymentReceiptEmailArgs {
+  formattedAmount: string;
+  formattedPaidAt: string;
+}
+
+function buildPaymentReceiptEmailHtml(args: PaymentReceiptEmailBodyArgs): string {
+  const referenceLine = args.reference
+    ? `<p style="margin:6px 0 0;color:#6b7280;font-size:14px;">Reference: <strong>${escapeHtml(args.reference)}</strong></p>`
+    : '';
+  const propertyLine = args.propertyAddress
+    ? `<p style="margin:6px 0 0;color:#6b7280;font-size:14px;">Property: <strong>${escapeHtml(args.propertyAddress)}</strong></p>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+    <tr>
+      <td>
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
+          <tr>
+            <td style="background:#1e293b;padding:20px 28px;">
+              <p style="margin:0;color:#f8fafc;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Premier Property Maintenance</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <p style="margin:0 0 16px;color:#111827;font-size:16px;">Hi ${escapeHtml(args.customerName)},</p>
+              <p style="margin:0 0 8px;color:#111827;font-size:16px;">We received your payment of <strong>${args.formattedAmount}</strong> for <strong>${escapeHtml(args.invoiceTitle)}</strong>.</p>
+              <p style="margin:0;color:#111827;font-size:15px;">Paid on ${escapeHtml(args.formattedPaidAt)} via ${escapeHtml(formatEnumLabel(args.paymentMethod))}.</p>
+              ${referenceLine}
+              ${propertyLine}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;color:#9ca3af;font-size:12px;">Premier Property Maintenance · Questions? Reply to this email or contact us directly.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildPaymentReceiptEmailText(args: PaymentReceiptEmailBodyArgs): string {
+  return `Hi ${args.customerName},
+
+We received your payment of ${args.formattedAmount} for ${args.invoiceTitle}.
+Paid on ${args.formattedPaidAt} via ${formatEnumLabel(args.paymentMethod)}.
+${args.reference ? `Reference: ${args.reference}\n` : ''}${args.propertyAddress ? `Property: ${args.propertyAddress}\n` : ''}
+Premier Property Maintenance`;
 }
 
 interface InvoiceEmailBodyArgs {
@@ -434,6 +701,23 @@ function formatDate(isoDate: string): string {
     month: 'long',
     year: 'numeric',
   }).format(new Date(isoDate));
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(value));
+}
+
+function formatEnumLabel(value: string): string {
+  return value
+    .split('_')
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
 }
 
 function escapeHtml(str: string): string {

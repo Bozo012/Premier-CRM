@@ -5,6 +5,7 @@ import type { DbClient } from '../client';
 
 export interface CreateServiceRequestResult {
   serviceRequestId: string;
+  requestNumber: string | null;
   customerId: string;
   propertyId: string;
   dedupedCustomer: boolean;
@@ -210,7 +211,7 @@ export async function createServiceRequest(
       access_notes: payload.access_notes ?? null,
       reviewed_at: null,
     })
-    .select('id')
+    .select('id, request_number')
     .single();
 
   if (serviceRequestError || !serviceRequest) {
@@ -222,6 +223,7 @@ export async function createServiceRequest(
 
   return ok({
     serviceRequestId: serviceRequest.id,
+    requestNumber: serviceRequest.request_number ?? null,
     customerId,
     propertyId,
     dedupedCustomer,

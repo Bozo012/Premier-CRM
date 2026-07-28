@@ -1,0 +1,116 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { sendMock } = vi.hoisted(() => ({
+  sendMock: vi.fn(),
+}));
+
+vi.mock('resend', () => ({
+  Resend: class {
+    emails;
+
+    constructor() {
+      this.emails = {
+        send: sendMock,
+      };
+    }
+  },
+}));
+
+describe('email lifecycle templates', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    process.env.RESEND_API_KEY = 're_test_key';
+    process.env.RESEND_FROM_EMAIL = 'quotes@ppmnky.com';
+    process.env.NEXT_PUBLIC_APP_URL = 'https://app.ppmnky.com';
+    sendMock.mockResolvedValue({ error: null });
+  });
+
+  it('sends the service-request confirmation with the request number and address', async () => {
+    const { sendServiceRequestConfirmationEmail } = await import('./email');
+
+    const result = await sendServiceRequestConfirmationEmail({
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Smith',
+      preferredDateTime: 'Thursday morning',
+      propertyAddress: '123 Main St, Nashville, TN 37201',
+      requestNumber: 'REQ-1001',
+      serviceTitle: 'Lawn cleanup',
+    });
+
+    expect(result).toEqual({ sent: true });
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: 'quotes@ppmnky.com',
+        subject: 'We received your request (REQ-1001)',
+        to: 'customer@example.com',
+      })
+    );
+    expect(sendMock.mock.calls[0]?.[0]?.html).toContain('REQ-1001');
+    expect(sendMock.mock.calls[0]?.[0]?.html).toContain('123 Main St, Nashville, TN 37201');
+  });
+
+  it('sends the site-visit scheduled email with the scheduled timestamp', async () => {
+    const { sendSiteVisitScheduledEmail } = await import('./email');
+
+    const result = await sendSiteVisitScheduledEmail({
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Smith',
+      propertyAddress: '123 Main St, Nashville, TN 37201',
+      siteVisitAt: '2026-08-02T13:30:00.000Z',
+      estimateTitle: 'Lawn cleanup',
+    });
+
+    expect(result).toEqual({ sent: true });
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.stringContaining('Your site visit is scheduled'),
+        to: 'customer@example.com',
+      })
+    );
+    expect(sendMock.mock.calls[0]?.[0]?.text).toContain('Lawn cleanup');
+  });
+
+  it('sends the payment receipt email with the payment summary', async () => {
+    const { sendPaymentReceiptEmail } = await import('./email');
+
+    const result = await sendPaymentReceiptEmail({
+      amount: 250,
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Smith',
+      invoiceTitle: 'August mowing',
+      paidAt: '2026-08-05',
+      paymentMethod: 'card',
+      propertyAddress: '123 Main St, Nashville, TN 37201',
+      reference: 'PMT-42',
+    });
+
+    expect(result).toEqual({ sent: true });
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: 'Payment received for August mowing',
+        to: 'customer@example.com',
+      })
+    );
+    expect(sendMock.mock.calls[0]?.[0]?.text).toContain('PMT-42');
+    expect(sendMock.mock.calls[0]?.[0]?.text).toContain('$250.00');
+  });
+
+  it('returns sent=false when the resend client throws', async () => {
+    sendMock.mockRejectedValueOnce(new Error('smtp down'));
+    const { sendPaymentReceiptEmail } = await import('./email');
+
+    const result = await sendPaymentReceiptEmail({
+      amount: 250,
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Smith',
+      invoiceTitle: 'August mowing',
+      paidAt: '2026-08-05',
+      paymentMethod: 'card',
+      propertyAddress: null,
+      reference: null,
+    });
+
+    expect(result).toEqual({ sent: false });
+  });
+});
