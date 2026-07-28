@@ -11,6 +11,14 @@ interface RequestsPageProps {
 }
 
 type ShowFilter = 'open' | 'done' | 'all';
+const REVIEWED_STATUSES = new Set([
+  'reviewing',
+  'estimate_created',
+  'approved',
+  'scheduled',
+  'completed',
+  'cancelled',
+]);
 
 export default async function RequestsPage({ searchParams }: RequestsPageProps) {
   const params = await searchParams;
@@ -56,12 +64,10 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   // For the 'open' tab, requests were already filtered server-side (status='new').
   // For 'all', include everything. For 'done', showDone=true but we only
-  // display the reviewing/completed/cancelled rows.
+  // display the reviewed / converted workflow states.
   const displayed =
     show === 'done'
-      ? requests.filter(
-          (r) => r.status === 'reviewing' || r.status === 'completed' || r.status === 'cancelled'
-        )
+      ? requests.filter((r) => REVIEWED_STATUSES.has(r.status))
       : requests;
 
   return (

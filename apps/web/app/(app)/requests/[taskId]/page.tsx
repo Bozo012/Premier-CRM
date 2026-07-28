@@ -5,6 +5,7 @@ import { getActiveOrgContext, getRequestById, type RequestDetail } from '@premie
 
 import { getServerSupabase } from '@/lib/supabase-server';
 import { CreateEstimateButton } from '../_components/create-estimate-button';
+import { CreateJobButton } from '../_components/create-job-button';
 import { MarkReviewedButton } from '../_components/mark-reviewed-button';
 
 interface RequestDetailPageProps {
@@ -66,6 +67,13 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
               className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
             >
               Estimate created
+            </Link>
+          ) : request.jobId ? (
+            <Link
+              href={`/jobs/${request.jobId}`}
+              className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 hover:bg-green-100"
+            >
+              Job created
             </Link>
           ) : null}
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -202,6 +210,8 @@ function PropertyCard({ request }: { request: RequestDetail }) {
 function ActionsCard({ request }: { request: RequestDetail }) {
   const isReviewed = request.status !== 'new';
   const hasEstimate = !!request.estimateId;
+  const hasJob = !!request.jobId;
+  const canStartFlow = !hasEstimate && !hasJob && !!request.customerId && !!request.property;
 
   return (
     <section className="rounded-md border bg-background p-4 space-y-3">
@@ -217,14 +227,38 @@ function ActionsCard({ request }: { request: RequestDetail }) {
           >
             Open estimate →
           </Link>
+        ) : hasJob ? (
+          <Link
+            href={`/jobs/${request.jobId}`}
+            className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
+          >
+            Open work order →
+          </Link>
         ) : (
-          <CreateEstimateButton requestId={request.id} />
+          <>
+            {canStartFlow ? <CreateEstimateButton requestId={request.id} /> : null}
+            {canStartFlow ? <CreateJobButton requestId={request.id} /> : null}
+          </>
         )}
 
         {!isReviewed ? (
           <MarkReviewedButton taskId={request.id} />
         ) : null}
       </div>
+
+      {!hasEstimate && !hasJob && canStartFlow ? (
+        <div className="space-y-1 rounded-md bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+          <p>
+            <span className="font-medium text-foreground">Inspection flow:</span> create a draft
+            estimate first, then schedule the site visit from the estimate screen.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Work-order path:</span> create a job
+            directly for repeat clients or already-approved work, then schedule it later from the
+            job side.
+          </p>
+        </div>
+      ) : null}
 
       {!hasEstimate && !request.property && request.customerId ? (
         <p className="text-xs text-muted-foreground">
@@ -247,6 +281,12 @@ function ActionsCard({ request }: { request: RequestDetail }) {
       {request.convertedAt && hasEstimate ? (
         <p className="text-xs text-muted-foreground">
           Estimate created {formatDateTime(request.convertedAt)}
+        </p>
+      ) : null}
+
+      {request.convertedAt && hasJob ? (
+        <p className="text-xs text-muted-foreground">
+          Work order created {formatDateTime(request.convertedAt)}
         </p>
       ) : null}
     </section>

@@ -1,6 +1,7 @@
-import type { EstimateDetail, InvoiceDetail } from '@premier/db';
+import type { EstimateDetail, InvoiceDetail, JobDetail } from '@premier/db';
 
 import {
+  sendJobScheduledEmail,
   sendPaymentReceiptEmail,
   sendServiceRequestConfirmationEmail,
   sendSiteVisitScheduledEmail,
@@ -16,6 +17,11 @@ export const CUSTOMER_NOTIFICATION_TRIGGER_POINTS = [
     event: 'estimate_site_visit_scheduled',
     template: 'site-visit-scheduled',
     trigger: 'updateEstimateStatusAction (draft → site_visit_scheduled)',
+  },
+  {
+    event: 'job_scheduled',
+    template: 'job-scheduled',
+    trigger: 'scheduleJobAction (approved → scheduled)',
   },
   {
     event: 'quote_sent',
@@ -73,6 +79,27 @@ export async function sendEstimateSiteVisitScheduledNotification(
     propertyAddress: estimate.property ? formatPropertyAddress(estimate.property) : null,
     siteVisitAt: estimate.siteVisitAt,
     estimateTitle: estimate.title?.trim() || estimate.estimateNumber || 'your estimate',
+  });
+}
+
+export async function sendJobScheduledNotification(
+  jobDetail: JobDetail
+): Promise<{ sent: boolean }> {
+  if (
+    jobDetail.job.status !== 'scheduled' ||
+    !jobDetail.customer?.email ||
+    !jobDetail.job.scheduled_start
+  ) {
+    return { sent: false };
+  }
+
+  return sendJobScheduledEmail({
+    customerEmail: jobDetail.customer.email,
+    customerName: jobDetail.customer.displayName,
+    jobTitle: jobDetail.job.title?.trim() || jobDetail.job.job_number || 'your job',
+    propertyAddress: jobDetail.property ? formatPropertyAddress(jobDetail.property) : null,
+    scheduledEnd: jobDetail.job.scheduled_end,
+    scheduledStart: jobDetail.job.scheduled_start,
   });
 }
 

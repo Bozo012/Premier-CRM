@@ -121,6 +121,40 @@ export async function sendSiteVisitScheduledEmail(
   });
 }
 
+export interface SendJobScheduledEmailArgs {
+  customerEmail: string;
+  customerName: string;
+  jobTitle: string;
+  propertyAddress: string | null;
+  scheduledEnd: string | null;
+  scheduledStart: string;
+}
+
+export async function sendJobScheduledEmail(
+  args: SendJobScheduledEmailArgs
+): Promise<{ sent: boolean }> {
+  const formattedScheduledStart = formatDateTime(args.scheduledStart);
+  const formattedScheduledEnd = args.scheduledEnd ? formatDateTime(args.scheduledEnd) : null;
+  const subject = `Your work is scheduled for ${formattedScheduledStart}`;
+  const html = buildJobScheduledEmailHtml({
+    ...args,
+    formattedScheduledEnd,
+    formattedScheduledStart,
+  });
+  const text = buildJobScheduledEmailText({
+    ...args,
+    formattedScheduledEnd,
+    formattedScheduledStart,
+  });
+
+  return deliverEmail({
+    to: args.customerEmail,
+    subject,
+    html,
+    text,
+  });
+}
+
 export interface SendPaymentReceiptEmailArgs {
   amount: number;
   customerEmail: string;
@@ -467,6 +501,66 @@ Premier Property Maintenance`;
 interface PaymentReceiptEmailBodyArgs extends SendPaymentReceiptEmailArgs {
   formattedAmount: string;
   formattedPaidAt: string;
+}
+
+interface JobScheduledEmailBodyArgs extends SendJobScheduledEmailArgs {
+  formattedScheduledEnd: string | null;
+  formattedScheduledStart: string;
+}
+
+function buildJobScheduledEmailHtml(args: JobScheduledEmailBodyArgs): string {
+  const propertyLine = args.propertyAddress
+    ? `<p style="margin:6px 0 0;color:#6b7280;font-size:14px;">Property: <strong>${escapeHtml(args.propertyAddress)}</strong></p>`
+    : '';
+  const windowLine = args.formattedScheduledEnd
+    ? `<p style="margin:0;color:#111827;font-size:15px;">We’ve scheduled <strong>${escapeHtml(args.jobTitle)}</strong> from <strong>${escapeHtml(args.formattedScheduledStart)}</strong> to <strong>${escapeHtml(args.formattedScheduledEnd)}</strong>.</p>`
+    : `<p style="margin:0;color:#111827;font-size:15px;">We’ve scheduled <strong>${escapeHtml(args.jobTitle)}</strong> for <strong>${escapeHtml(args.formattedScheduledStart)}</strong>.</p>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+    <tr>
+      <td>
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
+          <tr>
+            <td style="background:#1e293b;padding:20px 28px;">
+              <p style="margin:0;color:#f8fafc;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Premier Property Maintenance</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <p style="margin:0 0 16px;color:#111827;font-size:16px;">Hi ${escapeHtml(args.customerName)},</p>
+              ${windowLine}
+              ${propertyLine}
+              <p style="margin:16px 0 0;color:#111827;font-size:15px;">If anything changes, reply to this email or contact us and we’ll update the schedule.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;color:#9ca3af;font-size:12px;">Premier Property Maintenance · Questions? Reply to this email or contact us directly.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildJobScheduledEmailText(args: JobScheduledEmailBodyArgs): string {
+  const windowLine = args.formattedScheduledEnd
+    ? `We’ve scheduled ${args.jobTitle} from ${args.formattedScheduledStart} to ${args.formattedScheduledEnd}.`
+    : `We’ve scheduled ${args.jobTitle} for ${args.formattedScheduledStart}.`;
+
+  return `Hi ${args.customerName},
+
+${windowLine}
+${args.propertyAddress ? `Property: ${args.propertyAddress}\n` : ''}If anything changes, reply to this email or contact us and we’ll update the schedule.
+
+Premier Property Maintenance`;
 }
 
 function buildPaymentReceiptEmailHtml(args: PaymentReceiptEmailBodyArgs): string {
