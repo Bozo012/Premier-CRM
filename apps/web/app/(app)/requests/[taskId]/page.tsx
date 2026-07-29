@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { getActiveOrgContext, getRequestById, type RequestDetail } from '@premier/db';
 
+import { getRequestIntakePath, getRequestIntakePathLabel } from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
 import { CreateEstimateButton } from '../_components/create-estimate-button';
 import { CreateJobButton } from '../_components/create-job-button';
@@ -212,6 +213,9 @@ function ActionsCard({ request }: { request: RequestDetail }) {
   const hasEstimate = !!request.estimateId;
   const hasJob = !!request.jobId;
   const canStartFlow = !hasEstimate && !hasJob && !!request.customerId && !!request.property;
+  const intakePathLabel = getRequestIntakePathLabel(
+    getRequestIntakePath({ estimateId: request.estimateId, jobId: request.jobId })
+  );
 
   return (
     <section className="rounded-md border bg-background p-4 space-y-3">
@@ -220,6 +224,12 @@ function ActionsCard({ request }: { request: RequestDetail }) {
       </h2>
 
       <div className="flex flex-wrap gap-3">
+        {intakePathLabel ? (
+          <span className="inline-flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
+            {intakePathLabel}
+          </span>
+        ) : null}
+
         {hasEstimate ? (
           <Link
             href={`/estimates/${request.estimateId}`}
@@ -247,22 +257,27 @@ function ActionsCard({ request }: { request: RequestDetail }) {
       </div>
 
       {!hasEstimate && !hasJob && canStartFlow ? (
-        <div className="space-y-1 rounded-md bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
-          <p>
-            <span className="font-medium text-foreground">Inspection flow:</span> create a draft
-            estimate first, then schedule the site visit from the estimate screen.
-          </p>
-          <p>
-            <span className="font-medium text-foreground">Work-order path:</span> create a job
-            directly for repeat clients or already-approved work, then schedule it later from the
-            job side.
-          </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Inspection flow</p>
+            <p className="mt-1">
+              Use this for remodels, new work, or anything that needs a visit before pricing.
+            </p>
+            <p className="mt-1">Request → estimate → site visit → quote → job.</p>
+          </div>
+          <div className="rounded-md border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Work-order path</p>
+            <p className="mt-1">
+              Use this for repeat clients, property managers, or already-approved work.
+            </p>
+            <p className="mt-1">Request → job → schedule work.</p>
+          </div>
         </div>
       ) : null}
 
       {!hasEstimate && !request.property && request.customerId ? (
         <p className="text-xs text-muted-foreground">
-          A property must be linked to the customer before creating an estimate.{' '}
+          A property must be linked to the customer before starting either path.{' '}
           <Link
             href={`/customers/${request.customerId}`}
             className="underline-offset-2 hover:underline text-foreground"
@@ -280,7 +295,7 @@ function ActionsCard({ request }: { request: RequestDetail }) {
 
       {request.convertedAt && hasEstimate ? (
         <p className="text-xs text-muted-foreground">
-          Estimate created {formatDateTime(request.convertedAt)}
+          Inspection flow started {formatDateTime(request.convertedAt)}
         </p>
       ) : null}
 

@@ -3,6 +3,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  getPortalRequestStatusDescription,
+  getPortalRequestStatusLabel,
+} from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { signOutCustomerPortal } from '../actions';
@@ -18,9 +22,13 @@ interface ServiceRequestRow {
   request_number: string;
   status: string;
   priority: string;
+  estimate_id: string | null;
+  job_id: string | null;
   service_title: string;
   service_description: string;
   submitted_at: string;
+  reviewed_at: string | null;
+  converted_at: string | null;
   preferred_date: string | null;
   property_address_line_1: string;
   property_city: string;
@@ -67,6 +75,8 @@ function asServiceRequestRows(value: unknown): ServiceRequestRow[] {
       typeof record.request_number === 'string' &&
       typeof record.status === 'string' &&
       typeof record.priority === 'string' &&
+      ('estimate_id' in record) &&
+      ('job_id' in record) &&
       typeof record.service_title === 'string' &&
       typeof record.service_description === 'string' &&
       typeof record.submitted_at === 'string' &&
@@ -105,10 +115,6 @@ function formatDate(value: string): string {
     day: 'numeric',
     year: 'numeric',
   }).format(new Date(value));
-}
-
-function formatStatus(value: string): string {
-  return value.replace(/_/g, ' ');
 }
 
 function propertyAddress(row: CustomerPropertyRow): string {
@@ -167,7 +173,7 @@ export default async function PortalDashboardPage() {
     portalClient
       .from('service_requests')
       .select(
-        'id, request_number, status, priority, service_title, service_description, submitted_at, preferred_date, property_address_line_1, property_city, property_state'
+        'id, request_number, status, priority, estimate_id, job_id, service_title, service_description, submitted_at, reviewed_at, converted_at, preferred_date, property_address_line_1, property_city, property_state'
       )
       .eq('customer_id', account.customer_id)
       .order('submitted_at', { ascending: false }),
@@ -283,7 +289,11 @@ function RequestList({
                     </p>
                   </div>
                   <span className="rounded-full bg-muted px-2 py-1 text-xs capitalize text-muted-foreground">
-                    {formatStatus(request.status)}
+                    {getPortalRequestStatusLabel({
+                      status: request.status,
+                      estimateId: request.estimate_id,
+                      jobId: request.job_id,
+                    })}
                   </span>
                 </div>
                 <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
@@ -293,6 +303,19 @@ function RequestList({
                   {request.property_address_line_1}, {request.property_city}, {request.property_state}
                   {request.preferred_date ? ` · Preferred ${request.preferred_date}` : ''}
                 </p>
+                {getPortalRequestStatusDescription({
+                  status: request.status,
+                  estimateId: request.estimate_id,
+                  jobId: request.job_id,
+                }) ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {getPortalRequestStatusDescription({
+                      status: request.status,
+                      estimateId: request.estimate_id,
+                      jobId: request.job_id,
+                    })}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

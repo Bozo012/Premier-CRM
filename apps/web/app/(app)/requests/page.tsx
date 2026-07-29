@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { getActiveOrgContext, listRequests, type RequestListItem } from '@premier/db';
 
 import { OrgContextError } from '@/components/org-context-error';
+import { getRequestIntakePath, getRequestIntakePathLabel } from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 interface RequestsPageProps {
@@ -94,6 +95,10 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 // ---------------------------------------------------------------------------
 
 function RequestRow({ item }: { item: RequestListItem }) {
+  const intakePathLabel = getRequestIntakePathLabel(
+    getRequestIntakePath({ estimateId: item.estimateId, jobId: item.jobId })
+  );
+
   return (
     <li>
       <div className="space-y-2 px-4 py-4 sm:px-5">
@@ -128,6 +133,11 @@ function RequestRow({ item }: { item: RequestListItem }) {
               >
                 Job created
               </Link>
+            ) : null}
+            {intakePathLabel ? (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                {intakePathLabel}
+              </span>
             ) : null}
           </div>
         </div>
