@@ -21,10 +21,25 @@ import { NextResponse } from 'next/server';
  * underscore segments as private (excluded from routing), which silently
  * 404'd this route on first attempt.
  */
+const PROD_SUPABASE_PROJECT_REF = 'apnbpcauqrjvkoleisde';
+
 export async function GET() {
+  // Refuses to answer on an actual Vercel production deployment, and
+  // refuses to disclose the prod project ref even if somehow reached
+  // there (e.g. a misconfigured preview pointed at prod's DB). This route
+  // exists only to protect the e2e suite from running against the wrong
+  // project — it must never be a usable diagnostic surface in production.
+  if (process.env.VERCEL_ENV === 'production') {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   const match = url.match(/^https:\/\/([a-z0-9]+)\.supabase\.co/);
   const projectRef = match ? match[1] : null;
+
+  if (projectRef === PROD_SUPABASE_PROJECT_REF) {
+    return new NextResponse(null, { status: 404 });
+  }
 
   return NextResponse.json({ projectRef });
 }
