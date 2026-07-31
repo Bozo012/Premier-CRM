@@ -104,6 +104,9 @@ export default async function TodayPage() {
   const endOfDay = new Date(startOfDay);
   endOfDay.setDate(endOfDay.getDate() + 1);
 
+  const recentActivitySince = new Date();
+  recentActivitySince.setDate(recentActivitySince.getDate() - 14);
+
   const [
     customersResult,
     propertiesResult,
@@ -111,6 +114,7 @@ export default async function TodayPage() {
     profileResult,
     requestsResult,
     todayJobsResult,
+    quoteActivityResult,
   ] = await Promise.all([
     supabase.from('customers').select('*', { count: 'exact', head: true }).eq('org_id', orgId),
     supabase.from('properties').select('address_line_1, city, state, zip').eq('org_id', orgId),
@@ -128,6 +132,14 @@ export default async function TodayPage() {
       .gte('scheduled_start', startOfDay.toISOString())
       .lt('scheduled_start', endOfDay.toISOString())
       .order('scheduled_start', { ascending: true })
+      .limit(10),
+    supabase
+      .from('activity_log')
+      .select('id, entity_id, event_type, message, created_at')
+      .eq('org_id', orgId)
+      .in('event_type', ['quote_accepted', 'quote_declined'])
+      .gte('created_at', recentActivitySince.toISOString())
+      .order('created_at', { ascending: false })
       .limit(10),
   ]);
 
@@ -148,6 +160,24 @@ export default async function TodayPage() {
   const uniquePropertyCount = new Set(
     (propertiesResult.data || []).map((property) => normalizePropertyAddressKey(property))
   ).size;
+
+  const quoteActivity = quoteActivityResult.data ?? [];
+  const quoteIds = [...new Set(quoteActivity.map((entry) => entry.entity_id))];
+  const { data: activityQuotes } = quoteIds.length
+    ? await supabase.from('quotes').select('id, title, quote_number, job_id').in('id', quoteIds)
+    : { data: [] as { id: string; title: string | null; quote_number: string | null; job_id: string | null }[] };
+  const quoteById = new Map((activityQuotes ?? []).map((q) => [q.id, q]));
+
+  // "Needs attention": an accepted quote that hasn't been converted to a job
+  // yet is still actionable; a decline has nothing further to convert, but
+  // stays visible as recent activity worth being aware of. Deliberately no
+  // auto-created job here — see respondToQuoteAction / sendQuoteRespondedNotification.
+  const pendingQuoteActivity = quoteActivity.filter((entry) => {
+    const quote = quoteById.get(entry.entity_id);
+    if (!quote) return false;
+    if (entry.event_type === 'quote_accepted') return !quote.job_id;
+    return true;
+  });
 
   const fullName = profileResult.data?.full_name ?? null;
   const firstNameFromProfile = fullName ? fullName.split(' ')[0] : null;
@@ -382,6 +412,41 @@ export default async function TodayPage() {
           </CardContent>
         </Card>
       </section>
+
+      {pendingQuoteActivity.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Needs attention
+          </h2>
+          <Card>
+            <CardContent className="divide-y pt-6">
+              {pendingQuoteActivity.map((entry) => {
+                const quote = quoteById.get(entry.entity_id);
+                const quoteLabel = quote?.title?.trim() || quote?.quote_number || 'Quote';
+                const isAccepted = entry.event_type === 'quote_accepted';
+                return (
+                  <div key={entry.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">
+                        {isAccepted ? 'Quote accepted — ' : 'Quote declined — '}
+                        {quoteLabel}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {entry.message ?? (isAccepted ? 'Ready to create a job when you are.' : '')}
+                      </p>
+                    </div>
+                    <Button asChild size="sm" variant={isAccepted ? 'default' : 'outline'}>
+                      <Link href={`/quotes/${entry.entity_id}`}>
+                        {isAccepted ? 'Review & create job' : 'View quote'}
+                      </Link>
+                    </Button>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
 
       <section>
         <Card>

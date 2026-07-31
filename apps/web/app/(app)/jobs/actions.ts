@@ -7,15 +7,26 @@ import {
   CreateQuoteFromJobInputSchema,
   ErrorCode,
   err,
+  hasCapability,
   ok,
+  type OrgRole,
   type Result,
 } from '@premier/shared';
 import {
+  createChangeOrderDraft,
   createDraftInvoiceFromJob,
   createDraftQuote,
+  createSchedulingSlot,
   createServiceClient,
+  generateFinalInvoiceFromWorking,
   getActiveOrgContext,
   getJobById,
+  proposeChangeOrderRevision,
+  scheduleJob,
+  setDepositRequirement,
+  waiveDepositRequirement,
+  withdrawChangeOrderRevision,
+  type ChangeOrderLineItemInput,
 } from '@premier/db';
 
 import { sendJobScheduledNotification } from '@/lib/customer-lifecycle-notifications';
@@ -32,7 +43,7 @@ export type ScheduleJobActionState = Result<{
 }>;
 
 async function getJobActionContext(): Promise<
-  Result<{ orgId: string; userId: string }>
+  Result<{ orgId: string; userId: string; role: OrgRole }>
 > {
   const supabase = await getServerSupabase();
   const {
@@ -55,6 +66,7 @@ async function getJobActionContext(): Promise<
   return ok({
     orgId: orgContextResult.data.orgId,
     userId: user.id,
+    role: orgContextResult.data.role as OrgRole,
   });
 }
 
@@ -204,7 +216,11 @@ export async function scheduleJobAction(
 ): Promise<ScheduleJobActionState> {
   const access = await getJobActionContext();
   if (!access.success) return access;
-  const { orgId } = access.data;
+  const { orgId, userId, role } = access.data;
+
+  if (!hasCapability(role, 'canScheduleJobs')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit scheduling jobs.');
+  }
 
   const jobId = readString(formData, 'jobId');
   const scheduledStartInput = readString(formData, 'scheduledStart');
@@ -238,64 +254,23 @@ export async function scheduleJobAction(
 
   const serviceClient = createServiceClient();
 
-  const { data: job, error: jobError } = await serviceClient
-    .from('jobs')
-    .select('id, status')
-    .eq('id', jobId)
-    .eq('org_id', orgId)
-    .maybeSingle();
+  // Shared transition — identical to the customer portal's slot-booking
+  // path (both call apply_job_scheduling under the hood).
+  const scheduleResult = await scheduleJob(serviceClient, {
+    orgId,
+    jobId,
+    scheduledStart,
+    scheduledEnd,
+    actorUserId: userId,
+  });
+  if (!scheduleResult.success) return scheduleResult;
 
-  if (jobError) {
-    return err(ErrorCode.DB_ERROR, jobError.message);
-  }
-
-  if (!job) {
-    return err(ErrorCode.NOT_FOUND, 'Job not found.');
-  }
-
-  if (job.status !== 'approved') {
-    return err(
-      ErrorCode.VALIDATION_ERROR,
-      `Only approved jobs can be scheduled. This job is currently ${job.status}.`
-    );
-  }
-
-  const { error: updateError } = await serviceClient
-    .from('jobs')
-    .update({
-      scheduled_end: scheduledEnd,
-      scheduled_start: scheduledStart,
-      status: 'scheduled',
-    })
-    .eq('id', jobId)
-    .eq('org_id', orgId);
-
-  if (updateError) {
-    return err(ErrorCode.DB_ERROR, updateError.message);
-  }
-
-  const { data: linkedRequest, error: requestLookupError } = await serviceClient
+  const { data: linkedRequest } = await serviceClient
     .from('service_requests')
     .select('id')
     .eq('job_id', jobId)
     .eq('org_id', orgId)
     .maybeSingle();
-
-  if (requestLookupError) {
-    return err(ErrorCode.DB_ERROR, requestLookupError.message);
-  }
-
-  if (linkedRequest) {
-    const { error: requestUpdateError } = await serviceClient
-      .from('service_requests')
-      .update({ status: 'scheduled' })
-      .eq('id', linkedRequest.id)
-      .eq('org_id', orgId);
-
-    if (requestUpdateError) {
-      return err(ErrorCode.DB_ERROR, requestUpdateError.message);
-    }
-  }
 
   const jobDetailResult = await getJobById(serviceClient, { jobId, orgId });
   const notificationSent = jobDetailResult.success
@@ -354,4 +329,260 @@ export async function createInvoiceFromJobPageAction(
   }
 
   return ok({ invoiceId: result.data.id });
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling slots — staff-curated, so customer self-scheduling can never
+// double-book against actual company availability.
+// ---------------------------------------------------------------------------
+
+export type CreateSchedulingSlotActionState = Result<{ slotId: string }>;
+
+export async function createSchedulingSlotAction(
+  _previousState: CreateSchedulingSlotActionState | null,
+  formData: FormData
+): Promise<CreateSchedulingSlotActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, userId, role } = access.data;
+
+  if (!hasCapability(role, 'canScheduleJobs')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit managing the schedule.');
+  }
+
+  const startsAtResult = parseIsoDateTime(readString(formData, 'startsAt'), 'Slot start');
+  if (!startsAtResult.success) return startsAtResult;
+  const endsAtResult = parseIsoDateTime(readString(formData, 'endsAt'), 'Slot end');
+  if (!endsAtResult.success) return endsAtResult;
+
+  const capacityInput = readString(formData, 'capacity');
+  const capacity = capacityInput ? Number(capacityInput) : 1;
+
+  const serviceClient = createServiceClient();
+  const result = await createSchedulingSlot(serviceClient, {
+    orgId,
+    startsAt: startsAtResult.data,
+    endsAt: endsAtResult.data,
+    capacity,
+    createdByUserId: userId,
+  });
+  if (!result.success) return result;
+
+  revalidatePath('/jobs');
+  return ok({ slotId: result.data.slot.id });
+}
+
+// ---------------------------------------------------------------------------
+// Deposits — owner/admin only (canManageDeposits). job_deposits is a
+// requirement/config record; money stays on invoices/payments.
+// ---------------------------------------------------------------------------
+
+export type SetDepositRequirementActionState = Result<{ jobId: string }>;
+
+export async function setDepositRequirementAction(
+  _previousState: SetDepositRequirementActionState | null,
+  formData: FormData
+): Promise<SetDepositRequirementActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, role } = access.data;
+
+  if (!hasCapability(role, 'canManageDeposits')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit managing deposits.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  if (!jobId) return err(ErrorCode.VALIDATION_ERROR, 'Job ID is required.');
+
+  const amountInput = readString(formData, 'requiredAmount');
+  const percentageInput = readString(formData, 'requiredPercentage');
+  const dueDateInput = readString(formData, 'dueDate');
+  const blocksScheduling = formData.get('blocksScheduling') === 'on';
+  const blocksWorkStart = formData.get('blocksWorkStart') !== 'off';
+
+  const requiredAmount = amountInput ? Number(amountInput) : null;
+  const requiredPercentage = percentageInput ? Number(percentageInput) : null;
+
+  if (requiredAmount !== null && requiredPercentage !== null) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Set either a fixed amount or a percentage, not both.');
+  }
+
+  const serviceClient = createServiceClient();
+  const result = await setDepositRequirement(serviceClient, {
+    orgId,
+    jobId,
+    requiredAmount,
+    requiredPercentage,
+    dueDate: dueDateInput || null,
+    blocksScheduling,
+    blocksWorkStart,
+  });
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  return ok({ jobId });
+}
+
+export type WaiveDepositActionState = Result<{ jobId: string }>;
+
+export async function waiveDepositAction(
+  _previousState: WaiveDepositActionState | null,
+  formData: FormData
+): Promise<WaiveDepositActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, userId, role } = access.data;
+
+  if (!hasCapability(role, 'canManageDeposits')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit managing deposits.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  const reason = readString(formData, 'reason');
+  if (!jobId) return err(ErrorCode.VALIDATION_ERROR, 'Job ID is required.');
+  if (!reason) return err(ErrorCode.VALIDATION_ERROR, 'A waiver reason is required.');
+
+  const serviceClient = createServiceClient();
+  const result = await waiveDepositRequirement(serviceClient, { orgId, jobId, reason, waivedByUserId: userId });
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  return ok({ jobId });
+}
+
+// ---------------------------------------------------------------------------
+// Final invoice generation — snapshots the working invoice, never
+// repurposes it in place.
+// ---------------------------------------------------------------------------
+
+export type GenerateFinalInvoiceActionState = Result<{ finalInvoiceId: string }>;
+
+export async function generateFinalInvoiceAction(
+  _previousState: GenerateFinalInvoiceActionState | null,
+  formData: FormData
+): Promise<GenerateFinalInvoiceActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, role } = access.data;
+
+  if (!hasCapability(role, 'canCreateInvoices')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit creating invoices.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  if (!jobId) return err(ErrorCode.VALIDATION_ERROR, 'Job ID is required.');
+
+  const serviceClient = createServiceClient();
+  const result = await generateFinalInvoiceFromWorking(serviceClient, { orgId, jobId });
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/invoices/${result.data.finalInvoiceId}`);
+  return ok({ finalInvoiceId: result.data.finalInvoiceId });
+}
+
+// ---------------------------------------------------------------------------
+// Change orders — draft/propose/withdraw. Staff can draft and propose;
+// only the customer's response (portal) is contractual acceptance — see
+// apps/web/app/portal/change-orders/actions.ts.
+// ---------------------------------------------------------------------------
+
+export type CreateChangeOrderDraftActionState = Result<{ revisionId: string; changeOrderId: string }>;
+
+export async function createChangeOrderDraftAction(
+  _previousState: CreateChangeOrderDraftActionState | null,
+  formData: FormData
+): Promise<CreateChangeOrderDraftActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, userId, role } = access.data;
+
+  if (!hasCapability(role, 'canProposeChangeOrders')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit drafting change orders.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  const changeOrderId = readString(formData, 'changeOrderId') || null;
+  const reason = readString(formData, 'reason');
+  const scopeChangeSummary = readString(formData, 'scopeChangeSummary');
+  const scheduleOnly = formData.get('scheduleOnly') === 'on';
+  const lineItemsJson = readString(formData, 'lineItemsJson');
+
+  if (!jobId) return err(ErrorCode.VALIDATION_ERROR, 'Job ID is required.');
+
+  let lineItems: ChangeOrderLineItemInput[] = [];
+  if (lineItemsJson) {
+    try {
+      lineItems = JSON.parse(lineItemsJson);
+    } catch {
+      return err(ErrorCode.VALIDATION_ERROR, 'Line items payload is invalid.');
+    }
+  }
+
+  const serviceClient = createServiceClient();
+  const result = await createChangeOrderDraft(serviceClient, {
+    orgId,
+    jobId,
+    changeOrderId,
+    initiator: 'contractor',
+    requestedByUserId: userId,
+    createdByUserId: userId,
+    reason: reason || null,
+    scopeChangeSummary: scopeChangeSummary || null,
+    scheduleOnly,
+    lineItems,
+  });
+
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  return ok({ revisionId: result.data.id, changeOrderId: result.data.change_order_id });
+}
+
+export type ProposeChangeOrderActionState = Result<{ revisionId: string }>;
+
+export async function proposeChangeOrderAction(
+  _previousState: ProposeChangeOrderActionState | null,
+  formData: FormData
+): Promise<ProposeChangeOrderActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { userId, role } = access.data;
+
+  if (!hasCapability(role, 'canProposeChangeOrders')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit proposing change orders.');
+  }
+
+  const revisionId = readString(formData, 'revisionId');
+  const jobId = readString(formData, 'jobId');
+  if (!revisionId) return err(ErrorCode.VALIDATION_ERROR, 'Revision ID is required.');
+
+  const serviceClient = createServiceClient();
+  const result = await proposeChangeOrderRevision(serviceClient, { revisionId, actorUserId: userId });
+  if (!result.success) return result;
+
+  if (jobId) revalidatePath(`/jobs/${jobId}`);
+  return ok({ revisionId: result.data.id });
+}
+
+export type WithdrawChangeOrderActionState = Result<{ revisionId: string }>;
+
+export async function withdrawChangeOrderAction(
+  _previousState: WithdrawChangeOrderActionState | null,
+  formData: FormData
+): Promise<WithdrawChangeOrderActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { userId } = access.data;
+
+  const revisionId = readString(formData, 'revisionId');
+  const jobId = readString(formData, 'jobId');
+  if (!revisionId) return err(ErrorCode.VALIDATION_ERROR, 'Revision ID is required.');
+
+  const serviceClient = createServiceClient();
+  const result = await withdrawChangeOrderRevision(serviceClient, { revisionId, actorUserId: userId });
+  if (!result.success) return result;
+
+  if (jobId) revalidatePath(`/jobs/${jobId}`);
+  return ok({ revisionId: result.data.id });
 }

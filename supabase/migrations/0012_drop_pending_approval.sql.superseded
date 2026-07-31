@@ -1,3 +1,17 @@
+-- SUPERSEDED — NEVER APPLIED TO ANY DATABASE. Do not run.
+--
+-- This file DROPs org_members.status, which every migration from
+-- 20260510180000_service_requests.sql onward (and the current
+-- handle_new_user() trigger) depends on — running it now would break the
+-- schema. Confirmed 2026-07-30 against prod's
+-- supabase_migrations.schema_migrations history, which has no version
+-- "0012" entry at all; see 0012_service_requests_and_customer_accounts.sql
+-- (same directory) for the sibling file's corroborating comment. Renamed to
+-- .sql.superseded so `supabase db reset`/CLI tooling never picks it up; kept
+-- for historical record rather than deleted, since it documents an
+-- abandoned direction (removing pending-approval status entirely, later
+-- reversed in favor of fixing the trigger logic instead).
+--
 -- Premier CRM — Drop pending approval / self-signup flow
 -- Migration: 0012_drop_pending_approval
 --

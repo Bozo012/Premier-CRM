@@ -1,3 +1,14 @@
+-- SUPERSEDED — NEVER APPLIED TO ANY DATABASE. Do not run.
+--
+-- Confirmed via 20260510180000_service_requests.sql's own header comment:
+-- "The original 0012_ prefixed files defining these were never applied to
+-- the live DB (both were skipped due to a naming collision). This file
+-- replaces them as the canonical live migration." Independently confirmed
+-- 2026-07-30 against prod's supabase_migrations.schema_migrations history,
+-- which has no version "0012" entry at all. Renamed to .sql.superseded so
+-- `supabase db reset`/CLI tooling never picks it up; kept for historical
+-- record rather than deleted, since it documents an abandoned direction.
+--
 -- Premier CRM — Service requests and customer portal accounts
 -- Migration: 0012_service_requests_and_customer_accounts
 --

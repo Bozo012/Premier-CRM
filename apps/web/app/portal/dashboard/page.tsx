@@ -1,6 +1,14 @@
 import { redirect } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import {
+  createServiceClient,
+  getDepositState,
+  getWorkingInvoiceSummaryForCustomer,
+  listChangeOrdersForJob,
+  listOpenSchedulingSlots,
+} from '@premier/db';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -9,6 +17,10 @@ import {
 } from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { AddChangeOrderCommentForm } from '../_components/add-change-order-comment-form';
+import { BookSchedulingSlotForm } from '../_components/book-scheduling-slot-form';
+import { RequestChangeOrderForm } from '../_components/request-change-order-form';
+import { RespondToChangeOrderForm } from '../_components/respond-change-order-form';
 import { signOutCustomerPortal } from '../actions';
 
 interface CustomerAccountRow {
@@ -188,6 +200,34 @@ export default async function PortalDashboardPage() {
   const activeRequests = serviceRequests.filter((request) => !isCompleted(request.status));
   const completedRequests = serviceRequests.filter((request) => isCompleted(request.status));
 
+  const serviceClient = createServiceClient();
+  const { data: jobs } = await portalClient
+    .from('jobs')
+    .select('id, title, status, scheduled_start, scheduled_end, org_id')
+    .eq('customer_id', account.customer_id)
+    .order('created_at', { ascending: false });
+
+  const jobDetails = await Promise.all(
+    (jobs ?? []).map(async (job) => {
+      const [slotsResult, depositResult, workingInvoiceResult, changeOrdersResult] = await Promise.all([
+        job.status === 'approved'
+          ? listOpenSchedulingSlots(serviceClient, { orgId: job.org_id })
+          : Promise.resolve({ success: true as const, data: [] }),
+        getDepositState(serviceClient, { orgId: job.org_id, jobId: job.id }),
+        getWorkingInvoiceSummaryForCustomer(serviceClient, { jobId: job.id }),
+        listChangeOrdersForJob(serviceClient, { orgId: job.org_id, jobId: job.id }),
+      ]);
+
+      return {
+        job,
+        openSlots: slotsResult.success ? slotsResult.data : [],
+        depositState: depositResult.success ? depositResult.data : null,
+        workingInvoiceSummary: workingInvoiceResult.success ? workingInvoiceResult.data : null,
+        changeOrders: changeOrdersResult.success ? changeOrdersResult.data : [],
+      };
+    })
+  );
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -245,6 +285,109 @@ export default async function PortalDashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {jobDetails.length > 0 ? (
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold tracking-tight">Your jobs</h2>
+          {jobDetails.map(({ job, openSlots, depositState, workingInvoiceSummary, changeOrders }) => (
+            <Card key={job.id}>
+              <CardHeader>
+                <CardTitle>{job.title}</CardTitle>
+                <CardDescription className="capitalize">{job.status.replace(/_/g, ' ')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {job.scheduled_start ? (
+                  <p className="text-sm text-muted-foreground">
+                    Scheduled: {new Date(job.scheduled_start).toLocaleString()}
+                  </p>
+                ) : null}
+
+                {job.status === 'approved' ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Pick an available time</p>
+                    {openSlots.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No open slots published yet — Premier will reach out to schedule.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {openSlots.map((slot) => (
+                          <BookSchedulingSlotForm
+                            key={slot.id}
+                            jobId={job.id}
+                            slotId={slot.id}
+                            label={`${new Date(slot.starts_at).toLocaleString()} (${slot.spotsRemaining} open)`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {depositState && depositState.paymentStatus !== 'none' ? (
+                  <p className="text-sm text-muted-foreground">
+                    Deposit: <span className="font-medium capitalize">{depositState.paymentStatus.replace(/_/g, ' ')}</span>
+                    {depositState.requirement?.required_amount
+                      ? ` — $${depositState.requirement.required_amount}`
+                      : ''}
+                  </p>
+                ) : null}
+
+                {workingInvoiceSummary ? (
+                  <p className="text-sm text-muted-foreground">
+                    Work in progress total so far: ${workingInvoiceSummary.runningTotal.toFixed(2)} (
+                    {workingInvoiceSummary.lineCount} items)
+                  </p>
+                ) : null}
+
+                {changeOrders.length > 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium">Change orders</p>
+                    {changeOrders.map((thread) => {
+                      const currentRevision = thread.revisions.find(
+                        (r) => r.id === thread.changeOrder.current_revision_id
+                      );
+                      const awaitingResponse =
+                        currentRevision?.status === 'proposed' || currentRevision?.status === 'under_review';
+                      return (
+                        <div key={thread.changeOrder.id} className="rounded-md border p-3">
+                          <p className="text-sm font-medium">
+                            v{currentRevision?.version ?? 1} — {currentRevision?.status ?? thread.changeOrder.status}
+                          </p>
+                          {currentRevision?.reason ? (
+                            <p className="mt-1 text-sm text-muted-foreground">{currentRevision.reason}</p>
+                          ) : null}
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Price: ${(currentRevision?.price_adjustment ?? 0).toFixed(2)}
+                          </p>
+                          {thread.comments.map((comment) => (
+                            <p key={comment.id} className="mt-1 text-xs text-muted-foreground">
+                              {comment.body}
+                            </p>
+                          ))}
+                          {awaitingResponse && currentRevision ? (
+                            <div className="mt-2">
+                              <RespondToChangeOrderForm
+                                revisionId={currentRevision.id}
+                                acknowledgmentVersion={currentRevision.acknowledgment_version}
+                              />
+                            </div>
+                          ) : null}
+                          <div className="mt-2">
+                            <AddChangeOrderCommentForm changeOrderId={thread.changeOrder.id} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                <RequestChangeOrderForm jobId={job.id} />
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+      ) : null}
     </main>
   );
 }

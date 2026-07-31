@@ -20,23 +20,36 @@
  *    /settings/website page access) was already correctly enforced and
  *    needed no change — these tests exist to keep it that way.
  *
- * CRM data tables (customers, properties, estimates, jobs, quotes,
- * invoices) intentionally have NO role restriction beyond org membership —
- * confirmed by design (any active member does real field work), not a gap.
- * See employee-estimate-workflow-bot.spec.ts for the positive workflow
- * proof; this file is about permission BOUNDARIES only.
+ * CRM data tables (customers, properties, estimates, jobs, quotes) have NO
+ * role restriction beyond org membership — confirmed by design (any active
+ * member does real field work), not a gap. See
+ * employee-estimate-workflow-bot.spec.ts for the positive workflow proof.
+ *
+ * Invoices/payments are the one exception (Phase 4 below, 2026-07-31
+ * capability-layer audit): packages/shared/permissions.ts's capability map
+ * lets employee/subcontractor create and send invoices — normal daily
+ * operations — but reserves recording payments, voiding, deleting, and
+ * refunds for owner/admin, since those alter financial history. That
+ * boundary is enforced at TWO layers, and Phase 4 proves both: the server
+ * action (apps/web/app/(app)/invoices/actions.ts's getInvoiceActionContext)
+ * and, since server-action checks alone don't stop a direct Supabase REST
+ * call using the employee's own session, RLS itself (migration
+ * 20260731000000_invoices_payments_owner_admin_write.sql).
  */
 
 import { test, expect } from '@playwright/test';
 import {
   createUserApiClient,
+  getAdminAccount,
   getStaffAccount,
   hasAdminCredentials,
   hasApiTestCredentials,
   hasStaffCredentials,
 } from './utils/auth';
 import { createStaffScenario, type StaffScenario } from './context/scenario';
-import { routes, team } from './utils/selectors';
+import { addInvoiceLineItem, createTestInvoice, type InvoiceFixture } from './context/invoice';
+import { createTestJob } from './context/job';
+import { recordPaymentForm, routes, team } from './utils/selectors';
 
 const canRun = () => hasAdminCredentials() && hasStaffCredentials();
 const SKIP_REASON = 'TEST_ADMIN_* and/or TEST_STAFF_* not set in .env.test';
@@ -246,6 +259,165 @@ test.describe('staff permissions bot', () => {
       // row). Nothing to test here beyond test 6 above proving the DB layer
       // already refuses both operations regardless of who's asking. Add a
       // real test once such a feature and its own authorization ships.
+    });
+  });
+
+  test.describe.serial('financial capability restrictions (Phase 4)', () => {
+    let scenario: StaffScenario;
+    let invoice: InvoiceFixture;
+
+    test.beforeAll(async ({ browser }) => {
+      test.skip(!canRun(), SKIP_REASON);
+      const ownerPage = await browser.newPage();
+      const employeePage = await browser.newPage();
+      scenario = await createStaffScenario({
+        ownerPage,
+        employeePage,
+        customer: true,
+        property: true,
+      });
+
+      // Owner creates the job/invoice fixture the employee will attempt
+      // restricted actions against below — invoice creation itself stays
+      // open to employees (see test 1), so a separate, already-created
+      // invoice isolates the payment/void tests from that positive case.
+      // Recording a payment (and the invoice's own detail page) only ever
+      // renders for a non-draft invoice (invoices/[invoiceId]/page.tsx:
+      // `{!isDraft && invoice.status !== 'void' ? <RecordPaymentForm .../> : null}`)
+      // — so this must be sent, not just have a line item, before tests 2-5
+      // run against it.
+      const job = await scenario.ownerSession.job(scenario.customer!, scenario.property);
+      invoice = await scenario.ownerSession.invoice(job);
+      await addInvoiceLineItem(scenario.ownerSession.page, invoice);
+      await scenario.ownerSession.page.goto(invoice.url);
+      await scenario.ownerSession.page.getByRole('button', { name: /send invoice/i }).click();
+      await expect(
+        scenario.ownerSession.page.getByRole('button', { name: /send invoice/i })
+      ).toHaveCount(0, { timeout: 10_000 });
+    });
+
+    test.afterAll(async () => {
+      await scenario?.ownerSession.finish();
+      await scenario?.employeeSession.finish();
+    });
+
+    test('1. UI + DB: employee CAN send an invoice (canSendInvoices stays open to employees)', async () => {
+      const { page } = scenario.employeeSession;
+      // session.job()/.invoice() cache per-session (create once, reuse) — use
+      // the underlying fixture functions directly for a genuinely separate
+      // invoice from the one tests 2-5 attempt payment/void on below.
+      const job = await createTestJob(scenario.ownerSession.page, scenario.customer!, scenario.property);
+      const sendableInvoice = await createTestInvoice(scenario.ownerSession.page, job);
+      await addInvoiceLineItem(scenario.ownerSession.page, sendableInvoice);
+
+      await page.goto(sendableInvoice.url);
+      await page.getByRole('button', { name: /send invoice/i }).click();
+      // The button unmounts once status !== 'draft' (see send-invoice-button.tsx).
+      await expect(page.getByRole('button', { name: /send invoice/i })).toHaveCount(0, {
+        timeout: 10_000,
+      });
+
+      const api = await createUserApiClient(getStaffAccount());
+      const { data } = await api
+        .from('invoices')
+        .select('status')
+        .eq('id', sendableInvoice.id)
+        .single();
+      expect(data?.status).toBe('sent');
+    });
+
+    test('2. UI: employee attempting to record a payment is refused with a capability error', async () => {
+      const { page } = scenario.employeeSession;
+      await page.goto(invoice.url);
+      // "Back to job" is unique to the invoice detail page (customer detail
+      // pages render "Back to customers" instead) — a concrete, unambiguous
+      // signal that the correct page actually rendered.
+      await expect(page.getByRole('link', { name: 'Back to job' })).toBeVisible({
+        timeout: 15_000,
+      });
+      await recordPaymentForm.methodSelect(page).selectOption('cash');
+      await recordPaymentForm.submitButton(page).click();
+      await expect(
+        page.getByRole('main').getByText(/does not have permission to record payments/i)
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('3. direct API: employee cannot insert a payment row (bypassing the UI)', async () => {
+      test.skip(!canRunApiChecks(), API_SKIP_REASON);
+      const employeeApi = await createUserApiClient(getStaffAccount());
+
+      const { error } = await employeeApi.from('payments').insert({
+        org_id: scenario.membership.orgId,
+        invoice_id: invoice.id,
+        amount: 100,
+        method: 'cash',
+      });
+
+      expect(error, 'expected the direct insert to be refused by RLS').not.toBeNull();
+    });
+
+    test('4. UI: employee attempting to void the invoice is refused with a capability error', async () => {
+      const { page } = scenario.employeeSession;
+      await page.goto(invoice.url);
+      await page.getByRole('button', { name: 'Void invoice' }).click();
+      await page.getByRole('button', { name: 'Confirm void' }).click();
+      await expect(
+        page.getByRole('main').getByText(/does not have permission to void invoices/i)
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('5. direct API: employee cannot update the invoice status to void (bypassing the UI)', async () => {
+      test.skip(!canRunApiChecks(), API_SKIP_REASON);
+      const employeeApi = await createUserApiClient(getStaffAccount());
+
+      const { data, error } = await employeeApi
+        .from('invoices')
+        .update({ status: 'void' })
+        .eq('id', invoice.id)
+        .select('status');
+
+      if (!error) {
+        expect(data ?? []).toHaveLength(0);
+      }
+
+      const client = await createUserApiClient(getStaffAccount());
+      const { data: after } = await client
+        .from('invoices')
+        .select('status')
+        .eq('id', invoice.id)
+        .single();
+      expect(after?.status).not.toBe('void');
+    });
+
+    test('6. UI + DB: owner CAN record a payment and void an invoice (positive control)', async () => {
+      const { page } = scenario.ownerSession;
+
+      await page.goto(invoice.url);
+      await recordPaymentForm.methodSelect(page).selectOption('cash');
+      await recordPaymentForm.submitButton(page).click();
+      await expect(page.getByText(/no remaining balance/i)).toBeVisible({ timeout: 10_000 });
+
+      const job2 = await createTestJob(scenario.ownerSession.page, scenario.customer!, scenario.property);
+      const voidableInvoice = await createTestInvoice(scenario.ownerSession.page, job2);
+      await addInvoiceLineItem(scenario.ownerSession.page, voidableInvoice);
+      // Void invoice button only renders for a non-draft invoice (same
+      // isDraft gating as RecordPaymentForm — see beforeAll's comment).
+      await page.goto(voidableInvoice.url);
+      await page.getByRole('button', { name: /send invoice/i }).click();
+      await expect(page.getByRole('button', { name: /send invoice/i })).toHaveCount(0, {
+        timeout: 10_000,
+      });
+      await page.getByRole('button', { name: 'Void invoice' }).click();
+      await page.getByRole('button', { name: 'Confirm void' }).click();
+      await expect(page.getByText(/does not have permission/i)).toHaveCount(0);
+
+      const api = await createUserApiClient(getAdminAccount());
+      const { data } = await api
+        .from('invoices')
+        .select('status')
+        .eq('id', voidableInvoice.id)
+        .single();
+      expect(data?.status).toBe('void');
     });
   });
 });

@@ -34,7 +34,7 @@ async function deliverEmail(args: {
   html: string;
   subject: string;
   text: string;
-  to: string;
+  to: string | string[];
   errorLabel?: string;
 }): Promise<{ sent: boolean }> {
   const resend = getResendClient();
@@ -217,6 +217,49 @@ export async function sendQuoteEmail(
 
   return deliverEmail({
     to: args.customerEmail,
+    subject,
+    html,
+    text,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Quote response notification (staff-facing, not customer-facing)
+// ---------------------------------------------------------------------------
+
+export interface SendQuoteRespondedNotificationEmailArgs {
+  toEmails: string[];
+  customerName: string;
+  quoteTitle: string;
+  quoteTotal: number | null;
+  quoteDetailUrl: string; // relative path, e.g. /quotes/{id}
+  response: 'accepted' | 'declined';
+  declineReason: string | null;
+}
+
+/**
+ * Notifies the org's active owner/admin members when a customer responds to
+ * a quote via /q/[token] — see respondToQuoteAction, which previously had no
+ * downstream effect at all beyond flipping quotes.status (2026-07-31 audit
+ * repair). Deliberately does NOT create a job — that stays a manual,
+ * staff-triggered step (approveJobAction / createJobFromAcceptedQuoteAction)
+ * so staff can order materials, schedule, or collect a deposit first.
+ */
+export async function sendQuoteRespondedNotificationEmail(
+  args: SendQuoteRespondedNotificationEmailArgs
+): Promise<{ sent: boolean }> {
+  if (args.toEmails.length === 0) return { sent: false };
+
+  const absoluteUrl = `${getAppUrl()}${args.quoteDetailUrl}`;
+  const formattedTotal = formatMoney(args.quoteTotal);
+  const verb = args.response === 'accepted' ? 'accepted' : 'declined';
+
+  const subject = `Quote ${verb}: ${args.quoteTitle}`;
+  const html = buildQuoteRespondedEmailHtml({ ...args, absoluteUrl, formattedTotal, verb });
+  const text = buildQuoteRespondedEmailText({ ...args, absoluteUrl, formattedTotal, verb });
+
+  return deliverEmail({
+    to: args.toEmails,
     subject,
     html,
     text,
@@ -760,6 +803,84 @@ function buildQuoteEmailHtml(args: EmailBodyArgs): string {
   </table>
 </body>
 </html>`;
+}
+
+interface QuoteRespondedEmailBodyArgs {
+  absoluteUrl: string;
+  customerName: string;
+  declineReason: string | null;
+  formattedTotal: string;
+  quoteTitle: string;
+  response: 'accepted' | 'declined';
+  verb: string;
+}
+
+function buildQuoteRespondedEmailHtml(args: QuoteRespondedEmailBodyArgs): string {
+  const { absoluteUrl, customerName, declineReason, formattedTotal, quoteTitle, response, verb } =
+    args;
+  const accentColor = response === 'accepted' ? '#16a34a' : '#dc2626';
+  const reasonLine =
+    response === 'declined' && declineReason
+      ? `<p style="margin:8px 0 0;color:#6b7280;font-size:14px;">Reason given: ${escapeHtml(declineReason)}</p>`
+      : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+    <tr>
+      <td>
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
+          <tr>
+            <td style="background:#1e293b;padding:20px 28px;">
+              <p style="margin:0;color:#f8fafc;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Premier CRM</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <p style="margin:0 0 16px;color:${accentColor};font-size:16px;font-weight:600;">${escapeHtml(customerName)} ${verb} a quote.</p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0;color:#374151;font-size:15px;font-weight:600;">${escapeHtml(quoteTitle)}</p>
+                    <p style="margin:6px 0 0;color:#6b7280;font-size:14px;">Total: <strong style="color:#111827;">${formattedTotal}</strong></p>
+                    ${reasonLine}
+                  </td>
+                </tr>
+              </table>
+              <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                <tr>
+                  <td style="background:#2563eb;border-radius:6px;">
+                    <a href="${absoluteUrl}" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">Review quote →</a>
+                  </td>
+                </tr>
+              </table>
+              ${response === 'accepted' ? '<p style="margin:0;color:#6b7280;font-size:13px;">No job has been created automatically — review and create one when ready.</p>' : ''}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildQuoteRespondedEmailText(args: QuoteRespondedEmailBodyArgs): string {
+  const { absoluteUrl, customerName, declineReason, formattedTotal, quoteTitle, response, verb } =
+    args;
+  const reasonLine = response === 'declined' && declineReason ? `\nReason given: ${declineReason}` : '';
+  const jobNote =
+    response === 'accepted' ? '\nNo job has been created automatically — review and create one when ready.' : '';
+
+  return `${customerName} ${verb} a quote.
+
+${quoteTitle}
+Total: ${formattedTotal}${reasonLine}
+
+Review quote:
+${absoluteUrl}${jobNote}`;
 }
 
 function buildQuoteEmailText(args: EmailBodyArgs): string {

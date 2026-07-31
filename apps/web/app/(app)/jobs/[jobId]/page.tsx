@@ -4,13 +4,19 @@ import { notFound, redirect } from 'next/navigation';
 import {
   createServiceClient,
   getActiveOrgContext,
+  getDepositState,
   getJobById,
   getJobInvoiceTotals,
+  getWorkingInvoice,
+  listChangeOrdersForJob,
   listInvoicesForJob,
   listQuotesForJob,
+  type ChangeOrderThreadDetail,
+  type DepositState,
   type JobInvoiceSummary,
   type JobPhaseSummary,
   type JobQuoteSummary,
+  type WorkingInvoiceDetail,
 } from '@premier/db';
 import { ErrorCode } from '@premier/shared';
 
@@ -19,9 +25,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import {
+  ProposeChangeOrderButton,
+  WithdrawChangeOrderButton,
+} from '../_components/change-order-action-buttons';
+import { ChangeOrderDraftForm } from '../_components/change-order-draft-form';
 import { CreateDraftQuoteButton } from '../_components/create-draft-quote-button';
 import { CreateInvoiceButton } from '../_components/create-invoice-button';
+import { CreateSchedulingSlotForm } from '../_components/create-scheduling-slot-form';
+import { DepositRequirementForm } from '../_components/deposit-requirement-form';
+import { GenerateFinalInvoiceButton } from '../_components/generate-final-invoice-button';
 import { ScheduleJobForm } from '../_components/schedule-job-form';
+import { WaiveDepositButton } from '../_components/waive-deposit-button';
 
 interface JobDetailPageProps {
   params: Promise<{ jobId: string }>;
@@ -57,37 +72,49 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
 
   const serviceClient = createServiceClient();
 
-  const [result, quotesResult, sourceEstimateResult, sourceRequestResult, invoicesResult, invoiceTotalsResult] =
-    await Promise.all([
-      getJobById(supabase, {
-        jobId,
-        orgId,
-      }),
-      listQuotesForJob(supabase, {
-        jobId,
-        orgId,
-      }),
-      serviceClient
-        .from('estimates')
-        .select('id, title, estimate_number')
-        .eq('converted_job_id', jobId)
-        .eq('org_id', orgId)
-        .maybeSingle(),
-      serviceClient
-        .from('service_requests')
-        .select('id, request_number, service_title')
-        .eq('job_id', jobId)
-        .eq('org_id', orgId)
-        .maybeSingle(),
-      listInvoicesForJob(supabase, {
-        jobId,
-        orgId,
-      }),
-      getJobInvoiceTotals(supabase, {
-        jobId,
-        orgId,
-      }),
-    ]);
+  const [
+    result,
+    quotesResult,
+    sourceEstimateResult,
+    sourceRequestResult,
+    invoicesResult,
+    invoiceTotalsResult,
+    depositStateResult,
+    workingInvoiceResult,
+    changeOrdersResult,
+  ] = await Promise.all([
+    getJobById(supabase, {
+      jobId,
+      orgId,
+    }),
+    listQuotesForJob(supabase, {
+      jobId,
+      orgId,
+    }),
+    serviceClient
+      .from('estimates')
+      .select('id, title, estimate_number')
+      .eq('converted_job_id', jobId)
+      .eq('org_id', orgId)
+      .maybeSingle(),
+    serviceClient
+      .from('service_requests')
+      .select('id, request_number, service_title')
+      .eq('job_id', jobId)
+      .eq('org_id', orgId)
+      .maybeSingle(),
+    listInvoicesForJob(supabase, {
+      jobId,
+      orgId,
+    }),
+    getJobInvoiceTotals(supabase, {
+      jobId,
+      orgId,
+    }),
+    getDepositState(serviceClient, { orgId, jobId }),
+    getWorkingInvoice(serviceClient, { orgId, jobId }),
+    listChangeOrdersForJob(serviceClient, { orgId, jobId }),
+  ]);
 
   if (!result.success) {
     if (result.code === ErrorCode.NOT_FOUND) {
@@ -125,6 +152,9 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   // Live aggregate, not the stale jobs.invoiced_total/paid_total columns —
   // those have no maintaining trigger and would silently drift from reality.
   const invoiceTotals = invoiceTotalsResult.success ? invoiceTotalsResult.data : null;
+  const depositState = depositStateResult.success ? depositStateResult.data : null;
+  const workingInvoice = workingInvoiceResult.success ? workingInvoiceResult.data : null;
+  const changeOrders = changeOrdersResult.success ? changeOrdersResult.data : [];
 
   return (
     <PageShell>
@@ -236,8 +266,9 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
                 <p className="mt-1 text-sm text-muted-foreground">
                   Use this step to turn the approved work order into a scheduled job.
                 </p>
-                <div className="mt-3">
+                <div className="mt-3 space-y-3">
                   <ScheduleJobForm jobId={job.id} />
+                  <CreateSchedulingSlotForm />
                 </div>
               </div>
             ) : null}
@@ -393,16 +424,164 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <JobQuotesCard jobId={job.id} quotes={quotes} />
         <JobInvoicesCard jobId={job.id} invoices={invoices} />
-        <FutureSectionCard
-          title="Time entries"
-          description="Tracked labor and drive time will attach to this job here."
-        />
-        <FutureSectionCard
-          title="Captures"
-          description="Photos, notes, recordings, and vault items will surface here."
-        />
+        <DepositCard jobId={job.id} depositState={depositState} />
+        <WorkingInvoiceCard jobId={job.id} workingInvoice={workingInvoice} />
+      </section>
+
+      <section>
+        <ChangeOrdersCard jobId={job.id} threads={changeOrders} />
       </section>
     </PageShell>
+  );
+}
+
+function DepositCard({
+  depositState,
+  jobId,
+}: {
+  depositState: DepositState | null;
+  jobId: string;
+}) {
+  const status = depositState?.paymentStatus ?? 'none';
+  return (
+    <Card className="md:col-span-2 xl:col-span-1">
+      <CardHeader>
+        <CardTitle>Deposit</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Status: <span className="font-medium text-foreground">{formatEnumLabel(status)}</span>
+        </p>
+        {depositState?.requirement?.required_amount ? (
+          <p className="text-sm text-muted-foreground">
+            Required: {formatMoney(depositState.requirement.required_amount)}
+          </p>
+        ) : null}
+        {status === 'none' ? <DepositRequirementForm jobId={jobId} /> : null}
+        {status === 'required' ? <WaiveDepositButton jobId={jobId} /> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WorkingInvoiceCard({
+  jobId,
+  workingInvoice,
+}: {
+  jobId: string;
+  workingInvoice: WorkingInvoiceDetail | null;
+}) {
+  return (
+    <Card className="md:col-span-2 xl:col-span-1">
+      <CardHeader>
+        <CardTitle>Working invoice</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!workingInvoice ? (
+          <p className="text-sm text-muted-foreground">
+            No working invoice yet — created automatically when the job is scheduled.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {workingInvoice.lineItems.length}{' '}
+              {workingInvoice.lineItems.length === 1 ? 'line item' : 'line items'}
+            </p>
+            <ul className="space-y-1 text-sm">
+              {workingInvoice.lineItems.map((item) => (
+                <li key={item.id} className="flex justify-between gap-2">
+                  <span>
+                    {item.name}
+                    {item.source_type ? (
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        ({formatEnumLabel(item.source_type)})
+                      </span>
+                    ) : null}
+                  </span>
+                  <span>{formatMoney(item.total)}</span>
+                </li>
+              ))}
+            </ul>
+            {workingInvoice.lineItems.length > 0 ? (
+              <GenerateFinalInvoiceButton jobId={jobId} />
+            ) : null}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChangeOrdersCard({
+  jobId,
+  threads,
+}: {
+  jobId: string;
+  threads: ChangeOrderThreadDetail[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Change orders</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {threads.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No change orders on this job yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {threads.map((thread) => {
+              const currentRevision = thread.revisions.find(
+                (r) => r.id === thread.changeOrder.current_revision_id
+              );
+              return (
+                <li key={thread.changeOrder.id} className="rounded-md border p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-foreground">
+                      v{currentRevision?.version ?? 1} — {formatEnumLabel(thread.changeOrder.status)}
+                    </p>
+                  </div>
+                  {currentRevision?.reason ? (
+                    <p className="mt-1 text-sm text-muted-foreground">{currentRevision.reason}</p>
+                  ) : null}
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Price adjustment: {formatMoney(currentRevision?.price_adjustment ?? 0)}
+                  </p>
+                  {thread.currentRevisionLineItems.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-sm">
+                      {thread.currentRevisionLineItems.map((item) => (
+                        <li key={item.id} className="flex justify-between gap-2">
+                          <span>{item.description}</span>
+                          <span>{formatMoney(item.total)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {thread.comments.length > 0 ? (
+                    <ul className="mt-2 space-y-1 border-t pt-2 text-xs text-muted-foreground">
+                      {thread.comments.map((comment) => (
+                        <li key={comment.id}>{comment.body}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {currentRevision?.status === 'draft' ? (
+                    <div className="mt-2 flex gap-2">
+                      <ProposeChangeOrderButton jobId={jobId} revisionId={currentRevision.id} />
+                      <WithdrawChangeOrderButton jobId={jobId} revisionId={currentRevision.id} />
+                    </div>
+                  ) : null}
+                  {currentRevision?.status === 'proposed' || currentRevision?.status === 'under_review' ? (
+                    <div className="mt-2">
+                      <WithdrawChangeOrderButton jobId={jobId} revisionId={currentRevision.id} />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <ChangeOrderDraftForm jobId={jobId} />
+      </CardContent>
+    </Card>
   );
 }
 

@@ -27,6 +27,45 @@ type WebsitePromotionInsert = TablesInsert<'website_promotions'>;
 type WebsitePromotionUpdate = TablesUpdate<'website_promotions'>;
 type WebsiteServiceHighlightInsert = TablesInsert<'website_service_highlights'>;
 type WebsiteServiceHighlightUpdate = TablesUpdate<'website_service_highlights'>;
+type WebsiteSettingsPublicRow = Pick<
+  WebsiteSettingsRow,
+  | 'availability_text'
+  | 'call_cta_label'
+  | 'emergency_message'
+  | 'hero_headline'
+  | 'hero_subheadline'
+  | 'homepage_seo_description'
+  | 'homepage_seo_title'
+  | 'phone_display'
+  | 'phone_e164'
+  | 'portal_cta_label'
+  | 'portal_status_message'
+  | 'request_service_cta_label'
+  | 'service_area_summary'
+  | 'text_cta_label'
+  | 'updated_at'
+>;
+type WebsiteSettingsRecordRow = WebsiteSettingsPublicRow &
+  Pick<WebsiteSettingsRow, 'active' | 'created_at' | 'id' | 'org_id' | 'published'>;
+type WebsitePromotionPublicRow = Pick<
+  WebsitePromotionRow,
+  | 'button_link'
+  | 'button_text'
+  | 'description'
+  | 'display_order'
+  | 'end_date'
+  | 'id'
+  | 'start_date'
+  | 'title'
+>;
+type WebsitePromotionRecordRow = WebsitePromotionPublicRow &
+  Pick<WebsitePromotionRow, 'active' | 'created_at' | 'org_id' | 'updated_at'>;
+type WebsiteServiceHighlightPublicRow = Pick<
+  WebsiteServiceHighlightRow,
+  'description' | 'display_order' | 'featured' | 'id' | 'slug' | 'title'
+>;
+type WebsiteServiceHighlightRecordRow = WebsiteServiceHighlightPublicRow &
+  Pick<WebsiteServiceHighlightRow, 'active' | 'created_at' | 'org_id' | 'updated_at'>;
 
 export interface WebsiteSettingsRecord extends PublicWebsiteSettings {
   active: boolean;
@@ -69,7 +108,29 @@ function normalizeOptionalDate(value: string | null | undefined): string | null 
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function mapWebsiteSettings(row: WebsiteSettingsRow): PublicWebsiteSettings {
+function normalizeServiceHighlightSlug(
+  row: Pick<WebsiteServiceHighlightPublicRow, 'id' | 'slug' | 'title'>
+): string {
+  const trimmedSlug = row.slug?.trim();
+
+  if (trimmedSlug) {
+    return trimmedSlug;
+  }
+
+  const derivedFromTitle = row.title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (derivedFromTitle) {
+    return derivedFromTitle;
+  }
+
+  return row.id.slice(0, 8);
+}
+
+function mapWebsiteSettings(row: WebsiteSettingsPublicRow): PublicWebsiteSettings {
   return {
     availabilityText: row.availability_text,
     callCtaLabel: row.call_cta_label,
@@ -89,7 +150,7 @@ function mapWebsiteSettings(row: WebsiteSettingsRow): PublicWebsiteSettings {
   };
 }
 
-function mapWebsiteSettingsRecord(row: WebsiteSettingsRow): WebsiteSettingsRecord {
+function mapWebsiteSettingsRecord(row: WebsiteSettingsRecordRow): WebsiteSettingsRecord {
   return {
     active: row.active ?? true,
     createdAt: row.created_at,
@@ -100,7 +161,7 @@ function mapWebsiteSettingsRecord(row: WebsiteSettingsRow): WebsiteSettingsRecor
   };
 }
 
-function mapWebsitePromotion(row: WebsitePromotionRow): PublicWebsitePromotion {
+function mapWebsitePromotion(row: WebsitePromotionPublicRow): PublicWebsitePromotion {
   return {
     buttonLink: row.button_link,
     buttonText: row.button_text,
@@ -114,7 +175,7 @@ function mapWebsitePromotion(row: WebsitePromotionRow): PublicWebsitePromotion {
 }
 
 function mapWebsitePromotionRecord(
-  row: WebsitePromotionRow
+  row: WebsitePromotionRecordRow
 ): WebsitePromotionRecord {
   return {
     active: row.active ?? false,
@@ -126,20 +187,20 @@ function mapWebsitePromotionRecord(
 }
 
 function mapWebsiteServiceHighlight(
-  row: WebsiteServiceHighlightRow
+  row: WebsiteServiceHighlightPublicRow
 ): PublicWebsiteServiceHighlight {
   return {
     description: row.description,
     displayOrder: row.display_order ?? 0,
     featured: row.featured ?? false,
     id: row.id,
-    slug: row.slug,
+    slug: normalizeServiceHighlightSlug(row),
     title: row.title,
   };
 }
 
 function mapWebsiteServiceHighlightRecord(
-  row: WebsiteServiceHighlightRow
+  row: WebsiteServiceHighlightRecordRow
 ): WebsiteServiceHighlightRecord {
   return {
     active: row.active ?? false,
@@ -151,7 +212,7 @@ function mapWebsiteServiceHighlightRecord(
 }
 
 function isPromotionInActiveWindow(
-  row: WebsitePromotionRow,
+  row: Pick<WebsitePromotionPublicRow, 'end_date' | 'start_date'>,
   today: string
 ): boolean {
   const startsOnOrBeforeToday = !row.start_date || row.start_date <= today;

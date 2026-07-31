@@ -10,10 +10,51 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          event_type: string
+          id: string
+          message: string | null
+          org_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          event_type: string
+          id?: string
+          message?: string | null
+          org_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          event_type?: string
+          id?: string
+          message?: string | null
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_usage_events: {
         Row: {
           audio_seconds: number | null
@@ -417,6 +458,292 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      change_order_comments: {
+        Row: {
+          author_customer_id: string | null
+          author_user_id: string | null
+          body: string
+          change_order_id: string
+          created_at: string
+          id: string
+          org_id: string
+          revision_id: string | null
+        }
+        Insert: {
+          author_customer_id?: string | null
+          author_user_id?: string | null
+          body: string
+          change_order_id: string
+          created_at?: string
+          id?: string
+          org_id: string
+          revision_id?: string | null
+        }
+        Update: {
+          author_customer_id?: string | null
+          author_user_id?: string | null
+          body?: string
+          change_order_id?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          revision_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_order_comments_author_customer_id_fkey"
+            columns: ["author_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_order_comments_change_order_id_fkey"
+            columns: ["change_order_id"]
+            isOneToOne: false
+            referencedRelation: "change_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_order_comments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_order_comments_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "change_order_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      change_order_line_items: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          kind: string
+          quantity: number
+          revision_id: string
+          sort_order: number
+          source_reference: string | null
+          taxable: boolean
+          total: number | null
+          unit: string
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          kind: string
+          quantity?: number
+          revision_id: string
+          sort_order?: number
+          source_reference?: string | null
+          taxable?: boolean
+          total?: number | null
+          unit?: string
+          unit_price?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          kind?: string
+          quantity?: number
+          revision_id?: string
+          sort_order?: number
+          source_reference?: string | null
+          taxable?: boolean
+          total?: number | null
+          unit?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_order_line_items_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "change_order_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      change_order_revisions: {
+        Row: {
+          acknowledgment_text: string | null
+          acknowledgment_version: string | null
+          change_order_id: string
+          created_at: string
+          created_by_user_id: string | null
+          decided_at: string | null
+          decided_by_customer_id: string | null
+          decided_by_user_id: string | null
+          decision_note: string | null
+          deposit_impact: number
+          id: string
+          incorporated_at: string | null
+          price_adjustment: number
+          proposed_at: string | null
+          proposed_by_user_id: string | null
+          reason: string | null
+          schedule_delta_minutes: number | null
+          schedule_impact_notes: string | null
+          schedule_only: boolean
+          scope_change_summary: string | null
+          status: Database["public"]["Enums"]["change_order_status"]
+          supersedes_revision_id: string | null
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          acknowledgment_text?: string | null
+          acknowledgment_version?: string | null
+          change_order_id: string
+          created_at?: string
+          created_by_user_id?: string | null
+          decided_at?: string | null
+          decided_by_customer_id?: string | null
+          decided_by_user_id?: string | null
+          decision_note?: string | null
+          deposit_impact?: number
+          id?: string
+          incorporated_at?: string | null
+          price_adjustment?: number
+          proposed_at?: string | null
+          proposed_by_user_id?: string | null
+          reason?: string | null
+          schedule_delta_minutes?: number | null
+          schedule_impact_notes?: string | null
+          schedule_only?: boolean
+          scope_change_summary?: string | null
+          status?: Database["public"]["Enums"]["change_order_status"]
+          supersedes_revision_id?: string | null
+          updated_at?: string
+          version: number
+        }
+        Update: {
+          acknowledgment_text?: string | null
+          acknowledgment_version?: string | null
+          change_order_id?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          decided_at?: string | null
+          decided_by_customer_id?: string | null
+          decided_by_user_id?: string | null
+          decision_note?: string | null
+          deposit_impact?: number
+          id?: string
+          incorporated_at?: string | null
+          price_adjustment?: number
+          proposed_at?: string | null
+          proposed_by_user_id?: string | null
+          reason?: string | null
+          schedule_delta_minutes?: number | null
+          schedule_impact_notes?: string | null
+          schedule_only?: boolean
+          scope_change_summary?: string | null
+          status?: Database["public"]["Enums"]["change_order_status"]
+          supersedes_revision_id?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_order_revisions_change_order_id_fkey"
+            columns: ["change_order_id"]
+            isOneToOne: false
+            referencedRelation: "change_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_order_revisions_decided_by_customer_id_fkey"
+            columns: ["decided_by_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_order_revisions_supersedes_revision_id_fkey"
+            columns: ["supersedes_revision_id"]
+            isOneToOne: true
+            referencedRelation: "change_order_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      change_orders: {
+        Row: {
+          created_at: string
+          current_revision_id: string | null
+          id: string
+          initiator: Database["public"]["Enums"]["change_order_initiator"]
+          job_id: string
+          org_id: string
+          requested_by_customer_id: string | null
+          requested_by_user_id: string | null
+          status: Database["public"]["Enums"]["change_order_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_revision_id?: string | null
+          id?: string
+          initiator: Database["public"]["Enums"]["change_order_initiator"]
+          job_id: string
+          org_id: string
+          requested_by_customer_id?: string | null
+          requested_by_user_id?: string | null
+          status?: Database["public"]["Enums"]["change_order_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_revision_id?: string | null
+          id?: string
+          initiator?: Database["public"]["Enums"]["change_order_initiator"]
+          job_id?: string
+          org_id?: string
+          requested_by_customer_id?: string | null
+          requested_by_user_id?: string | null
+          status?: Database["public"]["Enums"]["change_order_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_orders_current_revision_fkey"
+            columns: ["current_revision_id"]
+            isOneToOne: false
+            referencedRelation: "change_order_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_orders_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_orders_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_orders_requested_by_customer_id_fkey"
+            columns: ["requested_by_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
         ]
@@ -1169,6 +1496,10 @@ export type Database = {
           quantity: number
           quote_line_id: string | null
           sort_order: number | null
+          source_change_order_revision_id: string | null
+          source_note: string | null
+          source_quote_line_id: string | null
+          source_type: string | null
           total: number | null
           unit: string
           unit_price: number
@@ -1182,6 +1513,10 @@ export type Database = {
           quantity?: number
           quote_line_id?: string | null
           sort_order?: number | null
+          source_change_order_revision_id?: string | null
+          source_note?: string | null
+          source_quote_line_id?: string | null
+          source_type?: string | null
           total?: number | null
           unit: string
           unit_price?: number
@@ -1195,6 +1530,10 @@ export type Database = {
           quantity?: number
           quote_line_id?: string | null
           sort_order?: number | null
+          source_change_order_revision_id?: string | null
+          source_note?: string | null
+          source_quote_line_id?: string | null
+          source_type?: string | null
           total?: number | null
           unit?: string
           unit_price?: number
@@ -1214,6 +1553,20 @@ export type Database = {
             referencedRelation: "quote_line_items"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "invoice_line_items_source_change_order_revision_id_fkey"
+            columns: ["source_change_order_revision_id"]
+            isOneToOne: false
+            referencedRelation: "change_order_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_line_items_source_quote_line_id_fkey"
+            columns: ["source_quote_line_id"]
+            isOneToOne: false
+            referencedRelation: "quote_line_items"
+            referencedColumns: ["id"]
+          },
         ]
       }
       invoices: {
@@ -1223,6 +1576,8 @@ export type Database = {
           created_at: string
           discount_amount: number | null
           due_date: string | null
+          finalized_at: string | null
+          finalized_into_invoice_id: string | null
           id: string
           invoice_number: string
           issued_date: string
@@ -1252,6 +1607,8 @@ export type Database = {
           created_at?: string
           discount_amount?: number | null
           due_date?: string | null
+          finalized_at?: string | null
+          finalized_into_invoice_id?: string | null
           id?: string
           invoice_number?: string
           issued_date?: string
@@ -1281,6 +1638,8 @@ export type Database = {
           created_at?: string
           discount_amount?: number | null
           due_date?: string | null
+          finalized_at?: string | null
+          finalized_into_invoice_id?: string | null
           id?: string
           invoice_number?: string
           issued_date?: string
@@ -1306,6 +1665,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "invoices_finalized_into_invoice_id_fkey"
+            columns: ["finalized_into_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "invoices_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
@@ -1324,6 +1690,82 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_deposits: {
+        Row: {
+          blocks_scheduling: boolean
+          blocks_work_start: boolean
+          created_at: string
+          deposit_invoice_id: string | null
+          due_date: string | null
+          id: string
+          job_id: string
+          org_id: string
+          required_amount: number | null
+          required_percentage: number | null
+          requirement_status: Database["public"]["Enums"]["deposit_requirement_status"]
+          updated_at: string
+          waived_at: string | null
+          waived_by_user_id: string | null
+          waived_reason: string | null
+        }
+        Insert: {
+          blocks_scheduling?: boolean
+          blocks_work_start?: boolean
+          created_at?: string
+          deposit_invoice_id?: string | null
+          due_date?: string | null
+          id?: string
+          job_id: string
+          org_id: string
+          required_amount?: number | null
+          required_percentage?: number | null
+          requirement_status?: Database["public"]["Enums"]["deposit_requirement_status"]
+          updated_at?: string
+          waived_at?: string | null
+          waived_by_user_id?: string | null
+          waived_reason?: string | null
+        }
+        Update: {
+          blocks_scheduling?: boolean
+          blocks_work_start?: boolean
+          created_at?: string
+          deposit_invoice_id?: string | null
+          due_date?: string | null
+          id?: string
+          job_id?: string
+          org_id?: string
+          required_amount?: number | null
+          required_percentage?: number | null
+          requirement_status?: Database["public"]["Enums"]["deposit_requirement_status"]
+          updated_at?: string
+          waived_at?: string | null
+          waived_by_user_id?: string | null
+          waived_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_deposits_deposit_invoice_id_fkey"
+            columns: ["deposit_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_deposits_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_deposits_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1537,6 +1979,9 @@ export type Database = {
           job_number: string | null
           jobber_id: string | null
           org_id: string
+          origin_estimate_id: string | null
+          origin_quote_id: string | null
+          origin_request_id: string | null
           paid_total: number | null
           priority: Database["public"]["Enums"]["job_priority"]
           property_id: string
@@ -1571,6 +2016,9 @@ export type Database = {
           job_number?: string | null
           jobber_id?: string | null
           org_id: string
+          origin_estimate_id?: string | null
+          origin_quote_id?: string | null
+          origin_request_id?: string | null
           paid_total?: number | null
           priority?: Database["public"]["Enums"]["job_priority"]
           property_id: string
@@ -1605,6 +2053,9 @@ export type Database = {
           job_number?: string | null
           jobber_id?: string | null
           org_id?: string
+          origin_estimate_id?: string | null
+          origin_quote_id?: string | null
+          origin_request_id?: string | null
           paid_total?: number | null
           priority?: Database["public"]["Enums"]["job_priority"]
           property_id?: string
@@ -1640,6 +2091,27 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_origin_estimate_id_fkey"
+            columns: ["origin_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_origin_quote_id_fkey"
+            columns: ["origin_quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_origin_request_id_fkey"
+            columns: ["origin_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
             referencedColumns: ["id"]
           },
           {
@@ -2717,6 +3189,122 @@ export type Database = {
           },
         ]
       }
+      scheduling_slot_bookings: {
+        Row: {
+          booked_by_customer_id: string | null
+          booked_by_user_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_customer_id: string | null
+          cancelled_by_user_id: string | null
+          created_at: string
+          id: string
+          job_id: string
+          org_id: string
+          slot_id: string
+        }
+        Insert: {
+          booked_by_customer_id?: string | null
+          booked_by_user_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_customer_id?: string | null
+          cancelled_by_user_id?: string | null
+          created_at?: string
+          id?: string
+          job_id: string
+          org_id: string
+          slot_id: string
+        }
+        Update: {
+          booked_by_customer_id?: string | null
+          booked_by_user_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_customer_id?: string | null
+          cancelled_by_user_id?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string
+          org_id?: string
+          slot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduling_slot_bookings_booked_by_customer_id_fkey"
+            columns: ["booked_by_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduling_slot_bookings_cancelled_by_customer_id_fkey"
+            columns: ["cancelled_by_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduling_slot_bookings_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduling_slot_bookings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduling_slot_bookings_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "scheduling_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduling_slots: {
+        Row: {
+          capacity: number
+          created_at: string
+          created_by: string | null
+          ends_at: string
+          id: string
+          org_id: string
+          starts_at: string
+        }
+        Insert: {
+          capacity?: number
+          created_at?: string
+          created_by?: string | null
+          ends_at: string
+          id?: string
+          org_id: string
+          starts_at: string
+        }
+        Update: {
+          capacity?: number
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string
+          id?: string
+          org_id?: string
+          starts_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduling_slots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_categories: {
         Row: {
           id: string
@@ -3612,6 +4200,7 @@ export type Database = {
           ai_summary: string | null
           audio_url: string | null
           captured_at: string
+          change_order_revision_id: string | null
           classified_type: string | null
           communication_id: string | null
           content: string
@@ -3652,6 +4241,7 @@ export type Database = {
           ai_summary?: string | null
           audio_url?: string | null
           captured_at?: string
+          change_order_revision_id?: string | null
           classified_type?: string | null
           communication_id?: string | null
           content: string
@@ -3692,6 +4282,7 @@ export type Database = {
           ai_summary?: string | null
           audio_url?: string | null
           captured_at?: string
+          change_order_revision_id?: string | null
           classified_type?: string | null
           communication_id?: string | null
           content?: string
@@ -3725,6 +4316,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vault_items_change_order_revision_id_fkey"
+            columns: ["change_order_revision_id"]
+            isOneToOne: false
+            referencedRelation: "change_order_revisions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vault_items_communication_id_fkey"
             columns: ["communication_id"]
@@ -3775,12 +4373,20 @@ export type Database = {
           button_link: string | null
           button_text: string | null
           created_at: string
+          cta_label: string | null
+          cta_url: string | null
           description: string | null
           display_order: number
           end_date: string | null
+          ends_at: string | null
           id: string
+          is_active: boolean
+          message: string | null
           org_id: string
+          placement: string | null
+          priority: number
           start_date: string | null
+          starts_at: string | null
           title: string
           updated_at: string
         }
@@ -3789,12 +4395,20 @@ export type Database = {
           button_link?: string | null
           button_text?: string | null
           created_at?: string
+          cta_label?: string | null
+          cta_url?: string | null
           description?: string | null
           display_order?: number
           end_date?: string | null
+          ends_at?: string | null
           id?: string
+          is_active?: boolean
+          message?: string | null
           org_id: string
+          placement?: string | null
+          priority?: number
           start_date?: string | null
+          starts_at?: string | null
           title: string
           updated_at?: string
         }
@@ -3803,12 +4417,20 @@ export type Database = {
           button_link?: string | null
           button_text?: string | null
           created_at?: string
+          cta_label?: string | null
+          cta_url?: string | null
           description?: string | null
           display_order?: number
           end_date?: string | null
+          ends_at?: string | null
           id?: string
+          is_active?: boolean
+          message?: string | null
           org_id?: string
+          placement?: string | null
+          priority?: number
           start_date?: string | null
+          starts_at?: string | null
           title?: string
           updated_at?: string
         }
@@ -3826,36 +4448,51 @@ export type Database = {
         Row: {
           active: boolean
           created_at: string
+          cta_label: string | null
+          cta_path: string | null
           description: string | null
           display_order: number
           featured: boolean
+          icon_key: string | null
           id: string
+          is_active: boolean
           org_id: string
-          slug: string
+          slug: string | null
+          sort_order: number
           title: string
           updated_at: string
         }
         Insert: {
           active?: boolean
           created_at?: string
+          cta_label?: string | null
+          cta_path?: string | null
           description?: string | null
           display_order?: number
           featured?: boolean
+          icon_key?: string | null
           id?: string
+          is_active?: boolean
           org_id: string
-          slug: string
+          slug?: string | null
+          sort_order?: number
           title: string
           updated_at?: string
         }
         Update: {
           active?: boolean
           created_at?: string
+          cta_label?: string | null
+          cta_path?: string | null
           description?: string | null
           display_order?: number
           featured?: boolean
+          icon_key?: string | null
           id?: string
+          is_active?: boolean
           org_id?: string
-          slug?: string
+          slug?: string | null
+          sort_order?: number
           title?: string
           updated_at?: string
         }
@@ -3881,14 +4518,21 @@ export type Database = {
           homepage_seo_description: string | null
           homepage_seo_title: string | null
           id: string
+          is_published: boolean
           org_id: string
           phone_display: string | null
           phone_e164: string | null
           portal_cta_label: string | null
           portal_status_message: string | null
+          primary_cta_label: string | null
+          primary_cta_path: string | null
           published: boolean
           request_service_cta_label: string | null
+          seo_description: string | null
+          seo_title: string | null
           service_area_summary: string | null
+          singleton_key: string
+          social_image_url: string | null
           text_cta_label: string | null
           updated_at: string
         }
@@ -3903,14 +4547,21 @@ export type Database = {
           homepage_seo_description?: string | null
           homepage_seo_title?: string | null
           id?: string
+          is_published?: boolean
           org_id: string
           phone_display?: string | null
           phone_e164?: string | null
           portal_cta_label?: string | null
           portal_status_message?: string | null
+          primary_cta_label?: string | null
+          primary_cta_path?: string | null
           published?: boolean
           request_service_cta_label?: string | null
+          seo_description?: string | null
+          seo_title?: string | null
           service_area_summary?: string | null
+          singleton_key?: string
+          social_image_url?: string | null
           text_cta_label?: string | null
           updated_at?: string
         }
@@ -3925,14 +4576,21 @@ export type Database = {
           homepage_seo_description?: string | null
           homepage_seo_title?: string | null
           id?: string
+          is_published?: boolean
           org_id?: string
           phone_display?: string | null
           phone_e164?: string | null
           portal_cta_label?: string | null
           portal_status_message?: string | null
+          primary_cta_label?: string | null
+          primary_cta_path?: string | null
           published?: boolean
           request_service_cta_label?: string | null
+          seo_description?: string | null
+          seo_title?: string | null
           service_area_summary?: string | null
+          singleton_key?: string
+          social_image_url?: string | null
           text_cta_label?: string | null
           updated_at?: string
         }
@@ -4123,6 +4781,163 @@ export type Database = {
             }
             Returns: string
           }
+      apply_job_scheduling: {
+        Args: {
+          p_actor_customer_id: string
+          p_actor_user_id: string
+          p_job_id: string
+          p_org_id: string
+          p_scheduled_end: string
+          p_scheduled_start: string
+        }
+        Returns: {
+          actual_end: string | null
+          actual_start: string | null
+          ai_summary: string | null
+          category_id: string | null
+          closed_at: string | null
+          closed_reason: string | null
+          cost_total: number | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          description: string | null
+          embedding: string | null
+          estimated_duration_minutes: number | null
+          id: string
+          invoiced_total: number | null
+          job_number: string | null
+          jobber_id: string | null
+          org_id: string
+          origin_estimate_id: string | null
+          origin_quote_id: string | null
+          origin_request_id: string | null
+          paid_total: number | null
+          priority: Database["public"]["Enums"]["job_priority"]
+          property_id: string
+          quoted_total: number | null
+          scheduled_end: string | null
+          scheduled_start: string | null
+          status: Database["public"]["Enums"]["job_status"]
+          tags: string[] | null
+          title: string
+          total_drive_cost: number | null
+          total_drive_miles: number | null
+          total_drive_time_seconds: number | null
+          total_on_site_minutes: number | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      book_scheduling_slot: {
+        Args: {
+          p_actor_customer_id: string
+          p_job_id: string
+          p_slot_id: string
+        }
+        Returns: {
+          booked_by_customer_id: string | null
+          booked_by_user_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_customer_id: string | null
+          cancelled_by_user_id: string | null
+          created_at: string
+          id: string
+          job_id: string
+          org_id: string
+          slot_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "scheduling_slot_bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      cancel_scheduling_slot_booking: {
+        Args: {
+          p_actor_customer_id: string
+          p_actor_user_id: string
+          p_booking_id: string
+          p_reason: string
+        }
+        Returns: {
+          booked_by_customer_id: string | null
+          booked_by_user_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_customer_id: string | null
+          cancelled_by_user_id: string | null
+          created_at: string
+          id: string
+          job_id: string
+          org_id: string
+          slot_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "scheduling_slot_bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_change_order_draft: {
+        Args: {
+          p_acknowledgment_text: string
+          p_acknowledgment_version: string
+          p_change_order_id: string
+          p_created_by_user_id: string
+          p_initiator: Database["public"]["Enums"]["change_order_initiator"]
+          p_job_id: string
+          p_line_items: Json
+          p_org_id: string
+          p_reason: string
+          p_requested_by_customer_id: string
+          p_requested_by_user_id: string
+          p_schedule_delta_minutes: number
+          p_schedule_impact_notes: string
+          p_schedule_only: boolean
+          p_scope_change_summary: string
+        }
+        Returns: {
+          acknowledgment_text: string | null
+          acknowledgment_version: string | null
+          change_order_id: string
+          created_at: string
+          created_by_user_id: string | null
+          decided_at: string | null
+          decided_by_customer_id: string | null
+          decided_by_user_id: string | null
+          decision_note: string | null
+          deposit_impact: number
+          id: string
+          incorporated_at: string | null
+          price_adjustment: number
+          proposed_at: string | null
+          proposed_by_user_id: string | null
+          reason: string | null
+          schedule_delta_minutes: number | null
+          schedule_impact_notes: string | null
+          schedule_only: boolean
+          scope_change_summary: string | null
+          status: Database["public"]["Enums"]["change_order_status"]
+          supersedes_revision_id: string | null
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "change_order_revisions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -4326,6 +5141,41 @@ export type Database = {
         Returns: Json
       }
       gettransactionid: { Args: never; Returns: unknown }
+      incorporate_change_order_revision: {
+        Args: { p_actor_user_id: string; p_revision_id: string }
+        Returns: {
+          acknowledgment_text: string | null
+          acknowledgment_version: string | null
+          change_order_id: string
+          created_at: string
+          created_by_user_id: string | null
+          decided_at: string | null
+          decided_by_customer_id: string | null
+          decided_by_user_id: string | null
+          decision_note: string | null
+          deposit_impact: number
+          id: string
+          incorporated_at: string | null
+          price_adjustment: number
+          proposed_at: string | null
+          proposed_by_user_id: string | null
+          reason: string | null
+          schedule_delta_minutes: number | null
+          schedule_impact_notes: string | null
+          schedule_only: boolean
+          scope_change_summary: string | null
+          status: Database["public"]["Enums"]["change_order_status"]
+          supersedes_revision_id: string | null
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "change_order_revisions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       longtransactionsenabled: { Args: never; Returns: boolean }
       next_estimate_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }
@@ -4370,10 +5220,90 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      propose_change_order_revision: {
+        Args: {
+          p_actor_user_id: string
+          p_expected_price_adjustment: number
+          p_revision_id: string
+        }
+        Returns: {
+          acknowledgment_text: string | null
+          acknowledgment_version: string | null
+          change_order_id: string
+          created_at: string
+          created_by_user_id: string | null
+          decided_at: string | null
+          decided_by_customer_id: string | null
+          decided_by_user_id: string | null
+          decision_note: string | null
+          deposit_impact: number
+          id: string
+          incorporated_at: string | null
+          price_adjustment: number
+          proposed_at: string | null
+          proposed_by_user_id: string | null
+          reason: string | null
+          schedule_delta_minutes: number | null
+          schedule_impact_notes: string | null
+          schedule_only: boolean
+          scope_change_summary: string | null
+          status: Database["public"]["Enums"]["change_order_status"]
+          supersedes_revision_id: string | null
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "change_order_revisions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       purge_old_location_events: { Args: never; Returns: number }
       refresh_job_time_rollup: {
         Args: { p_job_id: string }
         Returns: undefined
+      }
+      respond_to_change_order_revision: {
+        Args: {
+          p_acknowledgment_version: string
+          p_actor_customer_id: string
+          p_decision_note: string
+          p_response: string
+          p_revision_id: string
+        }
+        Returns: {
+          acknowledgment_text: string | null
+          acknowledgment_version: string | null
+          change_order_id: string
+          created_at: string
+          created_by_user_id: string | null
+          decided_at: string | null
+          decided_by_customer_id: string | null
+          decided_by_user_id: string | null
+          decision_note: string | null
+          deposit_impact: number
+          id: string
+          incorporated_at: string | null
+          price_adjustment: number
+          proposed_at: string | null
+          proposed_by_user_id: string | null
+          reason: string | null
+          schedule_delta_minutes: number | null
+          schedule_impact_notes: string | null
+          schedule_only: boolean
+          scope_change_summary: string | null
+          status: Database["public"]["Enums"]["change_order_status"]
+          supersedes_revision_id: string | null
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "change_order_revisions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       search_vault: {
         Args: {
@@ -5008,6 +5938,41 @@ export type Database = {
       }
       user_is_in_org: { Args: { target_org_id: string }; Returns: boolean }
       user_org_ids: { Args: never; Returns: string[] }
+      withdraw_change_order_revision: {
+        Args: { p_actor_user_id: string; p_revision_id: string }
+        Returns: {
+          acknowledgment_text: string | null
+          acknowledgment_version: string | null
+          change_order_id: string
+          created_at: string
+          created_by_user_id: string | null
+          decided_at: string | null
+          decided_by_customer_id: string | null
+          decided_by_user_id: string | null
+          decision_note: string | null
+          deposit_impact: number
+          id: string
+          incorporated_at: string | null
+          price_adjustment: number
+          proposed_at: string | null
+          proposed_by_user_id: string | null
+          reason: string | null
+          schedule_delta_minutes: number | null
+          schedule_impact_notes: string | null
+          schedule_only: boolean
+          scope_change_summary: string | null
+          status: Database["public"]["Enums"]["change_order_status"]
+          supersedes_revision_id: string | null
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "change_order_revisions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       action_status:
@@ -5016,6 +5981,18 @@ export type Database = {
         | "executed"
         | "rejected"
         | "failed"
+      change_order_initiator: "customer" | "contractor"
+      change_order_status:
+        | "draft"
+        | "proposed"
+        | "under_review"
+        | "approved"
+        | "declined"
+        | "revision_requested"
+        | "withdrawn"
+        | "expired"
+        | "incorporated"
+        | "completed"
       comm_channel:
         | "sms"
         | "email"
@@ -5034,6 +6011,7 @@ export type Database = {
         | "commercial"
         | "unknown"
       customer_type: "residential" | "commercial" | "property_manager"
+      deposit_requirement_status: "none" | "required" | "waived"
       estimate_status:
         | "draft"
         | "site_visit_scheduled"
@@ -5045,7 +6023,7 @@ export type Database = {
         | "converted"
       geofence_event_type: "entered" | "exited" | "dwelled"
       geofence_type: "property" | "home" | "shop" | "supplier" | "custom"
-      invoice_kind: "deposit" | "progress" | "final" | "standalone"
+      invoice_kind: "deposit" | "progress" | "final" | "standalone" | "working"
       invoice_status:
         | "draft"
         | "sent"
@@ -5286,6 +6264,19 @@ export const Constants = {
   public: {
     Enums: {
       action_status: ["proposed", "approved", "executed", "rejected", "failed"],
+      change_order_initiator: ["customer", "contractor"],
+      change_order_status: [
+        "draft",
+        "proposed",
+        "under_review",
+        "approved",
+        "declined",
+        "revision_requested",
+        "withdrawn",
+        "expired",
+        "incorporated",
+        "completed",
+      ],
       comm_channel: [
         "sms",
         "email",
@@ -5306,6 +6297,7 @@ export const Constants = {
         "unknown",
       ],
       customer_type: ["residential", "commercial", "property_manager"],
+      deposit_requirement_status: ["none", "required", "waived"],
       estimate_status: [
         "draft",
         "site_visit_scheduled",
@@ -5318,7 +6310,7 @@ export const Constants = {
       ],
       geofence_event_type: ["entered", "exited", "dwelled"],
       geofence_type: ["property", "home", "shop", "supplier", "custom"],
-      invoice_kind: ["deposit", "progress", "final", "standalone"],
+      invoice_kind: ["deposit", "progress", "final", "standalone", "working"],
       invoice_status: [
         "draft",
         "sent",
