@@ -26,9 +26,31 @@ dotenv.config({ path: path.resolve(__dirname, '.env.test'), override: false });
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const IS_CI = !!process.env.CI;
 
+// Hard safety guard: this suite creates/mutates/deletes data and must never
+// run against premier-crm-prod. Added after a real near-miss (2026-07-31) —
+// a dev-server restart picked up apps/web/.env.local's production Supabase
+// URL/keys instead of the intended premier-crm-e2e overrides. No data was
+// actually written (caught before any mutating action ran), but this
+// closes the gap so the suite refuses to even start rather than relying on
+// a human noticing in time. Checks the configured Supabase URL's project
+// ref against the known-prod ref, not project name/env var name, since
+// those can be renamed/copied without changing what's actually addressed.
+const PROD_SUPABASE_PROJECT_REF = 'apnbpcauqrjvkoleisde';
+const configuredSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+if (configuredSupabaseUrl.includes(PROD_SUPABASE_PROJECT_REF)) {
+  throw new Error(
+    `REFUSING TO RUN: NEXT_PUBLIC_SUPABASE_URL (${configuredSupabaseUrl}) points at ` +
+      'premier-crm-prod. This suite creates, mutates, and deletes data and must only ' +
+      'run against premier-crm-e2e or another non-production project. Check ' +
+      '.env.test / apps/web/.env.local / your shell environment for a stray production ' +
+      'value before running this suite again.'
+  );
+}
+
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: '**/*.spec.ts',
+  globalSetup: require.resolve('./tests/e2e/global-setup.ts'),
 
   // Fail the build in CI if someone accidentally left `.only` in a spec.
   forbidOnly: IS_CI,

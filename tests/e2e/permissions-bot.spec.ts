@@ -42,13 +42,24 @@ test.describe('permissions bot', () => {
   });
 
   test.skip('customer portal magic-link token is single-use and scoped', async () => {
-    // TODO: per ARCHITECTURE.md, magic_link_tokens are single-use with 30-day
-    // default expiry, scoped to a specific quote/invoice/job. Verify a token
-    // cannot be reused for a different record and expires as configured.
+    // NOT APPLICABLE to the app as built (confirmed 2026-07-31 audit):
+    // ARCHITECTURE.md describes a magic_link_tokens design, but no such
+    // table or mechanism exists anywhere in the codebase (grepped
+    // packages/db/types.ts and apps/web — zero hits beyond this comment).
+    // Actual customer auth is Supabase email/password (apps/web/app/portal/
+    // actions.ts); the closest real "token" concept is quotes.share_token /
+    // invoices.share_token, which are permanent (no expiry/single-use logic)
+    // and gate the public /q/[token] and /i/[token] pages, not portal login.
+    // Left skipped rather than testing a feature that doesn't exist — flagged
+    // to the user as a doc/reality mismatch, worth a product decision on
+    // whether to build real magic links or update ARCHITECTURE.md instead.
   });
 
-  test.skip('staff account without owner role cannot access org settings', async () => {
-    // TODO: needs a seeded non-owner staff account; not yet in scope of the
-    // env vars set up in this pass (TEST_ADMIN_* is assumed to be Owner).
-  });
+  // Now covered by staff-permissions-bot.spec.ts's "owner-only restrictions"
+  // block (tests 1 and 3): the persistent employee fixture (TEST_STAFF_*)
+  // asserts it cannot view /team or /settings/website, both at the UI level
+  // and (for /team's underlying action) via a direct API write. Not
+  // duplicated here — TEST_ADMIN_* is now provisioned as the org's owner
+  // (see .env.test), so this file's own credentials could run an equivalent
+  // check, but the existing bot already owns this exact boundary.
 });
