@@ -11,7 +11,9 @@ import {
   UpdateLineItemInputSchema,
   UpdateQuoteMetadataInputSchema,
   err,
+  hasCapability,
   ok,
+  type Capability,
   type Result,
 } from '@premier/shared';
 import {
@@ -36,7 +38,30 @@ interface QuoteActionContext {
   userId: string;
 }
 
-async function getQuoteActionContext(): Promise<Result<QuoteActionContext>> {
+/**
+ * Quotes are the priced, customer-facing document in this codebase's
+ * estimate → quote → job pipeline — mapped onto the business-level
+ * "estimates" capability (create/send) from the authorization design, since
+ * that capability set has no separate "quotes" entry.
+ */
+const CAPABILITY_LABELS: Record<Capability, string> = {
+  canCreateEstimates: 'create or edit quotes',
+  canSendEstimates: 'send quotes',
+  canCreateInvoices: 'create or edit invoices',
+  canSendInvoices: 'send invoices',
+  canRecordPayments: 'record payments',
+  canVoidInvoices: 'void invoices',
+  canDeleteInvoices: 'delete invoices',
+  canIssueRefunds: 'issue refunds',
+  canScheduleJobs: 'schedule jobs',
+  canProposeChangeOrders: 'propose change orders',
+  canManageDeposits: 'manage deposits',
+  canEditWorkingInvoice: 'edit the working invoice',
+};
+
+async function getQuoteActionContext(
+  capability: Capability
+): Promise<Result<QuoteActionContext>> {
   const supabase = await getServerSupabase();
   const {
     data: { user },
@@ -52,7 +77,15 @@ async function getQuoteActionContext(): Promise<Result<QuoteActionContext>> {
     return err(orgContextResult.code, orgContextResult.error);
   }
 
-  return ok({ orgId: orgContextResult.data.orgId, userId: user.id });
+  const { orgId, role } = orgContextResult.data;
+  if (!hasCapability(role, capability)) {
+    return err(
+      ErrorCode.FORBIDDEN,
+      `Your role does not have permission to ${CAPABILITY_LABELS[capability]}.`
+    );
+  }
+
+  return ok({ orgId, userId: user.id });
 }
 
 function readString(formData: FormData, key: string): string {
@@ -78,7 +111,7 @@ export async function updateQuoteMetadataAction(
   _prevState: UpdateQuoteMetadataActionState | null,
   formData: FormData
 ): Promise<UpdateQuoteMetadataActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canCreateEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -121,7 +154,7 @@ export async function approveJobAction(
   _prevState: ApproveJobActionState | null,
   formData: FormData
 ): Promise<ApproveJobActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canCreateEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -211,7 +244,7 @@ export async function sendQuoteAction(
   _prevState: SendQuoteActionState | null,
   formData: FormData
 ): Promise<SendQuoteActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canSendEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -299,7 +332,7 @@ export async function resendQuoteEmailAction(
   _prevState: ResendQuoteEmailActionState | null,
   formData: FormData
 ): Promise<ResendQuoteEmailActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canSendEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -372,7 +405,7 @@ export async function searchJobsForPickerAction(
   _prevState: SearchJobsForPickerActionState | null,
   formData: FormData
 ): Promise<SearchJobsForPickerActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canCreateEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -409,7 +442,7 @@ export async function createDraftQuoteAction(
   _prevState: CreateDraftQuoteActionState | null,
   formData: FormData
 ): Promise<CreateDraftQuoteActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canCreateEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -453,7 +486,7 @@ export async function createStandaloneQuoteAction(
   _prevState: CreateStandaloneQuoteActionState | null,
   formData: FormData
 ): Promise<CreateStandaloneQuoteActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canCreateEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -531,7 +564,7 @@ export async function addLineItemAction(
   _prevState: LineItemActionState | null,
   formData: FormData
 ): Promise<LineItemActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canCreateEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -575,7 +608,7 @@ export async function updateLineItemAction(
   _prevState: LineItemActionState | null,
   formData: FormData
 ): Promise<LineItemActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canCreateEstimates');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -619,7 +652,7 @@ export async function removeLineItemAction(
   _prevState: LineItemActionState | null,
   formData: FormData
 ): Promise<LineItemActionState> {
-  const contextResult = await getQuoteActionContext();
+  const contextResult = await getQuoteActionContext('canCreateEstimates');
   if (!contextResult.success) {
     return contextResult;
   }

@@ -14,7 +14,9 @@ import {
   UpdateInvoiceMetadataInputSchema,
   VoidInvoiceInputSchema,
   err,
+  hasCapability,
   ok,
+  type Capability,
   type Result,
 } from '@premier/shared';
 import {
@@ -44,7 +46,28 @@ interface InvoiceActionContext {
   userId: string;
 }
 
-async function getInvoiceActionContext(): Promise<Result<InvoiceActionContext>> {
+/**
+ * Capability names, in plain language, for the FORBIDDEN message when a
+ * signed-in staff member's role doesn't grant the requested action.
+ */
+const CAPABILITY_LABELS: Record<Capability, string> = {
+  canCreateEstimates: 'create estimates',
+  canSendEstimates: 'send estimates',
+  canCreateInvoices: 'create or edit invoices',
+  canSendInvoices: 'send invoices',
+  canRecordPayments: 'record payments',
+  canVoidInvoices: 'void invoices',
+  canDeleteInvoices: 'delete invoices',
+  canIssueRefunds: 'issue refunds',
+  canScheduleJobs: 'schedule jobs',
+  canProposeChangeOrders: 'propose change orders',
+  canManageDeposits: 'manage deposits',
+  canEditWorkingInvoice: 'edit the working invoice',
+};
+
+async function getInvoiceActionContext(
+  capability: Capability
+): Promise<Result<InvoiceActionContext>> {
   const supabase = await getServerSupabase();
   const {
     data: { user },
@@ -60,7 +83,15 @@ async function getInvoiceActionContext(): Promise<Result<InvoiceActionContext>> 
     return err(orgContextResult.code, orgContextResult.error);
   }
 
-  return ok({ orgId: orgContextResult.data.orgId, userId: user.id });
+  const { orgId, role } = orgContextResult.data;
+  if (!hasCapability(role, capability)) {
+    return err(
+      ErrorCode.FORBIDDEN,
+      `Your role does not have permission to ${CAPABILITY_LABELS[capability]}.`
+    );
+  }
+
+  return ok({ orgId, userId: user.id });
 }
 
 function readString(formData: FormData, key: string): string {
@@ -91,7 +122,7 @@ export async function searchJobsForInvoicePickerAction(
   _prevState: SearchJobsForInvoicePickerActionState | null,
   formData: FormData
 ): Promise<SearchJobsForInvoicePickerActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canCreateInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 
@@ -122,7 +153,7 @@ export async function createInvoiceFromJobAction(
   _prevState: CreateInvoiceActionState | null,
   formData: FormData
 ): Promise<CreateInvoiceActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canCreateInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId, userId } = contextResult.data;
 
@@ -155,7 +186,7 @@ export async function createInvoiceFromQuoteAction(
   _prevState: CreateInvoiceActionState | null,
   formData: FormData
 ): Promise<CreateInvoiceActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canCreateInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId, userId } = contextResult.data;
 
@@ -195,7 +226,7 @@ export async function updateInvoiceMetadataAction(
   _prevState: UpdateInvoiceMetadataActionState | null,
   formData: FormData
 ): Promise<UpdateInvoiceMetadataActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canCreateInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 
@@ -234,7 +265,7 @@ export async function addInvoiceLineItemAction(
   _prevState: LineItemActionState | null,
   formData: FormData
 ): Promise<LineItemActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canCreateInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 
@@ -265,7 +296,7 @@ export async function updateInvoiceLineItemAction(
   _prevState: LineItemActionState | null,
   formData: FormData
 ): Promise<LineItemActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canCreateInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 
@@ -297,7 +328,7 @@ export async function removeInvoiceLineItemAction(
   _prevState: LineItemActionState | null,
   formData: FormData
 ): Promise<LineItemActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canCreateInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 
@@ -330,7 +361,7 @@ export async function sendInvoiceAction(
   _prevState: SendInvoiceActionState | null,
   formData: FormData
 ): Promise<SendInvoiceActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canSendInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 
@@ -387,7 +418,7 @@ export async function voidInvoiceAction(
   _prevState: VoidInvoiceActionState | null,
   formData: FormData
 ): Promise<VoidInvoiceActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canVoidInvoices');
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 
@@ -417,7 +448,7 @@ export async function recordPaymentAction(
   _prevState: RecordPaymentActionState | null,
   formData: FormData
 ): Promise<RecordPaymentActionState> {
-  const contextResult = await getInvoiceActionContext();
+  const contextResult = await getInvoiceActionContext('canRecordPayments');
   if (!contextResult.success) return contextResult;
   const { orgId } = contextResult.data;
 

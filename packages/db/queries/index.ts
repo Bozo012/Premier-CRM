@@ -138,6 +138,50 @@ export {
   type CreateServiceRequestResult,
 } from './service-requests';
 export {
+  createJobFromAcceptedQuote,
+} from './job-lifecycle';
+export {
+  addChangeOrderComment,
+  createChangeOrderDraft,
+  incorporateChangeOrderRevision,
+  listChangeOrdersForJob,
+  proposeChangeOrderRevision,
+  respondToChangeOrderRevision,
+  withdrawChangeOrderRevision,
+  type ChangeOrder,
+  type ChangeOrderComment,
+  type ChangeOrderDraftInput,
+  type ChangeOrderLineItem,
+  type ChangeOrderLineItemInput,
+  type ChangeOrderRevision,
+  type ChangeOrderThreadDetail,
+} from './change-orders';
+export {
+  getDepositState,
+  setDepositRequirement,
+  waiveDepositRequirement,
+  type DepositPaymentStatus,
+  type DepositState,
+  type JobDeposit,
+} from './deposits';
+export {
+  generateFinalInvoiceFromWorking,
+  getWorkingInvoice,
+  getWorkingInvoiceSummaryForCustomer,
+  type WorkingInvoiceCustomerSummary,
+  type WorkingInvoiceDetail,
+} from './working-invoice';
+export {
+  bookSchedulingSlot,
+  cancelSchedulingSlotBooking,
+  createSchedulingSlot,
+  listOpenSchedulingSlots,
+  scheduleJob,
+  type OpenSchedulingSlot,
+  type SchedulingSlot,
+  type SchedulingSlotBooking,
+} from './scheduling';
+export {
   getEstimateById,
   listEstimates,
   listQuotesForEstimate,

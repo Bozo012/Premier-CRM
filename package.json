@@ -24,6 +24,13 @@
     "test:e2e:staff": "playwright test staff-permissions-bot --project=chromium",
     "test:e2e:employee-estimate": "playwright test employee-estimate-workflow-bot --project=chromium",
     "test:e2e:dashboard-org": "playwright test dashboard-org-resolution-bot --project=chromium",
+    "test:e2e:intake": "playwright test customer-intake-bot --project=chromium",
+    "test:e2e:conversion": "playwright test request-conversion-bot --project=chromium",
+    "test:e2e:scheduling": "playwright test scheduling-bot --project=chromium",
+    "test:e2e:estimates-lifecycle": "playwright test estimates-lifecycle-bot --project=chromium",
+    "test:e2e:quote-response": "playwright test quote-response-bot --project=chromium",
+    "test:e2e:transactional-email": "playwright test transactional-email-bot --project=chromium",
+    "test:e2e:integrated-lifecycle": "playwright test integrated-lifecycle-bot --project=chromium",
     "test:e2e:full": "playwright test",
     "test:e2e:report": "playwright show-report"
   },
