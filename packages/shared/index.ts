@@ -1,6 +1,8 @@
 export { ErrorCode, AppError } from './errors';
 export { ok, err } from './result';
 export type { Result } from './result';
+export { hasCapability } from './permissions';
+export type { Capability, OrgRole } from './permissions';
 export {
   AddInvoiceLineItemInputSchema,
   CreateInvoiceFromJobInputSchema,

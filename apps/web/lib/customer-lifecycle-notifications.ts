@@ -3,6 +3,7 @@ import type { EstimateDetail, InvoiceDetail, JobDetail } from '@premier/db';
 import {
   sendJobScheduledEmail,
   sendPaymentReceiptEmail,
+  sendQuoteRespondedNotificationEmail,
   sendServiceRequestConfirmationEmail,
   sendSiteVisitScheduledEmail,
 } from './email';
@@ -37,6 +38,11 @@ export const CUSTOMER_NOTIFICATION_TRIGGER_POINTS = [
     event: 'invoice_payment_recorded',
     template: 'payment-receipt',
     trigger: 'recordPaymentAction',
+  },
+  {
+    event: 'quote_responded',
+    template: 'quote-responded-notification',
+    trigger: 'respondToQuoteAction (accept or decline)',
   },
 ] as const;
 
@@ -125,6 +131,30 @@ export async function sendPaymentRecordedNotification(
     paymentMethod: payment.method,
     propertyAddress: invoice.property ? formatPropertyAddress(invoice.property) : null,
     reference: payment.reference ?? null,
+  });
+}
+
+export async function sendQuoteRespondedNotification(args: {
+  toEmails: string[];
+  customerName: string;
+  quoteTitle: string;
+  quoteTotal: number | null;
+  quoteId: string;
+  response: 'accepted' | 'declined';
+  declineReason: string | null;
+}): Promise<{ sent: boolean }> {
+  if (args.toEmails.length === 0) {
+    return { sent: false };
+  }
+
+  return sendQuoteRespondedNotificationEmail({
+    toEmails: args.toEmails,
+    customerName: args.customerName,
+    quoteTitle: args.quoteTitle,
+    quoteTotal: args.quoteTotal,
+    quoteDetailUrl: `/quotes/${args.quoteId}`,
+    response: args.response,
+    declineReason: args.declineReason,
   });
 }
 
