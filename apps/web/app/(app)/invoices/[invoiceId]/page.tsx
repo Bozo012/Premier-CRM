@@ -65,6 +65,12 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
 
   const { customer, invoice, job, lineItems, payments, property, quote } = result.data;
   const isDraft = invoice.status === 'draft';
+  // A working invoice's kind can never change (DB-enforced by the
+  // invoices_prevent_working_kind_change trigger) and it can never be
+  // sent, viewed, or paid directly (invoices_prevent_working_send_or_pay).
+  // These controls are hidden here as defense in depth so staff never
+  // reach them in the first place, not just to satisfy the DB guard.
+  const isWorking = invoice.kind === 'working';
 
   return (
     <PageShell>
@@ -115,7 +121,7 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
         />
       </section>
 
-      {isDraft ? (
+      {isDraft && !isWorking ? (
         <section>
           <InvoiceMetadataForm
             invoiceId={invoice.id}
@@ -230,10 +236,12 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
       <section className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>{isDraft ? 'Send invoice' : 'Actions'}</CardTitle>
+            <CardTitle>{isWorking ? 'Actions' : isDraft ? 'Send invoice' : 'Actions'}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {isDraft ? (
+            {isWorking ? (
+              <WorkingInvoiceNotice jobId={job.id} />
+            ) : isDraft ? (
               <>
                 <p className="text-sm text-muted-foreground">
                   Marking as sent transitions the invoice to{' '}
@@ -276,7 +284,7 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
         </Card>
       </section>
 
-      {!isDraft && invoice.status !== 'void' ? (
+      {!isWorking && !isDraft && invoice.status !== 'void' ? (
         <section>
           <RecordPaymentForm invoiceId={invoice.id} amountDue={invoice.amount_due ?? 0} />
         </section>
@@ -416,6 +424,26 @@ function InvoiceKindBadge({ kind }: { kind: string }) {
     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
       {formatEnumLabel(kind)}
     </span>
+  );
+}
+
+function WorkingInvoiceNotice({ jobId }: { jobId: string }) {
+  return (
+    <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+      <p className="text-sm text-foreground">
+        This is a working invoice. It cannot be edited, sent, or paid directly — its line items
+        can still be adjusted, but its kind and status are permanently protected.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        To bill the customer, generate a final invoice from the job page instead.
+      </p>
+      <Link
+        href={`/jobs/${jobId}`}
+        className="inline-flex text-sm font-medium text-foreground underline-offset-4 hover:underline"
+      >
+        Go to job to generate final invoice
+      </Link>
+    </div>
   );
 }
 
