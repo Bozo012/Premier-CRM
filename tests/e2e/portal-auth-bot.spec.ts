@@ -46,6 +46,7 @@ test.describe('portal auth bot', () => {
       if (!userId) return;
       const client = createGuardedServiceClient();
       await client.from('customer_accounts').delete().eq('auth_user_id', userId);
+      await client.from('customers').delete().eq('email', email);
       await client.auth.admin.deleteUser(userId);
     });
 
@@ -64,12 +65,44 @@ test.describe('portal auth bot', () => {
       expect(linkError).toBeFalsy();
       expect(linkData?.properties?.action_link).toBeTruthy();
       userId = linkData?.user?.id;
+      if (!userId) throw new Error('generateLink did not return a user id.');
+
+      // Mirrors ensureCustomerAccount() in portal/actions.ts, which the real
+      // createCustomerPortalAccount flow runs immediately after signUp() —
+      // by the time a real user clicks the confirmation email, their
+      // customer_accounts row already exists. Replicated here since this
+      // test intentionally bypasses the signup FORM to target the callback
+      // itself (see file-level doc comment).
+      const orgId = process.env.PREMIER_ORG_ID ?? 'a0000000-0000-0000-0000-000000000001';
+      const { data: customer } = await client
+        .from('customers')
+        .insert({
+          org_id: orgId,
+          type: 'residential',
+          first_name: E2E_TEST_PREFIX,
+          last_name: 'PortalAuthBot',
+          email,
+          source: 'customer_portal',
+          tags: ['customer_portal'],
+        })
+        .select('id')
+        .single();
+
+      await client.from('customer_accounts').insert({
+        org_id: orgId,
+        customer_id: customer!.id,
+        auth_user_id: userId,
+        email,
+        status: 'active',
+        invited_at: new Date().toISOString(),
+        accepted_at: new Date().toISOString(),
+      });
 
       await page.goto(linkData!.properties!.action_link);
 
       await expect(page).toHaveURL(/\/portal\/(confirm|dashboard)/, { timeout: 10_000 });
       await expect(page).toHaveURL(/\/portal\/dashboard/, { timeout: 10_000 });
-      await expect(page.getByText(/dashboard/i)).toBeVisible();
+      await expect(page.getByText(`Signed in as ${email}`)).toBeVisible();
     });
   });
 
