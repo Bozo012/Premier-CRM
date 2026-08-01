@@ -11,29 +11,22 @@ interface ErrorBoundaryProps {
 }
 
 /**
- * Error boundary for the customers route. Renders when an unhandled error
- * escapes the page or its children. The page itself is responsible for
- * graceful handling of expected failure modes (DB error, no org membership)
- * via Result<T> — this boundary is the safety net for the unexpected.
+ * Error boundary for the invoices route, matching the customers route's
+ * precedent. Renders when an unhandled error escapes the page or its
+ * children — e.g. the final-invoice-generation client-side crash this was
+ * added to instrument.
  */
-export default function CustomersErrorBoundary({
-  error,
-  reset,
-}: ErrorBoundaryProps) {
+export default function InvoicesErrorBoundary({ error, reset }: ErrorBoundaryProps) {
   useEffect(() => {
-    console.error('Customers route error:', error);
+    console.error('Invoices route error:', error);
     reportClientError({ message: error.message, stack: error.stack, digest: error.digest });
   }, [error]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-start gap-4 px-4 pb-24 pt-5 sm:px-6 md:px-8 md:pt-8">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Customers
-        </h1>
-        <p className="text-sm text-red-600">
-          Something went wrong loading your customers.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Invoices</h1>
+        <p className="text-sm text-red-600">Something went wrong loading this page.</p>
       </header>
 
       {error.message ? (
