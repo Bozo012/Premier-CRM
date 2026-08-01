@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useTransition } from 'react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 
@@ -17,7 +18,15 @@ export function CreateSchedulingSlotForm() {
   >(createSchedulingSlotAction, null);
 
   useEffect(() => {
-    if (state?.success) router.refresh();
+    if (!state) return;
+
+    if (state.success) {
+      toast.success('Slot published.');
+      router.refresh();
+      return;
+    }
+
+    toast.error(state.error ?? 'Could not publish slot.');
   }, [router, state]);
 
   const isPending = isActionPending || isTransitionPending;
