@@ -89,6 +89,7 @@ export async function setDepositRequirement(
     dueDate: string | null;
     blocksScheduling: boolean;
     blocksWorkStart: boolean;
+    actorUserId: string;
   }
 ): Promise<Result<{ requirement: JobDeposit }>> {
   const { data, error } = await client
@@ -113,6 +114,16 @@ export async function setDepositRequirement(
     .single();
 
   if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  await client.from('activity_log').insert({
+    org_id: args.orgId,
+    entity_type: 'job',
+    entity_id: args.jobId,
+    event_type: 'deposit_requested',
+    message: 'Deposit requirement set.',
+    actor_user_id: args.actorUserId,
+  });
+
   return ok({ requirement: data });
 }
 

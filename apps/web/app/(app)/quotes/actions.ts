@@ -22,6 +22,7 @@ import {
   getActiveOrgContext,
   getQuoteById,
   listJobs,
+  logActivity,
   removeQuoteLineItem,
   updateQuoteLineItem,
   updateQuoteMetadata,
@@ -248,7 +249,7 @@ export async function sendQuoteAction(
   if (!contextResult.success) {
     return contextResult;
   }
-  const { orgId } = contextResult.data;
+  const { orgId, userId } = contextResult.data;
 
   const rawInput = { quoteId: readString(formData, 'quoteId') };
   const parsed = SendQuoteInputSchema.safeParse(rawInput);
@@ -287,6 +288,15 @@ export async function sendQuoteAction(
   if (updateError) {
     return err(ErrorCode.DB_ERROR, updateError.message);
   }
+
+  await logActivity(client, {
+    orgId,
+    entityType: 'quote',
+    entityId: parsed.data.quoteId,
+    eventType: 'quote_sent',
+    message: 'Quote sent to customer.',
+    actorUserId: userId,
+  });
 
   revalidatePath(`/quotes/${parsed.data.quoteId}`);
   revalidatePath('/quotes');

@@ -141,6 +141,14 @@ export {
   createJobFromAcceptedQuote,
 } from './job-lifecycle';
 export {
+  getEntityTimeline,
+  getEntityTimelineForCustomer,
+  logActivity,
+  type ActivityLogEntry,
+  type ActivityLogEventType,
+  type CustomerTimelineEntry,
+} from './activity-log';
+export {
   addChangeOrderComment,
   createChangeOrderDraft,
   incorporateChangeOrderRevision,

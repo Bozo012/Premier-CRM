@@ -450,7 +450,7 @@ export async function recordPaymentAction(
 ): Promise<RecordPaymentActionState> {
   const contextResult = await getInvoiceActionContext('canRecordPayments');
   if (!contextResult.success) return contextResult;
-  const { orgId } = contextResult.data;
+  const { orgId, userId } = contextResult.data;
 
   const rawInput = {
     invoiceId: readString(formData, 'invoiceId'),
@@ -468,7 +468,7 @@ export async function recordPaymentAction(
   }
 
   const client = createServiceClient();
-  const result = await recordPayment(client, { input: parsed.data, orgId });
+  const result = await recordPayment(client, { input: parsed.data, orgId, actorUserId: userId });
   if (!result.success) return result;
 
   revalidatePath(`/invoices/${parsed.data.invoiceId}`);

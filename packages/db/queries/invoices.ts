@@ -911,7 +911,7 @@ export async function voidInvoice(
 
 export async function recordPayment(
   client: DbClient,
-  args: { input: RecordPaymentInput; orgId: string }
+  args: { input: RecordPaymentInput; orgId: string; actorUserId?: string }
 ): Promise<Result<Payment>> {
   const { data: invoice, error: fetchError } = await client
     .from('invoices')
@@ -940,6 +940,16 @@ export async function recordPayment(
     .single();
 
   if (error) return translatePaymentError(error.message);
+
+  await client.from('activity_log').insert({
+    org_id: args.orgId,
+    entity_type: 'invoice',
+    entity_id: args.input.invoiceId,
+    event_type: 'payment_recorded',
+    message: `Payment of ${args.input.amount} recorded.`,
+    actor_user_id: args.actorUserId ?? null,
+  });
+
   return ok(payment);
 }
 

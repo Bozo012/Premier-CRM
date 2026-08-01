@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   createServiceClient,
   getDepositState,
+  getEntityTimelineForCustomer,
   getWorkingInvoiceSummaryForCustomer,
   listChangeOrdersForJob,
   listOpenSchedulingSlots,
@@ -11,6 +12,8 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Timeline } from '@/components/timeline';
+import { buildChangeOrderHistoryFeed } from '@/lib/change-order-history';
 import {
   getPortalRequestStatusDescription,
   getPortalRequestStatusLabel,
@@ -209,14 +212,20 @@ export default async function PortalDashboardPage() {
 
   const jobDetails = await Promise.all(
     (jobs ?? []).map(async (job) => {
-      const [slotsResult, depositResult, workingInvoiceResult, changeOrdersResult] = await Promise.all([
-        job.status === 'approved'
-          ? listOpenSchedulingSlots(serviceClient, { orgId: job.org_id })
-          : Promise.resolve({ success: true as const, data: [] }),
-        getDepositState(serviceClient, { orgId: job.org_id, jobId: job.id }),
-        getWorkingInvoiceSummaryForCustomer(serviceClient, { jobId: job.id }),
-        listChangeOrdersForJob(serviceClient, { orgId: job.org_id, jobId: job.id }),
-      ]);
+      const [slotsResult, depositResult, workingInvoiceResult, changeOrdersResult, timelineResult] =
+        await Promise.all([
+          job.status === 'approved'
+            ? listOpenSchedulingSlots(serviceClient, { orgId: job.org_id })
+            : Promise.resolve({ success: true as const, data: [] }),
+          getDepositState(serviceClient, { orgId: job.org_id, jobId: job.id }),
+          getWorkingInvoiceSummaryForCustomer(serviceClient, { jobId: job.id }),
+          listChangeOrdersForJob(serviceClient, { orgId: job.org_id, jobId: job.id }),
+          getEntityTimelineForCustomer(serviceClient, {
+            orgId: job.org_id,
+            entityType: 'job',
+            entityId: job.id,
+          }),
+        ]);
 
       return {
         job,
@@ -224,6 +233,13 @@ export default async function PortalDashboardPage() {
         depositState: depositResult.success ? depositResult.data : null,
         workingInvoiceSummary: workingInvoiceResult.success ? workingInvoiceResult.data : null,
         changeOrders: changeOrdersResult.success ? changeOrdersResult.data : [],
+        timeline: timelineResult.success
+          ? timelineResult.data.map((entry) => ({
+              id: entry.id,
+              label: entry.label,
+              createdAt: entry.createdAt,
+            }))
+          : [],
       };
     })
   );
@@ -289,7 +305,7 @@ export default async function PortalDashboardPage() {
       {jobDetails.length > 0 ? (
         <section className="space-y-4">
           <h2 className="text-xl font-semibold tracking-tight">Your jobs</h2>
-          {jobDetails.map(({ job, openSlots, depositState, workingInvoiceSummary, changeOrders }) => (
+          {jobDetails.map(({ job, openSlots, depositState, workingInvoiceSummary, changeOrders, timeline }) => (
             <Card key={job.id}>
               <CardHeader>
                 <CardTitle>{job.title}</CardTitle>
@@ -342,29 +358,36 @@ export default async function PortalDashboardPage() {
 
                 {changeOrders.length > 0 ? (
                   <div className="space-y-3">
-                    <p className="text-sm font-medium">Change orders</p>
+                    <p className="text-sm font-medium">Project changes</p>
                     {changeOrders.map((thread) => {
                       const currentRevision = thread.revisions.find(
                         (r) => r.id === thread.changeOrder.current_revision_id
                       );
                       const awaitingResponse =
                         currentRevision?.status === 'proposed' || currentRevision?.status === 'under_review';
+                      const history = buildChangeOrderHistoryFeed(thread);
                       return (
                         <div key={thread.changeOrder.id} className="rounded-md border p-3">
                           <p className="text-sm font-medium">
                             v{currentRevision?.version ?? 1} — {currentRevision?.status ?? thread.changeOrder.status}
                           </p>
-                          {currentRevision?.reason ? (
-                            <p className="mt-1 text-sm text-muted-foreground">{currentRevision.reason}</p>
-                          ) : null}
                           <p className="mt-1 text-sm text-muted-foreground">
                             Price: ${(currentRevision?.price_adjustment ?? 0).toFixed(2)}
                           </p>
-                          {thread.comments.map((comment) => (
-                            <p key={comment.id} className="mt-1 text-xs text-muted-foreground">
-                              {comment.body}
-                            </p>
-                          ))}
+
+                          {history.length > 0 ? (
+                            <ol className="mt-3 space-y-2 border-l pl-3">
+                              {history.map((event) => (
+                                <li key={event.id} className="text-sm">
+                                  <p className="text-foreground">{event.label}</p>
+                                  {event.detail ? (
+                                    <p className="text-xs text-muted-foreground">{event.detail}</p>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ol>
+                          ) : null}
+
                           {awaitingResponse && currentRevision ? (
                             <div className="mt-2">
                               <RespondToChangeOrderForm
@@ -383,6 +406,8 @@ export default async function PortalDashboardPage() {
                 ) : null}
 
                 <RequestChangeOrderForm jobId={job.id} />
+
+                {timeline.length > 0 ? <Timeline entries={timeline} title="Job timeline" /> : null}
               </CardContent>
             </Card>
           ))}
