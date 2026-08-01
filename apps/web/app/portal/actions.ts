@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { createServiceClient } from '@premier/db';
 
+import { getAppUrl } from '@/lib/email';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 const PREMIER_ORG_ID =
@@ -146,6 +147,7 @@ export async function createCustomerPortalAccount(formData: FormData): Promise<v
         full_name: fullName,
         account_type: 'customer',
       },
+      emailRedirectTo: new URL('/portal/confirm', getAppUrl()).toString(),
     },
   });
 
@@ -158,6 +160,12 @@ export async function createCustomerPortalAccount(formData: FormData): Promise<v
     email,
     fullName,
   });
+
+  if (!data.session) {
+    redirectWithMessage(
+      'Account created. Check your email to confirm it, then sign in.'
+    );
+  }
 
   redirect('/portal/dashboard');
 }

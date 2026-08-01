@@ -57,6 +57,12 @@ export default async function PortalLoginPage({ searchParams }: PortalLoginPageP
               </div>
               <Button type="submit" className="w-full">Sign in</Button>
             </form>
+            <Link
+              href="/portal/forgot-password"
+              className="mt-3 inline-flex text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Forgot password?
+            </Link>
           </CardContent>
         </Card>
 

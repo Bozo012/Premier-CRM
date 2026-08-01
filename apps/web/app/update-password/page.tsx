@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { establishSessionFromCallback } from '@/lib/auth-callback';
 import { getPostAuthRedirectPath } from '@/lib/auth-routing';
 import { getBrowserSupabase } from '@/lib/supabase';
 
@@ -24,13 +25,13 @@ export default function UpdatePasswordPage() {
     const supabase = getBrowserSupabase();
 
     const finalizeStateFromSession = async () => {
-      const { data } = await supabase.auth.getSession();
+      const { hasSession } = await establishSessionFromCallback(supabase);
 
       if (!isMounted) {
         return;
       }
 
-      setCanUpdatePassword(Boolean(data.session));
+      setCanUpdatePassword(hasSession);
       setIsReady(true);
     };
 
