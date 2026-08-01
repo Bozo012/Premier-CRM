@@ -12,8 +12,13 @@ import type { DbClient } from '@premier/db';
  * org:
  *   1. Active `org_members` row -> `activePath` (default `/today`).
  *   2. Else active `customer_accounts` row -> `/portal/dashboard`.
- *   3. Else (no active relationship of either kind) -> `/login`, a safe
- *      fallback rather than guessing a destination.
+ *   3. Else -> `activePath`, unchanged. Neither relationship existing yet
+ *      is a legitimate, transient state — e.g. mid-invite-acceptance via
+ *      `/invite/[token]/continue`, where `activePath` carries a
+ *      `redirectTo` back to the link that is about to activate the
+ *      membership itself. Guessing a different destination here would
+ *      break that flow; the caller is trusted to pass a safe
+ *      `activePath`/`redirectTo` (see `normalizeRedirectPath`).
  */
 export async function getPostAuthRedirectPath(
   supabase: DbClient,
@@ -44,7 +49,7 @@ export async function getPostAuthRedirectPath(
     return '/portal/dashboard';
   }
 
-  return '/login';
+  return activePath;
 }
 
 export function normalizeRedirectPath(
