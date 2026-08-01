@@ -1,7 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import { POST, redact, safePathname } from './route';
+import { POST } from './route';
+import { redact, safePathname } from './redact';
 
 function buildRequest(body: unknown, ip: string): NextRequest {
   return new Request('https://app.ppmnky.com/api/client-error-log', {
