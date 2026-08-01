@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { ErrorCode, err, ok, type Result } from '@premier/shared';
-import { createServiceClient, getActiveOrgContext } from '@premier/db';
+import { createServiceClient, getActiveOrgContext, logActivity } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -182,6 +182,15 @@ export async function createEstimateFromRequestAction(
   if (updateError) {
     return err(ErrorCode.DB_ERROR, updateError.message);
   }
+
+  await logActivity(client, {
+    orgId,
+    entityType: 'estimate',
+    entityId: newEstimate.id,
+    eventType: 'estimate_created_from_request',
+    message: `Estimate created from service request ${requestId}.`,
+    actorUserId: userId,
+  });
 
   revalidatePath(`/requests/${requestId}`);
   revalidatePath('/requests');

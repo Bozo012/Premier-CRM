@@ -87,7 +87,7 @@ export async function getWorkingInvoiceSummaryForCustomer(
 
 export async function generateFinalInvoiceFromWorking(
   client: DbClient,
-  args: { orgId: string; jobId: string }
+  args: { orgId: string; jobId: string; actorUserId?: string }
 ): Promise<Result<{ finalInvoiceId: string }>> {
   const { data: working, error: workingError } = await client
     .from('invoices')
@@ -163,6 +163,7 @@ export async function generateFinalInvoiceFromWorking(
     entity_id: finalInvoice.id,
     event_type: 'final_invoice_generated',
     message: `Final invoice generated from working invoice ${working.id}.`,
+    actor_user_id: args.actorUserId ?? null,
   });
 
   return ok({ finalInvoiceId: finalInvoice.id });

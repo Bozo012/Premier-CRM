@@ -385,7 +385,7 @@ export async function setDepositRequirementAction(
 ): Promise<SetDepositRequirementActionState> {
   const access = await getJobActionContext();
   if (!access.success) return access;
-  const { orgId, role } = access.data;
+  const { orgId, role, userId } = access.data;
 
   if (!hasCapability(role, 'canManageDeposits')) {
     return err(ErrorCode.FORBIDDEN, 'Your role does not permit managing deposits.');
@@ -416,6 +416,7 @@ export async function setDepositRequirementAction(
     dueDate: dueDateInput || null,
     blocksScheduling,
     blocksWorkStart,
+    actorUserId: userId,
   });
   if (!result.success) return result;
 
@@ -463,7 +464,7 @@ export async function generateFinalInvoiceAction(
 ): Promise<GenerateFinalInvoiceActionState> {
   const access = await getJobActionContext();
   if (!access.success) return access;
-  const { orgId, role } = access.data;
+  const { orgId, role, userId } = access.data;
 
   if (!hasCapability(role, 'canCreateInvoices')) {
     return err(ErrorCode.FORBIDDEN, 'Your role does not permit creating invoices.');
@@ -473,7 +474,7 @@ export async function generateFinalInvoiceAction(
   if (!jobId) return err(ErrorCode.VALIDATION_ERROR, 'Job ID is required.');
 
   const serviceClient = createServiceClient();
-  const result = await generateFinalInvoiceFromWorking(serviceClient, { orgId, jobId });
+  const result = await generateFinalInvoiceFromWorking(serviceClient, { orgId, jobId, actorUserId: userId });
   if (!result.success) return result;
 
   revalidatePath(`/jobs/${jobId}`);

@@ -5,6 +5,7 @@ import {
   createServiceClient,
   getActiveOrgContext,
   getDepositState,
+  getEntityTimeline,
   getJobById,
   getJobInvoiceTotals,
   getWorkingInvoice,
@@ -23,6 +24,8 @@ import { ErrorCode } from '@premier/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrgContextError } from '@/components/org-context-error';
+import { Timeline } from '@/components/timeline';
+import { buildChangeOrderHistoryFeed } from '@/lib/change-order-history';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import {
@@ -82,6 +85,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     depositStateResult,
     workingInvoiceResult,
     changeOrdersResult,
+    timelineResult,
   ] = await Promise.all([
     getJobById(supabase, {
       jobId,
@@ -114,6 +118,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     getDepositState(serviceClient, { orgId, jobId }),
     getWorkingInvoice(serviceClient, { orgId, jobId }),
     listChangeOrdersForJob(serviceClient, { orgId, jobId }),
+    getEntityTimeline(serviceClient, { orgId, entityType: 'job', entityId: jobId }),
   ]);
 
   if (!result.success) {
@@ -155,6 +160,13 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const depositState = depositStateResult.success ? depositStateResult.data : null;
   const workingInvoice = workingInvoiceResult.success ? workingInvoiceResult.data : null;
   const changeOrders = changeOrdersResult.success ? changeOrdersResult.data : [];
+  const timelineEntries = timelineResult.success
+    ? timelineResult.data.map((entry) => ({
+        id: entry.id,
+        label: entry.message?.trim() || formatEnumLabel(entry.event_type),
+        createdAt: entry.created_at,
+      }))
+    : [];
 
   return (
     <PageShell>
@@ -368,6 +380,10 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
       </section>
 
       <section>
+        <Timeline entries={timelineEntries} />
+      </section>
+
+      <section>
         <Card>
           <CardHeader>
             <CardTitle>Phase summary</CardTitle>
@@ -556,13 +572,19 @@ function ChangeOrdersCard({
                       ))}
                     </ul>
                   ) : null}
-                  {thread.comments.length > 0 ? (
-                    <ul className="mt-2 space-y-1 border-t pt-2 text-xs text-muted-foreground">
-                      {thread.comments.map((comment) => (
-                        <li key={comment.id}>{comment.body}</li>
-                      ))}
-                    </ul>
-                  ) : null}
+                  {(() => {
+                    const history = buildChangeOrderHistoryFeed(thread);
+                    return history.length > 0 ? (
+                      <ol className="mt-2 space-y-1 border-t pt-2 text-xs text-muted-foreground">
+                        {history.map((event) => (
+                          <li key={event.id}>
+                            <span className="text-foreground">{event.label}</span>
+                            {event.detail ? ` — ${event.detail}` : ''}
+                          </li>
+                        ))}
+                      </ol>
+                    ) : null;
+                  })()}
                   {currentRevision?.status === 'draft' ? (
                     <div className="mt-2 flex gap-2">
                       <ProposeChangeOrderButton jobId={jobId} revisionId={currentRevision.id} />

@@ -9,6 +9,7 @@ import {
   createServiceClient,
   getActiveOrgContext,
   getEstimateById,
+  logActivity,
 } from '@premier/db';
 
 import {
@@ -77,7 +78,7 @@ export async function updateEstimateStatusAction(
 ): Promise<UpdateEstimateStatusActionState> {
   const contextResult = await getEstimateActionContext();
   if (!contextResult.success) return contextResult;
-  const { orgId } = contextResult.data;
+  const { orgId, userId } = contextResult.data;
 
   const estimateId =
     typeof formData.get('estimateId') === 'string'
@@ -137,6 +138,15 @@ export async function updateEstimateStatusAction(
       await sendEstimateSiteVisitScheduledNotification(estimateDetail.data);
     }
   }
+
+  await logActivity(client, {
+    orgId,
+    entityType: 'estimate',
+    entityId: estimateId,
+    eventType: 'estimate_status_changed',
+    message: `Estimate status changed from "${estimate.status}" to "${newStatus}".`,
+    actorUserId: userId,
+  });
 
   revalidatePath(`/estimates/${estimateId}`);
   revalidatePath('/estimates');
