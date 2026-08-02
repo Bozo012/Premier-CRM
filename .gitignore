@@ -66,3 +66,5 @@ Thumbs.db
 # Jobber import data — CSVs contain real customer PII, never commit
 scripts/import/jobber/*
 !scripts/import/jobber/.gitkeep
+
+.test-fixtures/

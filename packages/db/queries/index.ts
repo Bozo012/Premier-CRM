@@ -255,3 +255,21 @@ export {
   type SiteVisitAppointment,
   type TriageResult,
 } from './site-visits';
+export {
+  ALLOWED_ATTACHMENT_MIME_TYPES,
+  ATTACHMENT_FILE_COUNT_CAP,
+  ATTACHMENT_JPEG_QUALITY,
+  MAX_DECLARED_SIZE_BYTES,
+  MAX_DECODED_PIXELS,
+  SITE_VISIT_ATTACHMENTS_BUCKET,
+  getPendingUpload,
+  getSignedReadUrl,
+  insertFinalizedVaultItem,
+  markPendingUploadFinalized,
+  markPendingUploadRejected,
+  requestPendingUpload,
+  type FinalizedVaultItemInput,
+  type PendingUploadRow,
+  type PendingUploadTarget,
+  type RequestPendingUploadInput,
+} from './vault-items';
