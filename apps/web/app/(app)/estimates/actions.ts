@@ -5,11 +5,14 @@ import { revalidatePath } from 'next/cache';
 import { ErrorCode, err, hasCapability, ok, type Result } from '@premier/shared';
 import {
   createDraftQuote,
+  createEstimateLineItem,
   createJobFromAcceptedQuote,
   createServiceClient,
+  deleteEstimateLineItem,
   getActiveOrgContext,
   getEstimateById,
   logActivity,
+  updateEstimateLineItem,
 } from '@premier/db';
 
 import {
@@ -500,4 +503,96 @@ export async function createManualEstimateAction(
   revalidatePath('/estimates');
 
   return ok({ estimateId: newEstimate.id });
+}
+
+// ---------------------------------------------------------------------------
+// Estimate line items — DB RLS + the pricing-lock trigger are the real
+// enforcement boundary (a locked estimate rejects the write with a
+// DB_ERROR); this context only needs to establish who's asking.
+// ---------------------------------------------------------------------------
+
+async function getEstimateEditContext(): Promise<Result<{ orgId: string; userId: string }>> {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return err(ErrorCode.FORBIDDEN, 'You must be signed in.');
+  }
+
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
+  }
+
+  const { orgId, role } = orgContextResult.data;
+  if (!hasCapability(role, 'canEditEstimate')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not have permission to edit estimates.');
+  }
+
+  return ok({ orgId, userId: user.id });
+}
+
+export async function createEstimateLineItemAction(
+  _prevState: Result<{ id: string }> | null,
+  formData: FormData
+): Promise<Result<{ id: string }>> {
+  const contextResult = await getEstimateEditContext();
+  if (!contextResult.success) return contextResult;
+  const { orgId } = contextResult.data;
+
+  const estimateId = String(formData.get('estimateId') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+  const quantity = Number(formData.get('quantity') ?? 1);
+  const unitPrice = Number(formData.get('unitPrice') ?? 0);
+  const sortOrder = Number(formData.get('sortOrder') ?? 0);
+
+  if (!estimateId || !description) return err(ErrorCode.VALIDATION_ERROR, 'Description is required.');
+
+  const client = createServiceClient();
+  const result = await createEstimateLineItem(client, { estimateId, orgId, description, quantity, unitPrice, sortOrder });
+  if (result.success) revalidatePath(`/estimates/${estimateId}`);
+  return result;
+}
+
+export async function updateEstimateLineItemAction(
+  _prevState: Result<null> | null,
+  formData: FormData
+): Promise<Result<null>> {
+  const contextResult = await getEstimateEditContext();
+  if (!contextResult.success) return contextResult;
+  const { orgId } = contextResult.data;
+
+  const lineItemId = String(formData.get('lineItemId') ?? '').trim();
+  const estimateId = String(formData.get('estimateId') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+  const quantity = Number(formData.get('quantity') ?? 1);
+  const unitPrice = Number(formData.get('unitPrice') ?? 0);
+
+  if (!lineItemId || !description) return err(ErrorCode.VALIDATION_ERROR, 'Description is required.');
+
+  const client = createServiceClient();
+  const result = await updateEstimateLineItem(client, { lineItemId, orgId, description, quantity, unitPrice });
+  if (result.success && estimateId) revalidatePath(`/estimates/${estimateId}`);
+  return result;
+}
+
+export async function deleteEstimateLineItemAction(
+  _prevState: Result<null> | null,
+  formData: FormData
+): Promise<Result<null>> {
+  const contextResult = await getEstimateEditContext();
+  if (!contextResult.success) return contextResult;
+  const { orgId } = contextResult.data;
+
+  const lineItemId = String(formData.get('lineItemId') ?? '').trim();
+  const estimateId = String(formData.get('estimateId') ?? '').trim();
+  if (!lineItemId) return err(ErrorCode.VALIDATION_ERROR, 'Missing line item.');
+
+  const client = createServiceClient();
+  const result = await deleteEstimateLineItem(client, { lineItemId, orgId });
+  if (result.success && estimateId) revalidatePath(`/estimates/${estimateId}`);
+  return result;
 }

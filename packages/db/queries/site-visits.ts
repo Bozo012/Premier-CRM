@@ -22,6 +22,90 @@ import type { Database, Json } from '../types';
 export type SiteVisit = Database['public']['Tables']['site_visits']['Row'];
 export type SiteVisitAppointment = Database['public']['Tables']['site_visit_appointments']['Row'];
 
+export interface SiteVisitDetail {
+  id: string;
+  orgId: string;
+  status: string;
+  serviceRequestId: string;
+  serviceRequestTitle: string;
+  customerId: string;
+  customerDisplayName: string;
+  assignedUserId: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  inspectionResponses: Record<string, unknown> | null;
+  inspectionTemplateVersionId: string | null;
+  fieldDefinitions: unknown[];
+  generatedEstimateId: string | null;
+  activeAppointment: { id: string; scheduledStart: string; scheduledEnd: string; assignedUserId: string | null } | null;
+}
+
+export async function getSiteVisitById(client: DbClient, siteVisitId: string): Promise<Result<SiteVisitDetail>> {
+  const { data: visit, error } = await client
+    .from('site_visits')
+    .select('id, org_id, status, service_request_id, assigned_user_id, started_at, completed_at, cancelled_at, cancellation_reason, inspection_responses, inspection_template_version_id')
+    .eq('id', siteVisitId)
+    .maybeSingle();
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  if (!visit) return err(ErrorCode.NOT_FOUND, 'Site visit not found.');
+
+  const { data: request, error: requestError } = await client
+    .from('service_requests')
+    .select('id, service_title, customer_id')
+    .eq('id', visit.service_request_id)
+    .maybeSingle();
+  if (requestError || !request) return err(ErrorCode.DB_ERROR, requestError?.message ?? 'Source request not found.');
+
+  const { data: customer } = await client.from('customers').select('display_name').eq('id', request.customer_id).maybeSingle();
+
+  let fieldDefinitions: unknown[] = [];
+  if (visit.inspection_template_version_id) {
+    const { data: templateVersion } = await client
+      .from('inspection_template_versions')
+      .select('field_definitions')
+      .eq('id', visit.inspection_template_version_id)
+      .maybeSingle();
+    fieldDefinitions = (templateVersion?.field_definitions as unknown[] | undefined) ?? [];
+  }
+
+  const { data: appointment } = await client
+    .from('site_visit_appointments')
+    .select('id, scheduled_start, scheduled_end, assigned_user_id')
+    .eq('site_visit_id', siteVisitId)
+    .eq('status', 'scheduled')
+    .maybeSingle();
+
+  const { data: estimate } = await client
+    .from('estimates')
+    .select('id')
+    .eq('source_site_visit_id', siteVisitId)
+    .maybeSingle();
+
+  return ok({
+    id: visit.id,
+    orgId: visit.org_id,
+    status: visit.status,
+    serviceRequestId: request.id,
+    serviceRequestTitle: request.service_title,
+    customerId: request.customer_id,
+    customerDisplayName: customer?.display_name ?? 'Unknown customer',
+    assignedUserId: visit.assigned_user_id,
+    startedAt: visit.started_at,
+    completedAt: visit.completed_at,
+    cancelledAt: visit.cancelled_at,
+    cancellationReason: visit.cancellation_reason,
+    inspectionResponses: (visit.inspection_responses as Record<string, unknown> | null) ?? null,
+    inspectionTemplateVersionId: visit.inspection_template_version_id,
+    fieldDefinitions,
+    generatedEstimateId: estimate?.id ?? null,
+    activeAppointment: appointment
+      ? { id: appointment.id, scheduledStart: appointment.scheduled_start, scheduledEnd: appointment.scheduled_end, assignedUserId: appointment.assigned_user_id }
+      : null,
+  });
+}
+
 export interface CustomerSiteVisitSummary {
   siteVisitId: string;
   safeStatus: string;

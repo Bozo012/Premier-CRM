@@ -173,10 +173,11 @@ fix the underlying env mismatch — do not remove or bypass the check.
 
 ## Request → site visit → estimate → quote workflow
 
-Added on `feature/request-site-visit-estimate-workflow` (backend only —
-see `docs/implementation/request-site-visit-estimate-workflow.md` for the
-full report). Extends the request-to-payment lifecycle with an explicit,
-audited front half:
+Added on `feature/request-site-visit-estimate-workflow` — backend, staff
+UI, customer portal presentation, and Storage/upload finalization are all
+complete; see `docs/implementation/request-site-visit-estimate-workflow.md`
+for the full report. Extends the request-to-payment lifecycle with an
+explicit, audited front half:
 
 ```
 service request → triage (remote_estimate | site_visit_required | direct_work_order)
@@ -212,3 +213,16 @@ mismatch is treated as a security defect, not a UX bug):
 `canTriageRequests`, `canCreateDirectWorkOrder`,
 `canManageInspectionTemplates`, `canEditEstimate`,
 `canApproveEstimatePricing`, `canCreateQuote`, `canSendQuote`.
+
+**Staff UI**: `apps/web/app/(app)/requests/[taskId]/page.tsx` (triage panel,
+folded into the request detail page — includes the structured
+direct-work-order authorization fields), `apps/web/app/(app)/site-visits/
+[siteVisitId]/page.tsx` (scheduling, lifecycle buttons, mobile-first
+inspection form with per-field debounced autosave, photo upload, estimate
+generation), `apps/web/app/(app)/estimates/[estimateId]/page.tsx` (extended
+with a line-items editor and a pricing-review panel gating quote creation).
+
+**Customer portal**: `apps/web/app/portal/dashboard/page.tsx` calls
+`getMySiteVisitSummary()` with the portal-scoped (RLS-authenticated) client
+for every one of the customer's own requests — the only site-visit data the
+portal ever reads.

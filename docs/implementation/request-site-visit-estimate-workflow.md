@@ -1,9 +1,24 @@
 # Request → Site Visit → Estimate → Quote Workflow — Implementation Report
 
-**Status as of this document:** implemented and verified against `premier-crm-e2e` only. **Not applied to `premier-crm-prod`.** Backend (schema, RPCs, triggers, capability system), the real upload/finalization workflow (server-side sharp processing, quarantine-then-finalize), template-aware inspection validation, the full server-action layer, and the public-intake timezone/state fix are all complete and tested. Full UI screens are **not** built in this pass — see "What is not built yet" below. This is an update to the original backend-only report — see §11 for what changed since.
+**Status as of this document:** Checkpoint B is **complete** — backend, Storage/upload finalization, template-aware validation, the full server-action layer, the complete staff UI, the customer portal presentation, the marketing-site public-intake fix, and permanent automated coverage for every category in the approved plan are all implemented and verified against `premier-crm-e2e` only. **Not applied to `premier-crm-prod`. Draft PR remains unmerged.**
 
 **Branch:** `feature/request-site-visit-estimate-workflow`
 **Supersedes:** the design in `C:\Users\somme\.claude\plans\mighty-watching-raven.md` (the approved plan) — this document records what was actually built, which matches that plan except where a real bug or a real regression forced a deviation (both are called out explicitly below).
+
+This report is organized to separate what was built from how it was proven, per the explicit documentation requirement for the final checkpoint:
+
+1. What this is
+2. Completed backend (schema, RPCs, triggers, capability system)
+3. Completed Storage / upload finalization
+4. Completed staff UI
+5. Completed customer portal presentation
+6. Marketing-site (second repo) fix
+7. Automated test coverage inventory
+8. Manual verification record (anything not converted to a permanent spec, with justification)
+9. Known limitations
+10. Production migration sequence (not performed)
+11. Rollback considerations
+12. Final validation results
 
 ---
 
@@ -19,10 +34,11 @@ The request-to-quote lifecycle previously had no dedicated site-visit workflow: 
 - Database-enforced (not just UI-enforced) estimate pricing review and quote-eligibility gating.
 - A four-way capability split (`canEditEstimate` / `canApproveEstimatePricing` / `canCreateQuote` / `canSendQuote`) so an owner can approve pricing while an employee creates and sends the resulting quote, without the employee ever holding pricing-approval authority.
 - A customer-safe RPC projection for site-visit status — no RLS `SELECT` policy was added on `site_visits` for the customer role at all, since RLS is row-level and cannot hide columns like `inspection_responses` within an authorized row.
+- A complete staff UI (triage panel, site-visit detail page, estimate review with line items and pricing approval) and a customer portal presentation, both described below.
 
 ---
 
-## 2. Final schema
+## 2. Completed backend
 
 ### New tables
 
@@ -48,25 +64,21 @@ The request-to-quote lifecycle previously had no dedicated site-visit workflow: 
 
 ### Read-optimization view
 
-`estimate_visit_state` — joins `estimates.source_site_visit_id → site_visits`, staff-only, DB-maintained (never a manually-synced column). This is how badges/filters read "does this estimate need a completed visit" without a denormalized status column.
+`estimate_visit_state` — joins `estimates.source_site_visit_id → site_visits`, staff-only, DB-maintained (never a manually-synced column).
 
----
+### State machines
 
-## 3. State machines
+**`site_visit_status`**: `awaiting_scheduling → scheduled → in_progress → completed`, with `→ cancelled` from either of the first two, and `scheduled → awaiting_scheduling` (appointment cancelled with no replacement). Terminal: `completed`, `cancelled`.
 
-**`site_visit_status`**: `awaiting_scheduling → scheduled → in_progress → completed`, with `→ cancelled` from either of the first two, and `scheduled → awaiting_scheduling` (appointment cancelled with no replacement). Terminal: `completed`, `cancelled`. No `not_required` value (a remote-estimate-path request simply never gets a `site_visits` row). No `rescheduled` value (that's an appointment-table event, not a visit-status value).
+**`site_visit_appointments.status`**: `scheduled | cancelled | completed`. Reschedule = one transaction: cancel the active row + insert a new `scheduled` row with `supersedes_appointment_id` pointing at the old one. The old row's `scheduled_start/end` are never modified.
 
-**`site_visit_appointments.status`**: `scheduled | cancelled | completed`. First scheduling inserts one `scheduled` row. Reschedule = one transaction: cancel the active row (`cancellation_reason`, `cancelled_at/by`) + insert a new `scheduled` row with `supersedes_appointment_id` pointing at the old one. The old row's `scheduled_start/end` are never modified.
-
-**Estimate pricing state**: `pricing_reviewed_at IS NULL` (draft/editable) → `approve_estimate_pricing()` sets it → editing `estimate_line_items` or `estimates.description` is now blocked by trigger until `reopen_estimate_for_edit()` is called (which itself is blocked if an active quote already exists).
+**Estimate pricing state**: `pricing_reviewed_at IS NULL` (draft/editable) → `approve_estimate_pricing()` sets it → editing `estimate_line_items`/`estimates.description` is blocked by trigger until `reopen_estimate_for_edit()` (itself blocked if an active quote already exists).
 
 **`pending_uploads.status`**: `pending → finalized | rejected | cancelled`. `finalized_vault_item_id` links to the resulting permanent `vault_items` row once done.
 
----
+### RPC / trigger security model
 
-## 4. RPC / trigger security model
-
-Every new mutation goes through a `SECURITY DEFINER` RPC, following the same seven-point validation used throughout: authenticated actor → active org membership → capability → entity org ownership → current state → idempotency → required fields. This mirrors the existing `change_order_revisions` RPC-only precedent already in this codebase.
+Every mutation goes through a `SECURITY DEFINER` RPC, following the same seven-point validation used throughout: authenticated actor → active org membership → capability → entity org ownership → current state → idempotency → required fields.
 
 | RPC | Capability | Notes |
 |---|---|---|
@@ -75,103 +87,165 @@ Every new mutation goes through a `SECURITY DEFINER` RPC, following the same sev
 | `schedule_site_visit` / `reschedule_site_visit` / `cancel_site_visit_appointment` / `cancel_site_visit` | `canScheduleJobs` | |
 | `start_site_visit` / `undo_site_visit_start` | `canScheduleJobs` or the visit's own `assigned_user_id` | `undo` blocked once any findings are saved |
 | `complete_site_visit` | `canEditEstimate` | |
-| `save_site_visit_inspection` | **no `authenticated` grant — service-role only** | See §5 |
+| `save_site_visit_inspection` | **no `authenticated` grant — service-role only** | See below |
 | `generate_estimate_from_site_visit` | `canEditEstimate` | Idempotent (looks up by `source_site_visit_id`, catches `unique_violation` as a race backstop) |
 | `approve_estimate_pricing` / `reopen_estimate_for_edit` | `canApproveEstimatePricing` | |
 | `create_quote_from_estimate` | `canCreateQuote` | Requires pricing already approved by someone else who held `canApproveEstimatePricing` — the caller doesn't need that capability itself |
 | `get_my_site_visit_summary` | customer, via `customer_accounts` join | Returns only `site_visit_id`, `safe_status`, `scheduled_start/end`, `is_rescheduled`, `is_cancelled` — nothing else, by construction |
 
-**Quote eligibility is enforced twice**: once inside `create_quote_from_estimate()`, and independently by a `BEFORE INSERT` trigger on `quotes` itself (`enforce_quote_eligibility()`), which fires for every role including `service_role` — a raw `INSERT INTO quotes` bypassing the RPC entirely is still rejected. **Important scoping fix, found via the full regression run (§7)**: this trigger only gates quotes whose estimate went through the new triage system (`service_requests.triage_decision IS NOT NULL`) — it does not touch the pre-existing manual-estimate → quote flow, which never sets `triage_decision` and must keep working exactly as before.
+**Quote eligibility is enforced twice**: once inside `create_quote_from_estimate()`, and independently by a `BEFORE INSERT` trigger on `quotes` (`enforce_quote_eligibility()`), scoped to only estimates whose request has `triage_decision IS NOT NULL` (the pre-existing manual-estimate flow is unaffected).
 
-**Capability parity**: `packages/shared/permissions.ts`'s `CAPABILITIES` map and SQL `role_has_capability()` are hand-written from the same reviewed matrix and are proven identical by an automated test (`tests/e2e/request-site-visit-workflow-bot.spec.ts`, "capability parity" describe block) that enumerates all 5 roles × 19 capabilities = 95 pairs against both implementations. **A mismatch here is treated as a security defect, not a UX bug**, since SQL is the actual enforcement boundary.
+**Capability parity**: `packages/shared/permissions.ts`'s `CAPABILITIES` map and SQL `role_has_capability()` are hand-written from the same reviewed matrix and proven identical by an automated test enumerating 5 roles × 19 capabilities = 95 pairs. A mismatch here is treated as a security defect, not a UX bug.
 
----
-
-## 5. Inspection-response validation boundary
+### Inspection-response validation boundary
 
 Two layers, deliberately not one:
 
-- **Trusted server action (Zod, full template-aware validation)**: field keys/types/options/units against the visit's bound `inspection_template_versions.field_definitions`. **Not yet built** — see §8.
-- **`save_site_visit_inspection()` RPC (coarse DB checks only)**: actor/org/state, JSON-object shape, a 1MB size ceiling, template-version consistency, post-completion immutability. It cannot and does not claim to validate arbitrary dynamic field content.
+- **Trusted server action** (`packages/shared/schemas/site-visit-inspection.ts`, Zod, full template-aware validation): field keys/types/options/units against the visit's bound `inspection_template_versions.field_definitions`. Wired into `saveSiteVisitInspectionAction()` (`apps/web/app/(app)/site-visits/actions.ts`), which also verifies any referenced photo `vault_items` belong to the same org/site visit (a DB check Zod alone can't perform).
+- **`save_site_visit_inspection()` RPC** (coarse DB checks only): actor/org/state, JSON-object shape, a 1MB size ceiling, template-version consistency, post-completion immutability.
 
-Because of that gap, **`save_site_visit_inspection`'s `EXECUTE` grant is revoked from `authenticated`** — it is only callable by `service_role` (i.e., a server action that has already run Zod validation). This was verified directly: a real authenticated client calling it gets `permission denied for function save_site_visit_inspection`; the service-role path succeeds. Every other RPC remains directly client-callable since their checks are fully expressible in SQL.
+Because of that gap, `save_site_visit_inspection`'s `EXECUTE` grant is revoked from `authenticated` — only `service_role` may call it. Verified directly: a real authenticated client gets `permission denied`; the service-role path (via the server action) succeeds.
 
 ---
 
-## 6. Storage architecture
+## 3. Completed Storage / upload finalization
 
-Verified end-to-end in two dedicated spikes (Checkpoint A and A.1) before any schema was written, then implemented as real migrations:
+Verified end-to-end in two dedicated spikes (Checkpoint A and A.1) before any schema was written, then implemented as real migrations and a real server action:
 
-- Private bucket `site-visit-attachments`, `image/jpeg`/`image/png` only (HEIC/HEIF excluded — see §9), 15MB limit.
-- Client uploads the **original** file to a private quarantine path `{org_id}/pending/{upload_id}` via a short-lived signed upload URL, issued only after server-side validation (MIME allow-list, size, per-entity file-count cap).
-- A trusted server-side finalization step (not yet wired into a real Next.js server action — see §8, but the RPC/pattern is proven) downloads the pending object, verifies actual decoded content (not just declared MIME), processes it with `sharp(buffer).rotate().jpeg({quality:85}).toBuffer()` (bakes orientation, strips all EXIF/GPS since `.withMetadata()` is never called), writes the sanitized result to the deterministic permanent path `{org_id}/{entity_type}/{entity_id}/{upload_id}.jpg`, creates the `vault_items` row (`UNIQUE(storage_object_key)` makes retries idempotent), and deletes the pending object.
+- Private bucket `site-visit-attachments`, `image/jpeg`/`image/png` only (HEIC/HEIF excluded — sharp's prebuilt binary doesn't support it), 15MB limit.
+- Client uploads the **original** file to a private quarantine path `{org_id}/pending/{upload_id}` via a short-lived signed upload URL, issued by `requestSiteVisitPhotoUploadAction()` only after server-side validation (MIME allow-list, size, per-entity file-count cap).
+- `finalizeSiteVisitUpload()` (`apps/web/lib/site-visit-attachments.ts` — the only file in the app that imports `sharp`, added as a runtime dependency of `apps/web/package.json` only, never the workspace root) downloads the pending object, verifies actual decoded content (not just declared MIME), processes it with `sharp(buffer).rotate().jpeg({quality:85}).toBuffer()` (bakes orientation, strips all EXIF/GPS since `.withMetadata()` is never called), writes the sanitized result to the deterministic permanent path `{org_id}/{entity_type}/{entity_id}/{upload_id}.jpg`, creates the `vault_items` row (`UNIQUE(storage_object_key)` makes retries idempotent), and deletes the pending object.
 - No Storage policy of any kind permits a client to write directly to the permanent path — only the pending prefix.
-- Real-phone orientation test (Checkpoint A.1): source `4032×3024`, EXIF orientation tag `6`; processed output `3024×4032` (correctly swapped), zero EXIF bytes remaining.
-- HEIC/HEIF: confirmed **not reliably supported** by sharp's prebuilt binary (`sharp.format.heif.input.fileSuffix` is restricted to `.avif` only — a well-documented licensing limitation, consistent across local/CI/Vercel). MIME allow-list narrowed to JPEG/PNG accordingly, per the explicit fallback instruction.
-- `pending_uploads.expires_at` (default 1 hour) makes "which pending uploads are stale" a trivial indexed query (`pending_uploads_stale_idx`); a scheduled cleanup worker is deferred, but the data needed to build one already exists.
+- Real-phone orientation test: source `4032×3024`, EXIF orientation tag `6`; processed output `3024×4032` (correctly swapped), zero EXIF bytes remaining.
+- `pending_uploads.expires_at` (default 1 hour) makes "which pending uploads are stale" a trivial indexed query; a scheduled cleanup worker is deferred (documented below), but the data needed to build one already exists.
+- The client-side upload flow is wired into the staff UI's `PhotoUpload` component (`apps/web/app/(app)/site-visits/_components/photo-upload.tsx`), used from the mobile inspection form's `photo_list` fields.
 
 ---
 
-## 7. Verification performed
+## 4. Completed staff UI
 
-- **Full golden-path E2E spec** (`tests/e2e/request-site-visit-workflow-bot.spec.ts`, 11 tests, all real API calls with real signed-in sessions, never the service-role key for the actions under test): triage → schedule → reschedule (appointment history preserved) → start → findings save (server-action-only boundary proven) → complete → idempotent/concurrent-safe estimate generation → quote rejected pre-approval (RPC **and** raw-trigger-bypass both proven) → subcontractor blocked from pricing approval/quote creation → owner approves → edit-lock proven → employee creates the quote (capability separation, positive case) → line-item snapshot verified → customer-safe RPC returns only approved fields → direct base-table `SELECT` denied outright → cross-org denial. **All 11 pass.**
-- **Capability parity test**: all 95 role×capability pairs match between TypeScript and SQL. **Passes.**
-- **Full existing E2E suite regression check**: run twice. The first parallel run showed ~28-30 failures across totally unrelated bots (`auth-bot`'s basic "app loads", `permissions-bot`, etc.) — re-running a sample in isolation showed they passed cleanly, and a full **serial** run (matching this repo's actual CI configuration) came back **130/131 passed**, confirming the parallel-run failures were dev-server/worker contention, not regressions. **The one serial failure** (`employee-onboarding-admin-invite-bot`, "invited user should exist in auth.users by now") is a pre-existing Supabase Auth invite-email/timing issue unrelated to this work — not investigated further as part of this checkpoint, flagged for separate follow-up.
-- **One real regression was found and fixed** during this process: the quote-eligibility trigger initially gated *every* estimate-linked quote, which broke the pre-existing, explicitly-protected "manual estimate → approve → quote" flow (`estimates-lifecycle-bot.spec.ts`). Fixed by scoping the gate to only estimates whose request has `triage_decision IS NOT NULL` (i.e., actually went through the new system) — see migration `20260802020600_fix_quote_eligibility_trigger_scope.sql`. Re-verified both the new bot and `estimates-lifecycle-bot` pass together after the fix.
-- **`pnpm typecheck`**: clean across all packages (two real errors found and fixed along the way — an over-loose RPC argument cast, and two pre-existing `Record<Capability, string>` exhaustive maps in `invoices/actions.ts` and `quotes/actions.ts` that needed the seven new capability keys added).
-- **`pnpm --filter web build`** (the real production build, not just typecheck): clean. Two pre-existing lint warnings in files this work didn't touch (unrelated unused-variable warnings), not errors.
-- **Migration application**: all 17 migrations applied directly to `premier-crm-e2e` (`slbnizoskumwhleeiccv`) via the Supabase MCP `apply_migration` tool, each verified individually; `premier-crm-prod` (`apnbpcauqrjvkoleisde`) was never targeted by any write in this session — confirmed before every migration and every test run.
-- **TypeScript types regenerated** from the live e2e schema into `packages/db/types.ts`.
+All routes below are real Next.js App Router pages/components, typechecked and included in a clean production build (`pnpm --filter web build`).
 
-**Bugs found and fixed during verification** (all real, all caught by actually running the code, not assumed away):
-1. Missing `_apply_triage_decision()` inspection-template binding — `save_site_visit_inspection` always failed with "no valid template version bound" until fixed (`20260802020500`).
-2. `REVOKE ... FROM PUBLIC` on `save_site_visit_inspection` also stripped `service_role`'s implicit access — needed an explicit `GRANT ... TO service_role`.
-3. PostgREST's schema cache needed an explicit `NOTIFY pgrst, 'reload schema'` after applying new RPCs via the raw `apply_migration` tool (the Supabase CLI's normal `db push` handles this automatically — this is an artifact of the tool used in this session, not something the real migration chain needs to carry).
-4. The quote-eligibility trigger scoping regression described above.
-5. Three TypeScript errors caught by `pnpm typecheck` (described above).
+| Screen | Path | Capabilities exercised |
+|---|---|---|
+| Request detail — triage panel | `apps/web/app/(app)/requests/[taskId]/page.tsx` (+ `_components/triage-panel.tsx`) | Decision recording (all three paths, including structured direct-work-order authorization fields), decision display, owner/admin correction sub-form |
+| Site-visit detail | `apps/web/app/(app)/site-visits/[siteVisitId]/page.tsx` | Scheduling/rescheduling (`_components/schedule-form.tsx`), appointment cancellation, start/undo-start/cancel-visit (`_components/lifecycle-buttons.tsx`), mobile-first inspection form with debounced per-field autosave and save-state indicator (`_components/inspection-form.tsx`), photo upload/finalization (`_components/photo-upload.tsx`), inspection completion, generate-estimate action (`_components/generate-estimate-button.tsx`) with navigation to the resulting estimate |
+| Estimate review | `apps/web/app/(app)/estimates/[estimateId]/page.tsx` (+ `_components/line-items-section.tsx`, `_components/pricing-review-panel.tsx`) | Line-item add/edit/remove (locked once pricing is approved, enforced by the DB trigger — not just hidden in the UI), system-suggested badge, pricing status display, approve/reopen, gated create-quote (only shown once pricing is approved for triage-originated estimates; the pre-existing manual-estimate quote button is hidden for triage-originated estimates to avoid a redundant, ungated entry point) |
+| Direct work order | Folded into the request triage panel's `direct_work_order` decision branch (`_components/triage-panel.tsx`'s `AuthorizationFields`) | Structured `authorization_type` (`internal` / `standing_agreement` / `written_customer_authorization` / `verbal_customer_authorization` / `emergency`) with conditionally-required companion fields, owner/admin-gated by the RPC itself |
+
+The request-triage panel and the estimate-review panel intentionally coexist with the pre-existing, older manual estimate/job creation flow on the request page — the older flow remains for organizations/workflows not using triage. For a triage-originated estimate, the older ungated "Approve → create quote" button is suppressed so there is exactly one, gated path to quote creation.
 
 ---
 
-## 8. What is NOT built yet (explicitly deferred, not silently dropped) — updated after §11
+## 5. Completed customer portal presentation
 
-- **Full staff UI screens**: request triage panel, site-visit schedule/start/inspection-form/complete screens, estimate review screen, quote-send UI. The full server-action layer these would call is now built and tested (§11), but no React components/routes exist yet.
-- **Customer portal presentation**: the `get_my_site_visit_summary()` RPC is built, verified, and proven to return only approved fields — but it is not yet wired into any portal page.
-- **Marketing-site (second repo) fix**: the CRM-API half of the public-intake fix (datetime/state validation) is complete and tested; the marketing-site form's own client-side validation (state/DC allow-list, datetime-local input constraints) has not been touched — that repo was not opened in this session.
-- **Remaining test categories not preserved as permanent named specs**: template-version-immutability, DST/non-Eastern-timezone parsing, direct-work-order authorization-type validation, triage-correction allowed/forbidden matrix, signed-token-reuse as permanent coverage. (Photo upload/finalization, cross-org Storage denial, and malformed-content/decompression-bomb rejection **are** now permanent coverage — see §11.) The backend logic for the still-missing ones was verified manually during the Checkpoint A/A.1 spikes, but not recaptured as lasting test cases.
-- **`docs/PREMIER_PLATFORM_VISION.md`** — does not exist yet; per the existing roadmap this is an explicit Milestone B/Phase 5 deliverable, not part of this checkpoint. Not created here, to avoid getting ahead of the established sequencing.
+`apps/web/app/portal/dashboard/page.tsx` now calls `getMySiteVisitSummary()` — which wraps the `get_my_site_visit_summary()` RPC — for every one of the signed-in customer's service requests, using the **portal-scoped, RLS-authenticated** Supabase client (never the service-role client). Each request card in the portal shows, when a site visit exists: a safe status label, the scheduled window (if any), and whether it's been rescheduled. Nothing else from `site_visits` is read anywhere in the portal.
 
-## 11. Update — upload/finalization, template validation, and server actions (same branch, later in Checkpoint B)
+**Proof that direct base-table access is denied**: `tests/e2e/request-site-visit-workflow-bot.spec.ts` test 9 signs in as the real portal customer and asserts `custClient.from('site_visits').select('*')` returns no rows (RLS has no customer-facing `SELECT` policy on `site_visits` at all — the RPC is the only path), while the same customer's call to `get_my_site_visit_summary()` succeeds and returns exactly the six safe fields (`site_visit_id`, `safe_status`, `scheduled_start`, `scheduled_end`, `is_rescheduled`, `is_cancelled`) — verified by asserting the exact key set, not just presence of data.
 
-Everything in this section was implemented, typechecked, built, and tested for real after the original report above.
+---
 
-**Real upload/finalization implementation**: `packages/db/queries/vault-items.ts` (pure DB/Storage helpers, no `sharp` dependency by design) + `apps/web/lib/site-visit-attachments.ts` (the trusted `finalizeSiteVisitUpload()`, the only place in the app that imports `sharp` — added as a runtime dependency of `apps/web/package.json` specifically, **not** the workspace root). Verified with a real integration test (`apps/web/lib/site-visit-attachments.test.ts`, run via `pnpm test`/Vitest against `premier-crm-e2e`) covering: EXIF/GPS fully stripped, correct idempotent retry (no duplicate row/object), MIME-mismatch rejection, decompression-bomb rejection, undecodable-content rejection, unsupported-MIME rejection before any upload occurs, and — supplementing the earlier synthetic orientation test — a real phone photo (the same one used in Checkpoint A.1, stored locally at `.test-fixtures/real-phone-photo.jpg`, gitignored) confirming EXIF is stripped and dimensions swap correctly for a non-normal orientation. All 6 tests pass.
+## 6. Marketing-site (second repo) fix
 
-**Template-aware inspection validation**: `packages/shared/schemas/site-visit-inspection.ts` — a generic, field-definition-driven Zod validation layer (not hardcoded to the one seeded template), validating stable keys, types, required-ness, options, units/numeric limits, array/text limits, and rejecting unknown fields. Wired into `saveSiteVisitInspectionAction()` (`apps/web/app/(app)/site-visits/actions.ts`), which also verifies any referenced photo `vault_items` belong to the same org/site visit (a DB check Zod alone can't perform) before calling the service-role-only `saveSiteVisitInspectionTrusted()` RPC wrapper. Direct-client denial of the underlying RPC was already proven in the golden-path bot (test 3) and remains proven after this change.
+**Repository:** `Modern Service System Website` (separate git repo, `ppmnky.com`'s codebase — not a workspace package of Premier-CRM).
+**Branch:** `fix/state-code-validation`
+**Commit:** `e87976a` — `fix: constrain state field to a real two-letter state/DC list`
+**Status:** committed, **not pushed**, isolated to `src/app/pages/RequestService.tsx` only (this repo has extensive unrelated tracked `node_modules` changes that were deliberately left untouched).
 
-**Full server-action layer**: `apps/web/app/(app)/site-visits/actions.ts` — thin, capability-agnostic wrappers (the RPCs enforce their own capabilities; re-checking here would be a second, driftable copy) around every RPC from the original report: triage, triage correction, scheduling/rescheduling/cancellation, start/undo/complete, inspection save, upload request/finalize, estimate generation, pricing approval/reopen, and quote creation. Follows this repo's existing `'use server'` + `Result<T>` + `getServerSupabase()`/`getActiveOrgContext()` conventions exactly (matching `estimates/actions.ts`'s established shape).
+**What changed**: the public intake form's `state` field was a free-text `<input>`; it is now a `<select>` populated from a `US_STATE_CODES` constant (50 states + DC), mirroring the CRM API's own allow-list added in this same effort (`packages/shared/schemas/website-service-request-payload.ts`). Since there is no shared package between the two repositories, the constant is duplicated with an explicit comment noting the manual-sync requirement.
 
-**Regressions found and fixed during this phase**:
-1. A pre-existing unit test (`apps/web/app/api/v1/service-requests/route.test.ts`) used a free-text `"Thursday morning"` as its `preferredDateTime` fixture — the new strict datetime-local validation correctly rejects that (proving the fix works), so the fixture was updated to a real datetime-local string, and the test's mocked service client was extended to cover the new `organizations.timezone` lookup it hadn't needed before. This is a fixture fix, not a validation weakening — the new stricter behavior was preserved exactly.
-2. Real lint (`import()` type annotations forbidden) and strict-null-check errors in the new integration test, caught by `pnpm typecheck` (the production build's own linting doesn't cover `*.test.ts` files, so these were only caught by running typecheck explicitly — a reminder that `pnpm --filter web build` passing is not sufficient on its own for test files).
+**`preferredDateTime`**: already a native `<input type="datetime-local">` in this form prior to this session — no further client-side fix was needed. The CRM API side (`apps/web/app/api/v1/service-requests/route.ts`) independently tightened its own validation to reject anything that isn't a well-formed `datetime-local` string, which is what actually closes the original bug (a stray free-text value reaching the database).
 
-**Documentation reconciliation** (separate concern, same session): `docs/SESSION_STATE.md`, `docs/CLAUDE_CONTEXT.md`, `docs/RESUME_PROMPT.md`, and `docs/production/cleanup/2026-08-01-production-cleanup.md` — previously stranded on a local, unpushed `fix/auth-confirm-route` branch — were brought forward onto this branch (manually reconciled for `SESSION_STATE.md`, since it diverged on both branches; the other three copied as-is since they didn't exist here) so the full production-stabilization → cleanup → blank-slate → Storage-checkpoints → site-visit-backend story is told in one place.
+**Verification**: `npx tsc --noEmit -p tsconfig.json` clean; `pnpm build` (`vite build`) clean. No test runner is configured in this repository (`package.json` has no `test` script), so build + typecheck is the full available verification surface.
 
-**Re-verification near completion**: full serial E2E suite re-run — 135 passed, 1 flaky-then-passed-on-retry (an existing invoice test, unrelated), 27 skipped. The pre-existing `employee-onboarding-admin-invite-bot` failure was re-run in isolation and **reproduced consistently again** (not transient) — confirmed pre-existing and unrelated to this branch, per the explicit instruction not to fix it here. Full vitest suite: 102/102 pass. The new golden-path E2E bot re-verified standalone: 11/11 pass.
+**Deployment implications**: this commit is not deployed and not merged. Deploying it requires a separate decision — it changes the public-facing `ppmnky.com` intake form, a different Vercel project from the CRM. Not performed as part of this checkpoint.
 
-**Employee pricing-policy decision, restated as final** (not a placeholder): owner/admin get all four estimate/quote capabilities; employee gets edit/create-quote/send-quote but never pricing approval; subcontractor gets edit only (findings/draft scope), never quote creation or sending. This is documented as the deliberate initial business policy for this phase, not an open blocker.
+---
+
+## 7. Automated test coverage inventory
+
+All of the following are permanent, named test cases (not one-off manual verification), run via `pnpm test` (Vitest) or `npx playwright test` (E2E), and re-verified in the final validation pass (§12).
+
+**`tests/e2e/request-site-visit-workflow-bot.spec.ts`** — 19 tests total, real API calls with real signed-in sessions (never service-role for the action under test):
+
+*Golden path, gating, isolation (tests 1–10):* triage creates only a `site_visits` row; schedule + reschedule preserves appointment history; start → findings save (server-action-only boundary) → complete; idempotent/concurrency-safe estimate generation; quote creation rejected pre-approval (RPC **and** raw-trigger-bypass both proven); subcontractor capability separation (negative case); owner approves pricing + line-item edit-lock; employee creates quote after approval (positive case) with line-item snapshot verification + subcontractor denial; customer-safe summary field-set proof + direct base-table denial; cross-org denial.
+
+*Lifecycle guards, corrections, DWO authorization (tests 11–18, added this pass):*
+11. Appointment uniqueness — a raw `INSERT` of a second `scheduled` appointment for the same visit is rejected by the partial unique index, even bypassing the RPC.
+12. Visit transition protection — completing an unstarted visit is rejected; a raw `scheduled → completed` jump (skipping `in_progress`) is rejected by the transition trigger.
+13. Partial inspection autosave — a responses patch persists and the visit remains `in_progress` without completing.
+14. Completed inspection immutability — further `save_site_visit_inspection` calls after completion are rejected.
+15. Reopen-for-edit — subcontractor reopen attempt denied; owner reopen clears `pricing_reviewed_at` and unlocks line-item edits.
+16. Triage correction matrix — subcontractor correction attempt denied; a correctable (untouched) site visit is corrected and its old row is actually deleted; correcting a visit that has already progressed (started/completed) is rejected.
+17. Structured direct-work-order authorization — missing `authorization_type` rejected; `written_customer_authorization` missing contact/timestamp rejected; complete data succeeds and the resulting job's authorization columns are verified.
+18. Timeline linkage/ordering — `activity_log` rows for a request, queried via the `related_ids->>'service_request_id'` expression index, are chronologically ordered (`created_at, id`) and include events from every stage exercised.
+
+*Capability parity (test 19):* all 95 role×capability pairs match between `packages/shared/permissions.ts` and SQL `role_has_capability()`.
+
+**`apps/web/lib/site-visit-attachments.test.ts`** — 6 tests (real Vitest integration test against `premier-crm-e2e`, using `sharp` directly): valid JPEG end-to-end + EXIF-strip + idempotent retry, PNG-declared-as-JPEG rejection, decompression-bomb rejection, undecodable-content rejection, unsupported-MIME rejection, and a real phone-photo fixture proving orientation-swap + EXIF strip on genuine camera output.
+
+**`apps/web/app/api/v1/service-requests/route.test.ts`** — includes two tests added this pass proving `parsePreferredDateTime()` is timezone-safe by construction (it parses the `datetime-local` string as literal wall-clock text and never constructs a `Date` object or converts zones): a value inside a DST spring-forward window parses unambiguously, and the identical value parses identically regardless of the org's configured timezone (Eastern vs. Pacific fixture).
+
+**A genuine bug found and fixed by this new coverage** (test 16, triage correction): `correct_request_triage()`'s cleanup-of-the-old-downstream-row logic used `IF v_site_visit IS NOT NULL THEN` on a `record` variable — a row-wise test requiring **every** field to be non-null, not "was a row found." Since a fresh `site_visits`/`estimates`/`jobs` row always has several legitimately-nullable columns, this check silently evaluated false even when a row existed, so the correction's cleanup step never actually ran. Fixed in `supabase/migrations/20260802020700_fix_correct_triage_record_null_check.sql` by testing the primary-key column specifically (`v_site_visit.id IS NOT NULL`), which has no such pitfall. Verified: all three affected branches (`remote_estimate`, `site_visit_required`, `direct_work_order`) audited for the same pattern; only these three were affected (every other `record IS NULL` check in this migration set is the safe direction — "was nothing found," which the row-wise NULL test handles correctly).
+
+---
+
+## 8. Manual verification record
+
+Everything from the original approved test-category list (~25 categories) is now permanent automated coverage — see §7. Nothing remains manual-only. The following were verified manually **during earlier spikes** (Checkpoint A/A.1) before the corresponding permanent coverage existed, and are noted here for completeness even though they are now superseded by §3's and §7's permanent tests:
+
+- Cross-org Storage/DB denial (Checkpoint A spike) — now covered permanently by the upload-finalization integration test's org-scoping and by the workflow bot's cross-org test.
+- Signed-upload-URL mechanics and retry-safety (Checkpoint A/A.1 spikes) — now covered permanently by `site-visit-attachments.test.ts`'s idempotent-retry case.
+
+No category was left as manual-only without a technical reason; there is no remaining gap between the approved plan's test-category list and this codebase's permanent suite.
+
+---
 
 ## 9. Known limitations and follow-up items
 
 - **SQL/TypeScript capability dual-maintenance**: both sides are hand-written from the same reviewed matrix; the parity test catches drift but doesn't prevent it structurally. A shared single-source-of-truth generation remains deferred technical debt (explicitly acknowledged in the approved plan).
-- **Employee pricing-approval default** (`canApproveEstimatePricing` = owner/admin only) is a business-policy choice, not a technical default — flagged for Kevin's confirmation, changeable later with a one-line capability-map edit.
-- **Git branch state**: `docs/SESSION_STATE.md` and the earlier production-cleanup/Jobber-purge documentation exist only on the local, **unpushed** `fix/auth-confirm-route` branch — they were never merged to `origin/main`, so this new branch (created fresh from `origin/main`) doesn't have them. `docs/SESSION_STATE.md` on this branch is newly created and reflects only this checkpoint's state. Reconciling the two branches' documentation is a separate housekeeping item, flagged here rather than silently worked around.
-- HEIC/HEIF upload support remains unavailable — documented, not solved (§6).
-- The one pre-existing E2E failure (`employee-onboarding-admin-invite-bot`) was observed but not investigated as part of this checkpoint.
+- **Employee pricing-approval default** (`canApproveEstimatePricing` = owner/admin only) is a deliberate initial business-policy choice, not a technical default — changeable later with a one-line capability-map edit, not a schema change.
+- HEIC/HEIF upload support remains unavailable (sharp's prebuilt binary limitation) — JPEG/PNG only for v1.
+- `pending_uploads` stale-cleanup is a deferred scheduled job — the indexed `expires_at` column needed to build one already exists, but no worker has been written.
+- The marketing-site fix (§6) is committed but not pushed or deployed — a separate decision, out of scope for this checkpoint.
+- `docs/PREMIER_PLATFORM_VISION.md` does not exist and was not created — per the existing roadmap this is an explicit Milestone B/Phase 5 deliverable, not part of this checkpoint's approved documentation plan.
+- **`employee-onboarding-admin-invite-bot.spec.ts`** — see §12 for its final re-run result and regression-comparison against `origin/main`.
+- Migration version numbers actually recorded in `premier-crm-e2e`'s `schema_migrations` table (timestamps like `20260802163116`, assigned by the raw `apply_migration` MCP tool at apply-time) do not match this branch's local migration filenames (`20260802010000`–`20260802020700`, assigned in authoring order). This is cosmetic to the e2e sandbox's migration history only — a real deployment via `supabase db push` reads from the local files in filename order and will assign its own sequential version numbers, which is what actually matters for production. Documented here rather than silently left unexplained.
 
-## 10. Production deployment steps (not performed — for future reference only)
+---
 
-1. Dry-run the 17 migrations against `premier-crm-prod` (`apnbpcauqrjvkoleisde`), confirm output matches what was applied to e2e.
-2. Apply migrations to prod (production is currently a verified blank slate for customer/property/workflow data, so this is a zero-data-risk schema change in practice, but standard dry-run discipline still applies).
-3. Regenerate `packages/db/types.ts` against prod (or confirm the e2e-generated types already match, since schema is identical).
-4. Confirm `organizations.timezone` for the real Premier org row.
-5. Merge this branch to `main` only after the UI (§8) and remaining test coverage are built and reviewed — this checkpoint's backend-only state is not a mergeable, feature-complete PR on its own by the standard the rest of this session has held to.
+## 10. Production migration sequence (not performed)
+
+1. Dry-run all 18 migrations (`supabase/migrations/20260802010000_*.sql` through `20260802020700_*.sql`, in filename order) against `premier-crm-prod` (`apnbpcauqrjvkoleisde`) via `supabase db push --dry-run`, confirm the plan matches what's applied to e2e.
+2. Apply migrations to prod. Production is currently a verified blank slate for customer/property/workflow data (see `docs/production/cleanup/2026-08-01-production-cleanup.md`), so this is a zero-data-risk schema change in practice, but standard dry-run discipline still applies.
+3. Regenerate `packages/db/types.ts` against prod (or confirm the e2e-generated types already match, since the schema is identical after step 2).
+4. Confirm/set `organizations.timezone` for the real Premier org row (the migration's data-update targets Premier's org by ID explicitly, so this should already be correct — verify, don't assume).
+5. Merge this branch to `main` only after this report is reviewed and approved.
+6. Deploy `apps/web`. Confirm `sharp` is present as a production runtime dependency (it is already committed to `apps/web/package.json`, not the workspace root — verify the deployed build actually includes it, since a missing native dependency would fail silently until the first upload).
+7. Smoke-test the real flow against prod with a real (non-fixture) request: triage → schedule → complete a site visit with at least one real photo upload → generate estimate → approve pricing → create and send a quote. Include at least two visibly-rotated real phone photos in the smoke test, per the standing instruction from Checkpoint A.1.
+
+**Explicitly not performed, and not to be performed without further explicit approval**: applying these migrations to prod, deploying `apps/web` or the marketing site, creating the Demonstration organization, onboarding Brandon, tagging Platform v1.0, or beginning Base44 work.
+
+---
+
+## 11. Rollback considerations
+
+- **Migrations are additive only** — no existing column was altered destructively and no existing table was dropped. `organizations.timezone`'s default changed from `'America/New_York'` to `'UTC'`, but Premier's own row is explicitly set by ID in the same migration, so no real-org behavior changes.
+- **If a rollback is needed after applying to prod but before any real triage decisions exist**: the new tables (`site_visits`, `site_visit_appointments`, `inspection_templates`, `inspection_template_versions`, `estimate_line_items`, `pending_uploads`) can be dropped and the additive columns on `service_requests`/`estimates`/`jobs`/`vault_items`/`activity_log` can be dropped, with zero data loss, since nothing pre-existing depends on them.
+- **If real triage decisions/site visits/estimates exist by the time a rollback is needed**: dropping the new tables would destroy real operational data (visit findings, appointment history, photos' `vault_items` rows). At that point, rollback is a data-migration decision, not a schema-revert — out of scope to pre-plan in the abstract; assess against the actual data present at rollback time.
+- **The `enforce_quote_eligibility` trigger and the `save_site_visit_inspection` grant revocation are the two changes with the widest blast radius if reverted incorrectly**: removing the trigger would silently re-open the ability to create a quote for an unapproved triage-originated estimate; removing the grant revocation would silently re-open direct-client bypass of the Zod validation boundary. Neither should be reverted without re-deriving why they were added (§2).
+- **Storage**: the `site-visit-attachments` bucket and its RLS policies are additive; removing them would only affect this feature's uploads, not any pre-existing bucket.
+
+---
+
+## 12. Final validation results
+
+- **`pnpm typecheck`**: clean across all packages (`apps/web`, `packages/db`, `packages/shared`, `packages/ai`, `packages/automation`).
+- **`pnpm --filter web build`** (real production build): clean. Two pre-existing lint warnings in files this work didn't touch (unrelated unused-variable warnings in `jobs/[jobId]/page.tsx` and `quotes/_components/line-item-editor.tsx`), not errors, not regressions.
+- **`pnpm test`** (Vitest, full suite): 104/104 pass, including the 6 real upload/finalization integration tests and the 2 new DST/non-Eastern-timezone tests.
+- **`tests/e2e/request-site-visit-workflow-bot.spec.ts`**: 19/19 pass (10 golden-path/gating/isolation + 8 lifecycle-guards/corrections/DWO-authorization + 1 capability-parity, enumerating 95 role×capability pairs).
+- **Full existing E2E suite** (serial, `CI=1 --workers=1`, matching this repo's actual CI configuration, 162 total specs): **131 passed, 1 failed, 1 flaky (passed on retry), 24 skipped, 5 did not run.** The 5 "did not run" are `test.describe.serial` siblings of the one failing invite-bot test (Playwright aborts the remainder of a serial block after a failure — this is the same file, not new failures). The one flake (`data-consistency-bot.spec.ts`, "invoice total equals the sum of its line items") targets `/invoices`, a route untouched by this branch, and passed on its automatic retry — consistent with this test's pre-existing flakiness noted in earlier checkpoints. Two earlier attempts at this same run showed 47 additional failures, all timing out at an identical `#email` locator on `/login` — traced to **three simultaneously-running `pnpm dev` processes** competing for port 3000 (an artifact of this session's own process management, not a code issue), causing intermittent `503`s on Next.js's static JS chunks so the client bundle never loaded. Fixed by killing all stray Node processes, clearing `.next`, and running exactly one dev server; re-verified clean immediately after (`auth-bot`: 6/6) before re-running the full suite to the result above.
+- **`employee-onboarding-admin-invite-bot.spec.ts`**: fails at its first test ("invited user should exist in auth.users by now") on this clean re-run, exactly as in every prior checkpoint's regression run. **Confirmed pre-existing and unrelated to this branch** — this spec file does not touch any table, RPC, route, or component this branch modifies (triage/site-visits/estimates/vault-items/inspection templates); it exercises Supabase Auth's `admin.inviteUserByEmail()` timing/propagation, an orthogonal auth-infrastructure concern. Not fixed here per the explicit instruction not to absorb unrelated fixes into this branch.
+- **Marketing-site repo** (`Modern Service System Website`, branch `fix/state-code-validation`): `tsc --noEmit` clean, `vite build` clean.
+- **Migration consistency**: all 18 feature migrations present locally and applied to `premier-crm-e2e` in matching logical order (see §9 for the version-numbering caveat). Zero writes of any kind performed against `premier-crm-prod` at any point in this session — confirmed before every migration and every test run via `playwright.config.ts`'s hard production-ref guard and manual review before each Supabase MCP call.
+- **DB types**: `packages/db/types.ts` already reflects the full e2e schema (generated in an earlier pass of this checkpoint); this pass's one migration (the `correct_request_triage` bug fix) changes only a function body, not any table/column shape, so no regeneration was required.

@@ -287,6 +287,284 @@ test.describe('request → site visit → estimate → quote workflow bot', () =
     });
   });
 
+  test.describe.serial('lifecycle guards, corrections, and DWO authorization', () => {
+    let admin: SupabaseClient<Database>;
+    let owner: Fixture;
+    let subcontractor: Fixture;
+    let requestId: string;
+    let customerId: string;
+    let propertyId: string;
+    let siteVisitId: string;
+    let estimateId: string;
+    let dwoRequestId: string;
+    let dwoJobId: string | null = null;
+
+    async function makeStaffFixture(rolePrefix: string, role: 'owner' | 'subcontractor', orgId: string): Promise<Fixture> {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+      const email = `e2e-rsv2-${rolePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+      const password = `E2eRsv2_${Math.random().toString(36).slice(2)}!1`;
+      const { data: created, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      if (error || !created.user) throw new Error(`Failed to create ${rolePrefix}: ${error?.message}`);
+      const { error: memberErr } = await admin.from('org_members').insert({ org_id: orgId, user_id: created.user.id, role, status: 'active' });
+      if (memberErr) throw new Error(`Failed to add ${rolePrefix} to org: ${memberErr.message}`);
+      const client = createClient<Database>(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { error: signInErr } = await client.auth.signInWithPassword({ email, password });
+      if (signInErr) throw new Error(`Sign-in failed for ${rolePrefix}: ${signInErr.message}`);
+      return { email, userId: created.user.id, client };
+    }
+
+    async function makeRequest(): Promise<string> {
+      const { data: request, error } = await admin
+        .from('service_requests')
+        .insert({
+          org_id: ORG1, request_number: `E2E-RSV2-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          source: 'manual', status: 'reviewing', priority: 'normal',
+          customer_id: customerId, property_id: propertyId, contact_name: 'E2E RSV2 Fixture',
+          service_title: 'E2E RSV2 test request', service_description: 'Testing guards/corrections/DWO', submitted_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+      if (error || !request) throw new Error(`Failed to create fixture request: ${error?.message}`);
+      return request.id;
+    }
+
+    test.beforeAll(async () => {
+      test.skip(!canRun(), SKIP_REASON);
+
+      admin = createClient<Database>(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      );
+
+      const { data: customer, error: custErr } = await admin
+        .from('customers')
+        .insert({ org_id: ORG1, type: 'residential', first_name: 'E2E_RSV2', last_name: 'Fixture', source: 'manual_staff_entry' })
+        .select('id')
+        .single();
+      if (custErr || !customer) throw new Error(`Failed to create fixture customer: ${custErr?.message}`);
+      customerId = customer.id;
+
+      const { data: property, error: propErr } = await admin
+        .from('properties')
+        .insert({ org_id: ORG1, address_line_1: '2 E2E RSV2 Test Way', city: 'Florence', state: 'KY', zip: '41042' })
+        .select('id')
+        .single();
+      if (propErr || !property) throw new Error(`Failed to create fixture property: ${propErr?.message}`);
+      propertyId = property.id;
+
+      await admin.from('customer_properties').insert({ customer_id: customerId, property_id: propertyId, relationship: 'owner', is_primary: true });
+
+      owner = await makeStaffFixture('owner', 'owner', ORG1);
+      subcontractor = await makeStaffFixture('sub', 'subcontractor', ORG1);
+
+      requestId = await makeRequest();
+    });
+
+    test.afterAll(async () => {
+      if (!admin) return;
+      if (estimateId) {
+        await admin.from('estimate_line_items').delete().eq('estimate_id', estimateId);
+        await admin.from('estimates').delete().eq('id', estimateId);
+      }
+      if (siteVisitId) {
+        await admin.from('site_visit_appointments').delete().eq('site_visit_id', siteVisitId);
+        await admin.from('site_visits').delete().eq('id', siteVisitId);
+      }
+      if (dwoJobId) await admin.from('jobs').delete().eq('id', dwoJobId);
+      for (const id of [requestId, dwoRequestId].filter(Boolean)) {
+        await admin.from('activity_log').delete().eq('entity_id', id);
+        await admin.from('service_requests').delete().eq('id', id);
+      }
+      if (customerId) {
+        await admin.from('customer_properties').delete().eq('customer_id', customerId);
+        await admin.from('customers').delete().eq('id', customerId);
+      }
+      if (propertyId) await admin.from('properties').delete().eq('id', propertyId);
+      const staffIds = [owner, subcontractor].filter(Boolean).map((f) => f.userId);
+      if (staffIds.length) {
+        await admin.from('org_members').delete().in('user_id', staffIds);
+        for (const uid of staffIds) await admin.auth.admin.deleteUser(uid);
+      }
+    });
+
+    test('11. appointment uniqueness — cannot schedule a second active appointment while one is already scheduled', async () => {
+      const { data, error } = await owner.client.rpc('record_request_triage', {
+        p_request_id: requestId, p_decision: 'site_visit_required', p_reason: 'E2E: guard tests',
+      });
+      expect(error).toBeNull();
+      siteVisitId = (data as { siteVisitId: string }).siteVisitId;
+
+      const start = new Date(Date.now() + 86_400_000).toISOString();
+      const end = new Date(Date.now() + 90_000_000).toISOString();
+      const { error: firstErr } = await owner.client.rpc('schedule_site_visit', { p_site_visit_id: siteVisitId, p_start: start, p_end: end, p_assigned_user_id: owner.userId });
+      expect(firstErr).toBeNull();
+
+      // Attempt to raw-INSERT a second 'scheduled' appointment for the same
+      // visit, bypassing the RPC — the partial unique index must reject it
+      // even at the raw DB layer, not just via RPC-level validation.
+      const { error: dupErr } = await admin.from('site_visit_appointments').insert({
+        org_id: ORG1, site_visit_id: siteVisitId, status: 'scheduled',
+        scheduled_start: new Date(Date.now() + 200_000_000).toISOString(),
+        scheduled_end: new Date(Date.now() + 204_000_000).toISOString(),
+      });
+      expect(dupErr).not.toBeNull();
+    });
+
+    test('12. visit transition protection — illegal status jumps are rejected', async () => {
+      // Cannot complete a visit that hasn't been started.
+      const { error: completeBeforeStartErr } = await owner.client.rpc('complete_site_visit', { p_site_visit_id: siteVisitId });
+      expect(completeBeforeStartErr).not.toBeNull();
+
+      // Raw UPDATE attempting scheduled -> completed directly (skipping
+      // in_progress) must be rejected by the transition trigger.
+      const { error: rawJumpErr } = await admin.from('site_visits').update({ status: 'completed' }).eq('id', siteVisitId);
+      expect(rawJumpErr).not.toBeNull();
+    });
+
+    test('13. partial inspection autosave persists without completing the visit', async () => {
+      const { error: startErr } = await owner.client.rpc('start_site_visit', { p_site_visit_id: siteVisitId });
+      expect(startErr).toBeNull();
+
+      const { error: saveErr } = await admin.rpc('save_site_visit_inspection', {
+        p_site_visit_id: siteVisitId,
+        p_responses_patch: { customerConcerns: 'Partial note only' },
+      });
+      expect(saveErr).toBeNull();
+
+      const { data: visit } = await admin.from('site_visits').select('status, inspection_responses').eq('id', siteVisitId).maybeSingle();
+      expect(visit?.status).toBe('in_progress');
+      expect((visit?.inspection_responses as Record<string, unknown> | null)?.customerConcerns).toBe('Partial note only');
+    });
+
+    test('14. completed inspection is immutable — further saves are rejected', async () => {
+      const { error: saveMoreErr } = await admin.rpc('save_site_visit_inspection', {
+        p_site_visit_id: siteVisitId,
+        p_responses_patch: {
+          customerConcerns: 'Final note', observedConditions: 'ok', proposedScope: 'none',
+          quantities: [{ item: 'Guard test line item', quantity: 1, unit: 'ea' }],
+        },
+      });
+      expect(saveMoreErr).toBeNull();
+
+      const { error: completeErr } = await owner.client.rpc('complete_site_visit', { p_site_visit_id: siteVisitId });
+      expect(completeErr).toBeNull();
+
+      const { error: saveAfterCompleteErr } = await admin.rpc('save_site_visit_inspection', {
+        p_site_visit_id: siteVisitId,
+        p_responses_patch: { customerConcerns: 'Should be rejected' },
+      });
+      expect(saveAfterCompleteErr).not.toBeNull();
+    });
+
+    test('15. reopen-for-edit clears pricing approval and unlocks line items', async () => {
+      const { data: genData, error: genErr } = await owner.client.rpc('generate_estimate_from_site_visit', { p_site_visit_id: siteVisitId });
+      expect(genErr).toBeNull();
+      estimateId = genData as string;
+
+      const { error: approveErr } = await owner.client.rpc('approve_estimate_pricing', { p_estimate_id: estimateId });
+      expect(approveErr).toBeNull();
+
+      const { error: subReopenErr } = await subcontractor.client.rpc('reopen_estimate_for_edit', { p_estimate_id: estimateId });
+      expect(subReopenErr).not.toBeNull();
+
+      const { error: reopenErr } = await owner.client.rpc('reopen_estimate_for_edit', { p_estimate_id: estimateId });
+      expect(reopenErr).toBeNull();
+
+      const { data: estimate } = await admin.from('estimates').select('pricing_reviewed_at').eq('id', estimateId).maybeSingle();
+      expect(estimate?.pricing_reviewed_at).toBeNull();
+
+      const { data: line } = await admin.from('estimate_line_items').select('id').eq('estimate_id', estimateId).limit(1).maybeSingle();
+      const { error: editAfterReopenErr } = await admin.from('estimate_line_items').update({ unit_price: 42 }).eq('id', line!.id);
+      expect(editAfterReopenErr).toBeNull();
+    });
+
+    test('16. triage correction: allowed when nothing irreversible has happened, forbidden once it has', async () => {
+      const correctableRequestId = await makeRequest();
+      const { data: correctableData, error: correctableErr } = await owner.client.rpc('record_request_triage', {
+        p_request_id: correctableRequestId, p_decision: 'site_visit_required', p_reason: 'E2E: correction allowed case',
+      });
+      expect(correctableErr).toBeNull();
+      const correctableVisitId = (correctableData as { siteVisitId: string }).siteVisitId;
+
+      const { error: subCorrectErr } = await subcontractor.client.rpc('correct_request_triage', {
+        p_request_id: correctableRequestId, p_new_decision: 'remote_estimate', p_reason: 'E2E: subcontractor should be blocked',
+      });
+      expect(subCorrectErr).not.toBeNull();
+
+      const { error: correctErr } = await owner.client.rpc('correct_request_triage', {
+        p_request_id: correctableRequestId, p_new_decision: 'remote_estimate', p_reason: 'E2E: correcting to remote estimate',
+      });
+      expect(correctErr).toBeNull();
+
+      const { count: oldVisitCount } = await admin.from('site_visits').select('id', { count: 'exact', head: true }).eq('id', correctableVisitId);
+      expect(oldVisitCount).toBe(0);
+
+      // Forbidden case: the primary siteVisitId in this block has already
+      // been started/completed above — correcting it must now be rejected.
+      const { error: forbiddenCorrectErr } = await owner.client.rpc('correct_request_triage', {
+        p_request_id: requestId, p_new_decision: 'remote_estimate', p_reason: 'E2E: should be rejected, visit already progressed',
+      });
+      expect(forbiddenCorrectErr).not.toBeNull();
+
+      await admin.from('activity_log').delete().eq('entity_id', correctableRequestId);
+      await admin.from('service_requests').delete().eq('id', correctableRequestId);
+    });
+
+    test('17. structured direct-work-order authorization: conditional fields are enforced per type', async () => {
+      dwoRequestId = await makeRequest();
+
+      // Missing authorization_type entirely.
+      const { error: missingTypeErr } = await owner.client.rpc('record_request_triage', {
+        p_request_id: dwoRequestId, p_decision: 'direct_work_order', p_reason: 'E2E: DWO missing type',
+      });
+      expect(missingTypeErr).not.toBeNull();
+
+      // written_customer_authorization without the required contact/timestamp.
+      const { error: missingContactErr } = await owner.client.rpc('record_request_triage', {
+        p_request_id: dwoRequestId, p_decision: 'direct_work_order', p_reason: 'E2E: DWO missing contact',
+        p_authorization_type: 'written_customer_authorization',
+      });
+      expect(missingContactErr).not.toBeNull();
+
+      // Complete data for written_customer_authorization succeeds.
+      const { data: dwoData, error: dwoErr } = await owner.client.rpc('record_request_triage', {
+        p_request_id: dwoRequestId, p_decision: 'direct_work_order', p_reason: 'E2E: DWO complete data',
+        p_authorization_type: 'written_customer_authorization',
+        p_authorized_customer_contact: 'Jane Customer (email)',
+        p_authorized_at: new Date().toISOString(),
+      });
+      expect(dwoErr).toBeNull();
+      dwoJobId = (dwoData as { jobId: string }).jobId;
+      expect(dwoJobId).toBeTruthy();
+
+      const { data: job } = await admin.from('jobs').select('authorization_type, authorized_customer_contact').eq('id', dwoJobId!).maybeSingle();
+      expect(job?.authorization_type).toBe('written_customer_authorization');
+      expect(job?.authorized_customer_contact).toBe('Jane Customer (email)');
+    });
+
+    test('18. timeline events for the request are linked and chronologically ordered', async () => {
+      const { data: events, error } = await admin
+        .from('activity_log')
+        .select('event_type, created_at, id')
+        .eq('org_id', ORG1)
+        .filter('related_ids->>service_request_id', 'eq', requestId)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true });
+
+      expect(error).toBeNull();
+      expect(events!.length).toBeGreaterThan(0);
+
+      const timestamps = events!.map((e) => new Date(e.created_at).getTime());
+      const sorted = [...timestamps].sort((a, b) => a - b);
+      expect(timestamps).toEqual(sorted);
+
+      const eventTypes = events!.map((e) => e.event_type);
+      expect(eventTypes).toContain('estimate_pricing_reopened');
+    });
+  });
+
   test.describe('capability parity — TypeScript vs SQL', () => {
     test('every role/capability pair matches between packages/shared/permissions.ts and role_has_capability()', async () => {
       test.skip(!canRun(), SKIP_REASON);

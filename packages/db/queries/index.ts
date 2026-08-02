@@ -190,11 +190,16 @@ export {
   type SchedulingSlotBooking,
 } from './scheduling';
 export {
+  createEstimateLineItem,
+  deleteEstimateLineItem,
   getEstimateById,
+  listEstimateLineItems,
   listEstimates,
   listQuotesForEstimate,
+  updateEstimateLineItem,
   type EstimateCustomerSummary,
   type EstimateDetail,
+  type EstimateLineItem,
   type EstimateLinkedQuote,
   type EstimateListItem,
   type EstimateListPage,
@@ -242,6 +247,7 @@ export {
   createQuoteFromEstimateRpc,
   generateEstimateFromSiteVisit,
   getMySiteVisitSummary,
+  getSiteVisitById,
   recordRequestTriage,
   rescheduleSiteVisit,
   reopenEstimateForEdit,
@@ -253,6 +259,7 @@ export {
   type RequestTriageInput,
   type SiteVisit,
   type SiteVisitAppointment,
+  type SiteVisitDetail,
   type TriageResult,
 } from './site-visits';
 export {
