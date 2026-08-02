@@ -142,8 +142,40 @@ function mapPriority(
   }
 }
 
+/**
+ * A datetime-local value ("YYYY-MM-DDTHH:mm") carries no timezone — it is
+ * already the customer's intended wall-clock date/time, not a UTC instant
+ * that needs converting. The org's timezone is loaded and threaded through
+ * here for architectural correctness and so a future feature that DOES need
+ * a real timestamptz (e.g. auto-suggesting a site-visit slot) has it
+ * available — but for the two plain columns this populates (`preferred_date`
+ * DATE, `preferred_time` TEXT), splitting the string directly is not just
+ * sufficient but strictly safer than constructing a `Date` object: `new
+ * Date(str)` would be interpreted in whatever timezone the Node process
+ * happens to be running in (browser or server local time), which is exactly
+ * the naive-parsing bug this fix exists to close. Never build a `Date` from
+ * this string anywhere in this function.
+ */
+function parsePreferredDateTime(
+  raw: string,
+  _orgTimezone: string
+): { preferredDate?: string; preferredTime?: string } {
+  if (!raw) return {};
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(raw);
+  if (!match) return {};
+
+  const [, datePart, hourStr, minuteStr] = match as unknown as [string, string, string, string];
+  const hour24 = Number(hourStr);
+  const period = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  const preferredTime = `${hour12}:${minuteStr.padStart(2, '0')} ${period}`;
+
+  return { preferredDate: datePart, preferredTime };
+}
+
 function toServiceRequestPayload(
-  payload: WebsiteServiceRequestPayload
+  payload: WebsiteServiceRequestPayload,
+  orgTimezone: string
 ): ServiceRequestPayload {
   const name = `${payload.firstName} ${payload.lastName}`.trim();
 
@@ -151,9 +183,11 @@ function toServiceRequestPayload(
   if (payload.additionalNotes) {
     descriptionParts.push(`Additional notes: ${payload.additionalNotes}`);
   }
-  if (payload.preferredDateTime) {
-    descriptionParts.push(`Preferred date/time: ${payload.preferredDateTime}`);
-  }
+  // The raw datetime-local string is never appended to free-text description
+  // anymore — it's parsed into the structured preferred_date/preferred_time
+  // columns below, which already exist for exactly this purpose.
+
+  const { preferredDate, preferredTime } = parsePreferredDateTime(payload.preferredDateTime, orgTimezone);
 
   return {
     name,
@@ -168,6 +202,8 @@ function toServiceRequestPayload(
     service_category: payload.serviceCategory,
     service_title: payload.serviceCategory ?? 'Service Request',
     service_description: descriptionParts.join('\n\n'),
+    preferred_date: preferredDate,
+    preferred_time: preferredTime,
     access_notes: payload.accessInstructions ?? undefined,
     priority: mapPriority(payload.priorityLevel),
   };
@@ -249,9 +285,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const supabase = createServiceClient();
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('timezone')
+    .eq('id', PREMIER_ORG_ID)
+    .maybeSingle();
+  const orgTimezone = org?.timezone ?? 'UTC';
+
   const result = await createServiceRequest(supabase, {
     orgId: PREMIER_ORG_ID,
-    payload: toServiceRequestPayload(parsed.data),
+    payload: toServiceRequestPayload(parsed.data, orgTimezone),
   });
 
   if (!result.success) {

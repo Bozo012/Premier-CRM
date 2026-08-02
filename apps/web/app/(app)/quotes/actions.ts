@@ -58,6 +58,13 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   canProposeChangeOrders: 'propose change orders',
   canManageDeposits: 'manage deposits',
   canEditWorkingInvoice: 'edit the working invoice',
+  canTriageRequests: 'triage requests',
+  canCreateDirectWorkOrder: 'create a direct work order',
+  canManageInspectionTemplates: 'manage inspection templates',
+  canEditEstimate: 'edit the estimate',
+  canApproveEstimatePricing: 'approve estimate pricing',
+  canCreateQuote: 'create a quote',
+  canSendQuote: 'send a quote',
 };
 
 async function getQuoteActionContext(

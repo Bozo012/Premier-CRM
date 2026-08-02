@@ -22,7 +22,14 @@ export type Capability =
   | 'canScheduleJobs'
   | 'canProposeChangeOrders'
   | 'canManageDeposits'
-  | 'canEditWorkingInvoice';
+  | 'canEditWorkingInvoice'
+  | 'canTriageRequests'
+  | 'canCreateDirectWorkOrder'
+  | 'canManageInspectionTemplates'
+  | 'canEditEstimate'
+  | 'canApproveEstimatePricing'
+  | 'canCreateQuote'
+  | 'canSendQuote';
 
 /**
  * Day-to-day estimate/invoice creation and sending is normal operations for
@@ -48,6 +55,30 @@ const CAPABILITIES: Record<Capability, readonly OrgRole[]> = {
   canProposeChangeOrders: ['owner', 'admin', 'employee', 'subcontractor'],
   canManageDeposits: ['owner', 'admin'],
   canEditWorkingInvoice: ['owner', 'admin', 'employee', 'subcontractor'],
+
+  // Request → site visit → estimate workflow (see
+  // docs/implementation/request-site-visit-estimate-workflow.md). This is
+  // the canonical capability matrix — packages/db's SQL
+  // role_has_capability() function must be kept in exact sync with this
+  // map (see the automated parity test); a mismatch is a security defect,
+  // not a UX bug, since the SQL side is the real enforcement boundary.
+  canTriageRequests: ['owner', 'admin', 'employee', 'subcontractor'],
+  // Deliberately narrower than canTriageRequests — direct work orders skip
+  // quoting/pricing review entirely and must not become a casual bypass.
+  canCreateDirectWorkOrder: ['owner', 'admin'],
+  canManageInspectionTemplates: ['owner', 'admin'],
+  canEditEstimate: ['owner', 'admin', 'employee', 'subcontractor'],
+  // Pricing approval is deliberately owner/admin-only for now — whether to
+  // extend this to employee is an open business-policy decision, not a
+  // technical default (see the implementation doc's "Open decisions"
+  // section). Subcontractors never get this, regardless of future changes.
+  canApproveEstimatePricing: ['owner', 'admin'],
+  // Creating/sending a quote is separate from approving its pricing — an
+  // owner/admin can approve pricing and an employee can then create and
+  // send the resulting quote without ever holding pricing-approval
+  // authority. Subcontractors get neither.
+  canCreateQuote: ['owner', 'admin', 'employee'],
+  canSendQuote: ['owner', 'admin', 'employee'],
 };
 
 export function hasCapability(role: OrgRole, capability: Capability): boolean {
