@@ -91,7 +91,7 @@ export {
   translateAcceptInviteError,
   type OrgInvite,
 } from './org-invites';
-export { getActiveOrgContext, type ActiveOrgContext, type OrgMemberRole } from './org-context';
+export { getActiveOrgContext, type ActiveOrgContext, type AvailableOrgMembership, type OrgMemberRole } from './org-context';
 export {
   createCustomer,
   findCustomerByEmail,
