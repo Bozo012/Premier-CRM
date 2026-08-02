@@ -38,14 +38,16 @@ Complete the originally-approved Checkpoint B (request → site visit → estima
 - **premier-crm-e2e** (`slbnizoskumwhleeiccv`): has all Checkpoint B migrations applied and verified; confirmed clean of all spike/test residue after each checkpoint.
 - Local dev server: not running.
 
-## Test Status (as of the backend-only report; UI/upload/template work below will add more)
+## Test Status (updated — backend + upload/finalization + template validation + server actions)
 - `pnpm typecheck` / `pnpm --filter web build`: clean.
-- `tests/e2e/request-site-visit-workflow-bot.spec.ts`: 11/11 pass.
+- `pnpm test` (Vitest, full suite): 102/102 pass, including the new real upload/finalization integration test (6/6, against premier-crm-e2e, using both synthetic and a real phone-photo fixture).
+- `tests/e2e/request-site-visit-workflow-bot.spec.ts`: 11/11 pass (re-verified standalone after all subsequent changes).
 - Capability parity (95 role×capability pairs): pass.
-- Full existing E2E suite (serial): 130/131 pass, one pre-existing unrelated failure (see Known Issues #6).
+- Full existing E2E suite (serial, re-run near completion): 135 passed, 1 flaky-then-passed (unrelated), 27 skipped. `employee-onboarding-admin-invite-bot` re-run in isolation and reproduced consistently — confirmed pre-existing/unrelated, not fixed here per instruction.
+- One real regression found and fixed: a pre-existing unit test's fixture used free-text `preferredDateTime`, correctly rejected by the new stricter validation — fixture updated, not the validation weakened.
 
 ## Next Exact Step
-Continue Checkpoint B on this same branch: upload/finalization server action → template-aware Zod validation → staff UI → customer portal presentation → public-intake marketing-site fix → permanent test coverage for remaining categories → re-run the full suite once near completion → push branch + open/update the draft PR. Do not merge, deploy, create the Demo org, onboard Brandon, or tag v1.0 until Checkpoint B is reported complete and explicitly approved.
+Backend, upload/finalization, template validation, and the full server-action layer are complete and tested on this branch. **Remaining for Checkpoint B**: full staff UI (request triage panel, site-visit screens, estimate review), customer portal presentation (wire `get_my_site_visit_summary()` into a portal page), the marketing-site (second repo) half of the public-intake fix, and the remaining handful of test categories not yet preserved as permanent specs (see the implementation doc §8 for the exact list). Push to origin was attempted but blocked by the local permission classifier both times — needs the user's interactive approval, not something resolvable from chat alone. Do not merge, deploy, create the Demo org, onboard Brandon, or tag v1.0 until Checkpoint B is reported complete and explicitly approved.
 
 ## Checkpoint Routine (unchanged)
 Update this file after each meaningful milestone and before/after any production action. Commit in small logical checkpoints. Never commit secrets. Never leave important decisions only in chat history.
