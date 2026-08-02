@@ -52,6 +52,13 @@ export interface RequestDetail extends RequestListItem {
   reviewedAt: string | null;
   convertedAt: string | null;
   property: RequestPropertySummary | null;
+  triageDecision: 'remote_estimate' | 'site_visit_required' | 'direct_work_order' | null;
+  triageReason: string | null;
+  triagedAt: string | null;
+  triageCorrectedFrom: string | null;
+  triageCorrectedAt: string | null;
+  triageCorrectionReason: string | null;
+  siteVisitId: string | null;
 }
 
 export interface RequestListPage {
@@ -194,6 +201,12 @@ export async function getRequestById(
       submitted_at,
       reviewed_at,
       converted_at,
+      triage_decision,
+      triage_reason,
+      triaged_at,
+      triage_corrected_from,
+      triage_corrected_at,
+      triage_correction_reason,
       customers (
         id,
         first_name,
@@ -240,6 +253,16 @@ export async function getRequestById(
   const serviceLine = row.service_category ?? row.service_title ?? null;
   const title = `${row.contact_name} — ${row.service_title}`;
 
+  let siteVisitId: string | null = null;
+  if (row.triage_decision === 'site_visit_required') {
+    const { data: visit } = await client
+      .from('site_visits')
+      .select('id')
+      .eq('service_request_id', taskId)
+      .maybeSingle();
+    siteVisitId = visit?.id ?? null;
+  }
+
   return ok({
     id: row.id,
     requestNumber: row.request_number,
@@ -260,6 +283,13 @@ export async function getRequestById(
     serviceCategory: row.service_category ?? null,
     reviewedAt: row.reviewed_at ?? null,
     convertedAt: row.converted_at ?? null,
+    triageDecision: (row.triage_decision as RequestDetail['triageDecision']) ?? null,
+    triageReason: row.triage_reason ?? null,
+    triagedAt: row.triaged_at ?? null,
+    triageCorrectedFrom: row.triage_corrected_from ?? null,
+    triageCorrectedAt: row.triage_corrected_at ?? null,
+    triageCorrectionReason: row.triage_correction_reason ?? null,
+    siteVisitId,
     customer: cust
       ? {
           id: cust.id,

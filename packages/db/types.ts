@@ -24,6 +24,7 @@ export type Database = {
           id: string
           message: string | null
           org_id: string
+          related_ids: Json | null
         }
         Insert: {
           actor_user_id?: string | null
@@ -34,6 +35,7 @@ export type Database = {
           id?: string
           message?: string | null
           org_id: string
+          related_ids?: Json | null
         }
         Update: {
           actor_user_id?: string | null
@@ -44,6 +46,7 @@ export type Database = {
           id?: string
           message?: string | null
           org_id?: string
+          related_ids?: Json | null
         }
         Relationships: [
           {
@@ -1228,6 +1231,70 @@ export type Database = {
           },
         ]
       }
+      estimate_line_items: {
+        Row: {
+          created_at: string
+          description: string
+          estimate_id: string
+          id: string
+          is_system_suggested: boolean
+          org_id: string
+          quantity: number
+          reviewed_at: string | null
+          reviewed_by: string | null
+          sort_order: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          estimate_id: string
+          id?: string
+          is_system_suggested?: boolean
+          org_id: string
+          quantity?: number
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sort_order?: number
+          unit_price?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          estimate_id?: string
+          id?: string
+          is_system_suggested?: boolean
+          org_id?: string
+          quantity?: number
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sort_order?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_line_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_visit_state"
+            referencedColumns: ["estimate_id"]
+          },
+          {
+            foreignKeyName: "estimate_line_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimates: {
         Row: {
           converted_at: string | null
@@ -1240,10 +1307,13 @@ export type Database = {
           expires_at: string | null
           id: string
           org_id: string
+          pricing_reviewed_at: string | null
+          pricing_reviewed_by: string | null
           property_id: string
           service_request_id: string | null
           site_visit_at: string | null
           site_visit_notes: string | null
+          source_site_visit_id: string | null
           status: Database["public"]["Enums"]["estimate_status"]
           title: string
           updated_at: string
@@ -1259,10 +1329,13 @@ export type Database = {
           expires_at?: string | null
           id?: string
           org_id: string
+          pricing_reviewed_at?: string | null
+          pricing_reviewed_by?: string | null
           property_id: string
           service_request_id?: string | null
           site_visit_at?: string | null
           site_visit_notes?: string | null
+          source_site_visit_id?: string | null
           status?: Database["public"]["Enums"]["estimate_status"]
           title: string
           updated_at?: string
@@ -1278,10 +1351,13 @@ export type Database = {
           expires_at?: string | null
           id?: string
           org_id?: string
+          pricing_reviewed_at?: string | null
+          pricing_reviewed_by?: string | null
           property_id?: string
           service_request_id?: string | null
           site_visit_at?: string | null
           site_visit_notes?: string | null
+          source_site_visit_id?: string | null
           status?: Database["public"]["Enums"]["estimate_status"]
           title?: string
           updated_at?: string
@@ -1320,6 +1396,13 @@ export type Database = {
             columns: ["service_request_id"]
             isOneToOne: false
             referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_source_site_visit_id_fkey"
+            columns: ["source_site_visit_id"]
+            isOneToOne: true
+            referencedRelation: "site_visits"
             referencedColumns: ["id"]
           },
         ]
@@ -1482,6 +1565,88 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inspection_template_versions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          field_definitions: Json
+          id: string
+          inspection_template_id: string
+          publication_status: string
+          published_at: string | null
+          response_schema_version: number
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          field_definitions: Json
+          id?: string
+          inspection_template_id: string
+          publication_status?: string
+          published_at?: string | null
+          response_schema_version: number
+          version: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          field_definitions?: Json
+          id?: string
+          inspection_template_id?: string
+          publication_status?: string
+          published_at?: string | null
+          response_schema_version?: number
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspection_template_versions_inspection_template_id_fkey"
+            columns: ["inspection_template_id"]
+            isOneToOne: false
+            referencedRelation: "inspection_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inspection_templates: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          org_id: string | null
+          trade: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          org_id?: string | null
+          trade?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          org_id?: string | null
+          trade?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspection_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1964,6 +2129,11 @@ export type Database = {
           actual_end: string | null
           actual_start: string | null
           ai_summary: string | null
+          authorization_note: string | null
+          authorization_reference: string | null
+          authorization_type: string | null
+          authorized_at: string | null
+          authorized_customer_contact: string | null
           category_id: string | null
           closed_at: string | null
           closed_reason: string | null
@@ -1978,6 +2148,7 @@ export type Database = {
           invoiced_total: number | null
           job_number: string | null
           jobber_id: string | null
+          not_to_exceed_amount: number | null
           org_id: string
           origin_estimate_id: string | null
           origin_quote_id: string | null
@@ -2001,6 +2172,11 @@ export type Database = {
           actual_end?: string | null
           actual_start?: string | null
           ai_summary?: string | null
+          authorization_note?: string | null
+          authorization_reference?: string | null
+          authorization_type?: string | null
+          authorized_at?: string | null
+          authorized_customer_contact?: string | null
           category_id?: string | null
           closed_at?: string | null
           closed_reason?: string | null
@@ -2015,6 +2191,7 @@ export type Database = {
           invoiced_total?: number | null
           job_number?: string | null
           jobber_id?: string | null
+          not_to_exceed_amount?: number | null
           org_id: string
           origin_estimate_id?: string | null
           origin_quote_id?: string | null
@@ -2038,6 +2215,11 @@ export type Database = {
           actual_end?: string | null
           actual_start?: string | null
           ai_summary?: string | null
+          authorization_note?: string | null
+          authorization_reference?: string | null
+          authorization_type?: string | null
+          authorized_at?: string | null
+          authorized_customer_contact?: string | null
           category_id?: string | null
           closed_at?: string | null
           closed_reason?: string | null
@@ -2052,6 +2234,7 @@ export type Database = {
           invoiced_total?: number | null
           job_number?: string | null
           jobber_id?: string | null
+          not_to_exceed_amount?: number | null
           org_id?: string
           origin_estimate_id?: string | null
           origin_quote_id?: string | null
@@ -2092,6 +2275,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_origin_estimate_id_fkey"
+            columns: ["origin_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_visit_state"
+            referencedColumns: ["estimate_id"]
           },
           {
             foreignKeyName: "jobs_origin_estimate_id_fkey"
@@ -2753,6 +2943,69 @@ export type Database = {
           },
         ]
       }
+      pending_uploads: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          declared_mime_type: string
+          declared_size_bytes: number
+          entity_id: string
+          entity_type: string
+          expires_at: string
+          finalized_vault_item_id: string | null
+          id: string
+          org_id: string
+          pending_path: string
+          rejection_reason: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          declared_mime_type: string
+          declared_size_bytes: number
+          entity_id: string
+          entity_type: string
+          expires_at?: string
+          finalized_vault_item_id?: string | null
+          id?: string
+          org_id: string
+          pending_path: string
+          rejection_reason?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          declared_mime_type?: string
+          declared_size_bytes?: number
+          entity_id?: string
+          entity_type?: string
+          expires_at?: string
+          finalized_vault_item_id?: string | null
+          id?: string
+          org_id?: string
+          pending_path?: string
+          rejection_reason?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_uploads_finalized_vault_item_id_fkey"
+            columns: ["finalized_vault_item_id"]
+            isOneToOne: false
+            referencedRelation: "vault_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_uploads_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       permit_guardrails: {
         Row: {
           created_at: string
@@ -3163,6 +3416,13 @@ export type Database = {
             foreignKeyName: "quotes_estimate_id_fkey"
             columns: ["estimate_id"]
             isOneToOne: false
+            referencedRelation: "estimate_visit_state"
+            referencedColumns: ["estimate_id"]
+          },
+          {
+            foreignKeyName: "quotes_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
             referencedRelation: "estimates"
             referencedColumns: ["id"]
           },
@@ -3524,6 +3784,14 @@ export type Database = {
           source: Database["public"]["Enums"]["service_request_source"]
           status: Database["public"]["Enums"]["service_request_status"]
           submitted_at: string
+          triage_corrected_at: string | null
+          triage_corrected_by: string | null
+          triage_corrected_from: string | null
+          triage_correction_reason: string | null
+          triage_decision: string | null
+          triage_reason: string | null
+          triaged_at: string | null
+          triaged_by: string | null
           updated_at: string
         }
         Insert: {
@@ -3561,6 +3829,14 @@ export type Database = {
           source?: Database["public"]["Enums"]["service_request_source"]
           status?: Database["public"]["Enums"]["service_request_status"]
           submitted_at?: string
+          triage_corrected_at?: string | null
+          triage_corrected_by?: string | null
+          triage_corrected_from?: string | null
+          triage_correction_reason?: string | null
+          triage_decision?: string | null
+          triage_reason?: string | null
+          triaged_at?: string | null
+          triaged_by?: string | null
           updated_at?: string
         }
         Update: {
@@ -3598,6 +3874,14 @@ export type Database = {
           source?: Database["public"]["Enums"]["service_request_source"]
           status?: Database["public"]["Enums"]["service_request_status"]
           submitted_at?: string
+          triage_corrected_at?: string | null
+          triage_corrected_by?: string | null
+          triage_corrected_from?: string | null
+          triage_correction_reason?: string | null
+          triage_decision?: string | null
+          triage_reason?: string | null
+          triaged_at?: string | null
+          triaged_by?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -3607,6 +3891,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_visit_state"
+            referencedColumns: ["estimate_id"]
           },
           {
             foreignKeyName: "service_requests_estimate_id_fkey"
@@ -3634,6 +3925,161 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_visit_appointments: {
+        Row: {
+          assigned_user_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          org_id: string
+          scheduled_end: string
+          scheduled_start: string
+          site_visit_id: string
+          status: string
+          supersedes_appointment_id: string | null
+        }
+        Insert: {
+          assigned_user_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          org_id: string
+          scheduled_end: string
+          scheduled_start: string
+          site_visit_id: string
+          status: string
+          supersedes_appointment_id?: string | null
+        }
+        Update: {
+          assigned_user_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          org_id?: string
+          scheduled_end?: string
+          scheduled_start?: string
+          site_visit_id?: string
+          status?: string
+          supersedes_appointment_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_visit_appointments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visit_appointments_site_visit_id_fkey"
+            columns: ["site_visit_id"]
+            isOneToOne: false
+            referencedRelation: "site_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visit_appointments_supersedes_appointment_id_fkey"
+            columns: ["supersedes_appointment_id"]
+            isOneToOne: false
+            referencedRelation: "site_visit_appointments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_visits: {
+        Row: {
+          assigned_user_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          inspection_responses: Json | null
+          inspection_template_version_id: string | null
+          org_id: string
+          response_schema_version: number | null
+          service_request_id: string
+          started_at: string | null
+          started_by: string | null
+          status: Database["public"]["Enums"]["site_visit_status"]
+          updated_at: string
+        }
+        Insert: {
+          assigned_user_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inspection_responses?: Json | null
+          inspection_template_version_id?: string | null
+          org_id: string
+          response_schema_version?: number | null
+          service_request_id: string
+          started_at?: string | null
+          started_by?: string | null
+          status?: Database["public"]["Enums"]["site_visit_status"]
+          updated_at?: string
+        }
+        Update: {
+          assigned_user_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inspection_responses?: Json | null
+          inspection_template_version_id?: string | null
+          org_id?: string
+          response_schema_version?: number | null
+          service_request_id?: string
+          started_at?: string | null
+          started_by?: string | null
+          status?: Database["public"]["Enums"]["site_visit_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_visits_inspection_template_version_fkey"
+            columns: ["inspection_template_version_id"]
+            isOneToOne: false
+            referencedRelation: "inspection_template_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visits_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visits_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: true
+            referencedRelation: "service_requests"
             referencedColumns: ["id"]
           },
         ]
@@ -4210,6 +4656,7 @@ export type Database = {
           document_url: string | null
           duration_seconds: number | null
           embedding: string | null
+          estimate_id: string | null
           exif_data: Json | null
           geo_address: string | null
           id: string
@@ -4225,8 +4672,10 @@ export type Database = {
           processing_status: string | null
           property_id: string | null
           raw_content: string | null
+          site_visit_id: string | null
           source: Database["public"]["Enums"]["vault_source"]
           speakers: Json | null
+          storage_object_key: string | null
           tags: string[] | null
           thumbnail_url: string | null
           title: string | null
@@ -4251,6 +4700,7 @@ export type Database = {
           document_url?: string | null
           duration_seconds?: number | null
           embedding?: string | null
+          estimate_id?: string | null
           exif_data?: Json | null
           geo_address?: string | null
           id?: string
@@ -4266,8 +4716,10 @@ export type Database = {
           processing_status?: string | null
           property_id?: string | null
           raw_content?: string | null
+          site_visit_id?: string | null
           source: Database["public"]["Enums"]["vault_source"]
           speakers?: Json | null
+          storage_object_key?: string | null
           tags?: string[] | null
           thumbnail_url?: string | null
           title?: string | null
@@ -4292,6 +4744,7 @@ export type Database = {
           document_url?: string | null
           duration_seconds?: number | null
           embedding?: string | null
+          estimate_id?: string | null
           exif_data?: Json | null
           geo_address?: string | null
           id?: string
@@ -4307,8 +4760,10 @@ export type Database = {
           processing_status?: string | null
           property_id?: string | null
           raw_content?: string | null
+          site_visit_id?: string | null
           source?: Database["public"]["Enums"]["vault_source"]
           speakers?: Json | null
+          storage_object_key?: string | null
           tags?: string[] | null
           thumbnail_url?: string | null
           title?: string | null
@@ -4338,6 +4793,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "vault_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_visit_state"
+            referencedColumns: ["estimate_id"]
+          },
+          {
+            foreignKeyName: "vault_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "vault_items_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
@@ -4363,6 +4832,13 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_items_site_visit_id_fkey"
+            columns: ["site_visit_id"]
+            isOneToOne: false
+            referencedRelation: "site_visits"
             referencedColumns: ["id"]
           },
         ]
@@ -4606,6 +5082,25 @@ export type Database = {
       }
     }
     Views: {
+      estimate_visit_state: {
+        Row: {
+          estimate_id: string | null
+          site_visit_completed_at: string | null
+          site_visit_status:
+            | Database["public"]["Enums"]["site_visit_status"]
+            | null
+          source_site_visit_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimates_source_site_visit_id_fkey"
+            columns: ["source_site_visit_id"]
+            isOneToOne: true
+            referencedRelation: "site_visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       geography_columns: {
         Row: {
           coord_dimension: number | null
@@ -4650,6 +5145,21 @@ export type Database = {
       }
     }
     Functions: {
+      _apply_triage_decision: {
+        Args: {
+          p_actor_id: string
+          p_authorization_note: string
+          p_authorization_reference: string
+          p_authorization_type: string
+          p_authorized_at: string
+          p_authorized_customer_contact: string
+          p_decision: string
+          p_not_to_exceed_amount: number
+          p_org_id: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
       _postgis_deprecate: {
         Args: { newname: string; oldname: string; version: string }
         Returns: undefined
@@ -4794,6 +5304,11 @@ export type Database = {
           actual_end: string | null
           actual_start: string | null
           ai_summary: string | null
+          authorization_note: string | null
+          authorization_reference: string | null
+          authorization_type: string | null
+          authorized_at: string | null
+          authorized_customer_contact: string | null
           category_id: string | null
           closed_at: string | null
           closed_reason: string | null
@@ -4808,6 +5323,7 @@ export type Database = {
           invoiced_total: number | null
           job_number: string | null
           jobber_id: string | null
+          not_to_exceed_amount: number | null
           org_id: string
           origin_estimate_id: string | null
           origin_quote_id: string | null
@@ -4833,6 +5349,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      approve_estimate_pricing: {
+        Args: { p_estimate_id: string }
+        Returns: undefined
       }
       book_scheduling_slot: {
         Args: {
@@ -4887,6 +5407,32 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_site_visit: {
+        Args: { p_reason: string; p_site_visit_id: string }
+        Returns: undefined
+      }
+      cancel_site_visit_appointment: {
+        Args: { p_appointment_id: string; p_reason: string }
+        Returns: undefined
+      }
+      complete_site_visit: {
+        Args: { p_site_visit_id: string }
+        Returns: undefined
+      }
+      correct_request_triage: {
+        Args: {
+          p_authorization_note?: string
+          p_authorization_reference?: string
+          p_authorization_type?: string
+          p_authorized_at?: string
+          p_authorized_customer_contact?: string
+          p_new_decision: string
+          p_not_to_exceed_amount?: number
+          p_reason: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
       create_change_order_draft: {
         Args: {
           p_acknowledgment_text: string
@@ -4937,6 +5483,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      create_quote_from_estimate: {
+        Args: { p_estimate_id: string }
+        Returns: string
       }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
@@ -4998,6 +5548,10 @@ export type Database = {
           total_invoiced: number
           total_quoted: number
         }[]
+      }
+      generate_estimate_from_site_visit: {
+        Args: { p_site_visit_id: string }
+        Returns: string
       }
       geofences_containing_point: {
         Args: { p_org_id: string; p_point: unknown; p_user_id?: string }
@@ -5108,6 +5662,10 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
+      get_actor_org_role: {
+        Args: { p_org_id: string }
+        Returns: Database["public"]["Enums"]["user_role"]
+      }
       get_customer_360: {
         Args: { search_customer_id: string; search_org_id: string }
         Returns: Json
@@ -5115,6 +5673,17 @@ export type Database = {
       get_effective_location_prefs: {
         Args: { p_customer_id?: string; p_job_id?: string; p_user_id: string }
         Returns: Json
+      }
+      get_my_site_visit_summary: {
+        Args: { p_service_request_id: string }
+        Returns: {
+          is_cancelled: boolean
+          is_rescheduled: boolean
+          safe_status: string
+          scheduled_end: string
+          scheduled_start: string
+          site_visit_id: string
+        }[]
       }
       get_pricing_intelligence: {
         Args: {
@@ -5260,9 +5829,37 @@ export type Database = {
         }
       }
       purge_old_location_events: { Args: never; Returns: number }
+      record_request_triage: {
+        Args: {
+          p_authorization_note?: string
+          p_authorization_reference?: string
+          p_authorization_type?: string
+          p_authorized_at?: string
+          p_authorized_customer_contact?: string
+          p_decision: string
+          p_not_to_exceed_amount?: number
+          p_reason: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
       refresh_job_time_rollup: {
         Args: { p_job_id: string }
         Returns: undefined
+      }
+      reopen_estimate_for_edit: {
+        Args: { p_estimate_id: string }
+        Returns: undefined
+      }
+      reschedule_site_visit: {
+        Args: {
+          p_assigned_user_id?: string
+          p_end: string
+          p_reason?: string
+          p_site_visit_id: string
+          p_start: string
+        }
+        Returns: string
       }
       respond_to_change_order_revision: {
         Args: {
@@ -5304,6 +5901,26 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      role_has_capability: {
+        Args: {
+          p_capability: string
+          p_role: Database["public"]["Enums"]["user_role"]
+        }
+        Returns: boolean
+      }
+      save_site_visit_inspection: {
+        Args: { p_responses_patch: Json; p_site_visit_id: string }
+        Returns: undefined
+      }
+      schedule_site_visit: {
+        Args: {
+          p_assigned_user_id?: string
+          p_end: string
+          p_site_visit_id: string
+          p_start: string
+        }
+        Returns: string
       }
       search_vault: {
         Args: {
@@ -5925,6 +6542,14 @@ export type Database = {
         Args: { geom: unknown; move: number; wrap: number }
         Returns: unknown
       }
+      start_site_visit: {
+        Args: { p_site_visit_id: string }
+        Returns: undefined
+      }
+      undo_site_visit_start: {
+        Args: { p_site_visit_id: string }
+        Returns: undefined
+      }
       unlockrows: { Args: { "": string }; Returns: number }
       updategeometrysrid: {
         Args: {
@@ -6086,6 +6711,12 @@ export type Database = {
         | "cancelled"
         | "spam"
         | "estimate_created"
+      site_visit_status:
+        | "awaiting_scheduling"
+        | "scheduled"
+        | "in_progress"
+        | "completed"
+        | "cancelled"
       task_priority: "low" | "normal" | "high" | "urgent"
       task_status: "open" | "in_progress" | "done" | "cancelled" | "snoozed"
       trip_purpose:
@@ -6378,6 +7009,13 @@ export const Constants = {
         "cancelled",
         "spam",
         "estimate_created",
+      ],
+      site_visit_status: [
+        "awaiting_scheduling",
+        "scheduled",
+        "in_progress",
+        "completed",
+        "cancelled",
       ],
       task_priority: ["low", "normal", "high", "urgent"],
       task_status: ["open", "in_progress", "done", "cancelled", "snoozed"],

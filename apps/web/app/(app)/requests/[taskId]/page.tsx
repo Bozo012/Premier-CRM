@@ -8,6 +8,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 import { CreateEstimateButton } from '../_components/create-estimate-button';
 import { CreateJobButton } from '../_components/create-job-button';
 import { MarkReviewedButton } from '../_components/mark-reviewed-button';
+import { TriagePanel } from '../_components/triage-panel';
 
 interface RequestDetailPageProps {
   params: Promise<{ taskId: string }>;
@@ -91,6 +92,17 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
         <CustomerCard request={request} />
         <RequestDetailsCard request={request} />
         <PropertyCard request={request} />
+        <TriagePanel
+          requestId={request.id}
+          triageDecision={request.triageDecision}
+          triageReason={request.triageReason}
+          triagedAt={request.triagedAt}
+          triageCorrectedFrom={request.triageCorrectedFrom}
+          triageCorrectionReason={request.triageCorrectionReason}
+          estimateId={request.estimateId}
+          jobId={request.jobId}
+          siteVisitId={request.siteVisitId}
+        />
         <ActionsCard request={request} />
       </div>
     </main>

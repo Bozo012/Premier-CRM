@@ -110,4 +110,13 @@ export {
   type WebsiteServiceHighlightInput,
   type WebsiteServiceRequestPayload,
   type WebsiteSettingsInput,
+  InspectionFieldDefinitionSchema,
+  InspectionFieldTypeSchema,
+  validateInspectionResponses,
+  validateRequiredFieldsPresent,
+  type InspectionFieldDefinition,
+  type InspectionFieldType,
+  type InspectionValidationError,
+  type InspectionValidationResult,
+  US_STATE_CODES,
 } from './schemas';

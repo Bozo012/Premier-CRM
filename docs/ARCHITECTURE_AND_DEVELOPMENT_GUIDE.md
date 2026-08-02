@@ -170,3 +170,59 @@ fix the underlying env mismatch — do not remove or bypass the check.
 - New customer-portal-visible data → narrow dedicated query + RLS policy
   using the `customer_accounts` join pattern above, not a broadened
   existing policy.
+
+## Request → site visit → estimate → quote workflow
+
+Added on `feature/request-site-visit-estimate-workflow` — backend, staff
+UI, customer portal presentation, and Storage/upload finalization are all
+complete; see `docs/implementation/request-site-visit-estimate-workflow.md`
+for the full report. Extends the request-to-payment lifecycle with an
+explicit, audited front half:
+
+```
+service request → triage (remote_estimate | site_visit_required | direct_work_order)
+  [site_visit_required] → site_visits (own table, linked via service_request_id,
+    NOT via an estimate) → scheduled/rescheduled (site_visit_appointments,
+    structured history, never overwritten in place) → started → completed
+    → generate_estimate_from_site_visit() → draft estimate
+      (estimates.source_site_visit_id is the ONLY link — one direction only)
+  → staff review → approve_estimate_pricing() → create_quote_from_estimate()
+    (DB-enforced via a BEFORE INSERT trigger on quotes, not just app logic)
+```
+
+Everything from quote creation onward (acceptance → job → scheduling →
+deposit → working invoice → change order → final invoice → payment) is
+unmodified — this workflow only extends the front half.
+
+**New RPC-only mutation surface**, mirroring the existing
+`change_order_revisions` pattern: `record_request_triage`,
+`correct_request_triage`, `schedule_site_visit`, `reschedule_site_visit`,
+`cancel_site_visit(_appointment)`, `start_site_visit`,
+`undo_site_visit_start`, `complete_site_visit`,
+`save_site_visit_inspection` (service-role-only — no `authenticated`
+grant, see the implementation doc §5), `generate_estimate_from_site_visit`,
+`approve_estimate_pricing`, `reopen_estimate_for_edit`,
+`create_quote_from_estimate`, `get_my_site_visit_summary`
+(customer-portal-safe projection — no RLS `SELECT` on `site_visits` for
+the customer role at all, since RLS can't hide columns within an
+authorized row).
+
+New capabilities in `packages/shared/permissions.ts`, mirrored in SQL by
+`role_has_capability()` (kept in sync by an automated parity test —
+mismatch is treated as a security defect, not a UX bug):
+`canTriageRequests`, `canCreateDirectWorkOrder`,
+`canManageInspectionTemplates`, `canEditEstimate`,
+`canApproveEstimatePricing`, `canCreateQuote`, `canSendQuote`.
+
+**Staff UI**: `apps/web/app/(app)/requests/[taskId]/page.tsx` (triage panel,
+folded into the request detail page — includes the structured
+direct-work-order authorization fields), `apps/web/app/(app)/site-visits/
+[siteVisitId]/page.tsx` (scheduling, lifecycle buttons, mobile-first
+inspection form with per-field debounced autosave, photo upload, estimate
+generation), `apps/web/app/(app)/estimates/[estimateId]/page.tsx` (extended
+with a line-items editor and a pricing-review panel gating quote creation).
+
+**Customer portal**: `apps/web/app/portal/dashboard/page.tsx` calls
+`getMySiteVisitSummary()` with the portal-scoped (RLS-authenticated) client
+for every one of the customer's own requests — the only site-visit data the
+portal ever reads.

@@ -46,6 +46,27 @@ export interface EstimateDetail extends EstimateListItem {
   createdBy: string | null;
   /** Resolved from user_profiles — null if createdBy is null or has no profile. */
   createdByName: string | null;
+  sourceSiteVisitId: string | null;
+  pricingReviewedAt: string | null;
+  pricingReviewedBy: string | null;
+  /**
+   * True when the source service_requests row has triage_decision set —
+   * i.e. this estimate is gated by enforce_quote_eligibility() regardless
+   * of path (both remote_estimate and site_visit_required-originated
+   * estimates are gated; only pre-triage-system manual estimates are not).
+   * Drives which quote-creation UI (gated pricing-review panel vs. the
+   * legacy ungated button) the estimate page shows.
+   */
+  isQuoteEligibilityGated: boolean;
+}
+
+export interface EstimateLineItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  isSystemSuggested: boolean;
+  sortOrder: number;
 }
 
 export interface EstimateListPage {
@@ -180,6 +201,9 @@ export async function getEstimateById(
       converted_job_id,
       converted_at,
       created_by,
+      source_site_visit_id,
+      pricing_reviewed_at,
+      pricing_reviewed_by,
       customers (
         id,
         first_name,
@@ -228,6 +252,16 @@ export async function getEstimateById(
     createdByName = profile?.full_name?.trim() || null;
   }
 
+  let isQuoteEligibilityGated = false;
+  if (row.service_request_id) {
+    const { data: sourceRequest } = await client
+      .from('service_requests')
+      .select('triage_decision')
+      .eq('id', row.service_request_id)
+      .maybeSingle();
+    isQuoteEligibilityGated = sourceRequest?.triage_decision != null;
+  }
+
   return ok({
     id: row.id,
     estimateNumber: row.estimate_number,
@@ -244,6 +278,10 @@ export async function getEstimateById(
     convertedAt: row.converted_at ?? null,
     createdBy: row.created_by ?? null,
     createdByName,
+    sourceSiteVisitId: row.source_site_visit_id ?? null,
+    pricingReviewedAt: row.pricing_reviewed_at ?? null,
+    pricingReviewedBy: row.pricing_reviewed_by ?? null,
+    isQuoteEligibilityGated,
     customer: cust
       ? {
           id: cust.id,
@@ -302,6 +340,85 @@ export async function listQuotesForEstimate(
       createdAt: row.created_at,
     }))
   );
+}
+
+// ---------------------------------------------------------------------------
+// Estimate line items — direct table access under RLS
+// ("internal_org_estimate_line_items"), not RPC-gated. The DB-side
+// estimate_line_items_enforce_pricing_lock trigger rejects any insert/
+// update/delete once the parent estimate's pricing_reviewed_at is set, so
+// callers don't need to duplicate that check client-side — a rejected write
+// surfaces as a DB_ERROR Result.
+// ---------------------------------------------------------------------------
+
+export async function listEstimateLineItems(
+  client: DbClient,
+  args: { estimateId: string; orgId: string }
+): Promise<Result<EstimateLineItem[]>> {
+  const { data, error } = await client
+    .from('estimate_line_items')
+    .select('id, description, quantity, unit_price, is_system_suggested, sort_order')
+    .eq('org_id', args.orgId)
+    .eq('estimate_id', args.estimateId)
+    .order('sort_order', { ascending: true });
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  return ok(
+    (data ?? []).map((row) => ({
+      id: row.id,
+      description: row.description,
+      quantity: row.quantity,
+      unitPrice: row.unit_price,
+      isSystemSuggested: row.is_system_suggested,
+      sortOrder: row.sort_order,
+    }))
+  );
+}
+
+export async function createEstimateLineItem(
+  client: DbClient,
+  args: { estimateId: string; orgId: string; description: string; quantity: number; unitPrice: number; sortOrder: number }
+): Promise<Result<{ id: string }>> {
+  const { data, error } = await client
+    .from('estimate_line_items')
+    .insert({
+      estimate_id: args.estimateId,
+      org_id: args.orgId,
+      description: args.description,
+      quantity: args.quantity,
+      unit_price: args.unitPrice,
+      sort_order: args.sortOrder,
+      is_system_suggested: false,
+    })
+    .select('id')
+    .single();
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok({ id: data.id });
+}
+
+export async function updateEstimateLineItem(
+  client: DbClient,
+  args: { lineItemId: string; orgId: string; description: string; quantity: number; unitPrice: number }
+): Promise<Result<null>> {
+  const { error } = await client
+    .from('estimate_line_items')
+    .update({ description: args.description, quantity: args.quantity, unit_price: args.unitPrice })
+    .eq('id', args.lineItemId)
+    .eq('org_id', args.orgId);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok(null);
+}
+
+export async function deleteEstimateLineItem(
+  client: DbClient,
+  args: { lineItemId: string; orgId: string }
+): Promise<Result<null>> {
+  const { error } = await client.from('estimate_line_items').delete().eq('id', args.lineItemId).eq('org_id', args.orgId);
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok(null);
 }
 
 // ---------------------------------------------------------------------------

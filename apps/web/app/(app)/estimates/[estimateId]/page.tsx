@@ -1,12 +1,20 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { createServiceClient, getActiveOrgContext, getEstimateById, listQuotesForEstimate } from '@premier/db';
+import {
+  createServiceClient,
+  getActiveOrgContext,
+  getEstimateById,
+  listEstimateLineItems,
+  listQuotesForEstimate,
+} from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { AdvanceStatusButton } from '../_components/advance-status-button';
 import { CreateQuoteButton } from '../_components/create-quote-button';
+import { LineItemsSection } from '../_components/line-items-section';
+import { PricingReviewPanel } from '../_components/pricing-review-panel';
 
 interface EstimateDetailPageProps {
   params: Promise<{ estimateId: string }>;
@@ -33,9 +41,10 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
   const serviceClient = createServiceClient();
   const { orgId } = orgContextResult.data;
 
-  const [result, quotesResult] = await Promise.all([
+  const [result, quotesResult, lineItemsResult] = await Promise.all([
     getEstimateById(supabase, { estimateId, orgId }),
     listQuotesForEstimate(serviceClient, { estimateId, orgId }),
+    listEstimateLineItems(serviceClient, { estimateId, orgId }),
   ]);
 
   if (!result.success) {
@@ -53,6 +62,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
 
   const estimate = result.data;
   const quotes = quotesResult.success ? quotesResult.data : [];
+  const lineItems = lineItemsResult.success ? lineItemsResult.data : [];
 
   const address = estimate.property
     ? `${estimate.property.addressLine1}, ${estimate.property.city}, ${estimate.property.state} ${estimate.property.zip}`
@@ -151,11 +161,24 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
         ) : null}
       </div>
 
+      <LineItemsSection
+        estimateId={estimate.id}
+        lineItems={lineItems}
+        locked={!!estimate.pricingReviewedAt}
+      />
+
+      {estimate.isQuoteEligibilityGated ? (
+        <PricingReviewPanel estimateId={estimate.id} pricingReviewedAt={estimate.pricingReviewedAt} />
+      ) : null}
+
       {/* Quotes section */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Quotes</h2>
-          {estimate.status !== 'converted' && estimate.status !== 'declined' && estimate.status !== 'expired' ? (
+          {!estimate.isQuoteEligibilityGated &&
+          estimate.status !== 'converted' &&
+          estimate.status !== 'declined' &&
+          estimate.status !== 'expired' ? (
             <CreateQuoteButton
               estimateId={estimate.id}
               estimateTitle={estimate.title}

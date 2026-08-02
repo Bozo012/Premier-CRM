@@ -5,9 +5,11 @@ import {
   createServiceClient,
   getDepositState,
   getEntityTimelineForCustomer,
+  getMySiteVisitSummary,
   getWorkingInvoiceSummaryForCustomer,
   listChangeOrdersForJob,
   listOpenSchedulingSlots,
+  type CustomerSiteVisitSummary,
 } from '@premier/db';
 
 import { Button } from '@/components/ui/button';
@@ -203,6 +205,23 @@ export default async function PortalDashboardPage() {
   const activeRequests = serviceRequests.filter((request) => !isCompleted(request.status));
   const completedRequests = serviceRequests.filter((request) => isCompleted(request.status));
 
+  // Customer-safe presentation: this is the ONLY way the portal reads
+  // site-visit data — via the get_my_site_visit_summary() RPC, called with
+  // the portal-scoped (RLS-authenticated) client, never the service client.
+  // The RPC itself filters to this customer's own requests; it never
+  // exposes inspection responses, hazards, internal notes, staff-only
+  // actors, or the triage reason — see supabase/migrations/20260802020400_
+  // customer_safe_site_visit_summary.sql.
+  const siteVisitSummaries = new Map<string, CustomerSiteVisitSummary[]>();
+  await Promise.all(
+    serviceRequests.map(async (request) => {
+      const result = await getMySiteVisitSummary(supabase, request.id);
+      if (result.success && result.data.length > 0) {
+        siteVisitSummaries.set(request.id, result.data);
+      }
+    })
+  );
+
   const serviceClient = createServiceClient();
   const { data: jobs } = await portalClient
     .from('jobs')
@@ -275,8 +294,18 @@ export default async function PortalDashboardPage() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
-        <RequestList title="Active service requests" requests={activeRequests} emptyText="No active service requests yet." />
-        <RequestList title="Completed service requests" requests={completedRequests} emptyText="No completed service requests yet." />
+        <RequestList
+          title="Active service requests"
+          requests={activeRequests}
+          emptyText="No active service requests yet."
+          siteVisitSummaries={siteVisitSummaries}
+        />
+        <RequestList
+          title="Completed service requests"
+          requests={completedRequests}
+          emptyText="No completed service requests yet."
+          siteVisitSummaries={siteVisitSummaries}
+        />
       </section>
 
       <Card>
@@ -432,10 +461,12 @@ function RequestList({
   title,
   requests,
   emptyText,
+  siteVisitSummaries,
 }: {
   title: string;
   requests: ServiceRequestRow[];
   emptyText: string;
+  siteVisitSummaries: Map<string, CustomerSiteVisitSummary[]>;
 }) {
   return (
     <Card>
@@ -484,6 +515,21 @@ function RequestList({
                     })}
                   </p>
                 ) : null}
+                {(siteVisitSummaries.get(request.id) ?? []).map((visit) => (
+                  <div key={visit.siteVisitId} className="mt-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                    <p className="font-medium capitalize text-foreground">
+                      Site visit: {visit.safeStatus.replace(/_/g, ' ')}
+                    </p>
+                    {visit.scheduledStart ? (
+                      <p className="mt-1 text-muted-foreground">
+                        {new Date(visit.scheduledStart).toLocaleString()}
+                        {visit.isRescheduled ? ' (rescheduled)' : ''}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-muted-foreground">Not yet scheduled.</p>
+                    )}
+                  </div>
+                ))}
               </li>
             ))}
           </ul>
