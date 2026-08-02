@@ -252,7 +252,7 @@ export async function sendQuoteAction(
   _prevState: SendQuoteActionState | null,
   formData: FormData
 ): Promise<SendQuoteActionState> {
-  const contextResult = await getQuoteActionContext('canSendEstimates');
+  const contextResult = await getQuoteActionContext('canSendQuote');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -349,7 +349,7 @@ export async function resendQuoteEmailAction(
   _prevState: ResendQuoteEmailActionState | null,
   formData: FormData
 ): Promise<ResendQuoteEmailActionState> {
-  const contextResult = await getQuoteActionContext('canSendEstimates');
+  const contextResult = await getQuoteActionContext('canSendQuote');
   if (!contextResult.success) {
     return contextResult;
   }
