@@ -45,7 +45,7 @@ const validPayload = {
   lastName: 'Smith',
   phoneNumber: '615-555-0100',
   preferredContactMethod: 'email',
-  preferredDateTime: 'Thursday morning',
+  preferredDateTime: '2026-08-05T14:30',
   priorityLevel: 'normal',
   problemDescription: 'Need lawn cleanup',
   propertyType: 'single-family',
@@ -57,7 +57,15 @@ const validPayload = {
 describe('POST /api/v1/service-requests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createServiceClientMock.mockReturnValue({ client: true });
+    createServiceClientMock.mockReturnValue({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () => Promise.resolve({ data: { timezone: 'America/New_York' } }),
+          }),
+        }),
+      }),
+    });
     createServiceRequestMock.mockResolvedValue({
       success: true,
       data: {
@@ -83,7 +91,7 @@ describe('POST /api/v1/service-requests', () => {
     expect(sendServiceRequestSubmittedNotificationMock).toHaveBeenCalledWith({
       customerEmail: 'customer@example.com',
       customerName: 'Jane Smith',
-      preferredDateTime: 'Thursday morning',
+      preferredDateTime: '2026-08-05T14:30',
       propertyAddress: '123 Main St, Nashville, TN 37201',
       requestNumber: 'REQ-1001',
       serviceTitle: 'Lawn cleanup',

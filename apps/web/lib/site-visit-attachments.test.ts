@@ -10,6 +10,11 @@ import path from 'node:path';
 import { config as loadEnv } from 'dotenv';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createClient } from '@supabase/supabase-js';
+
+import { createServiceClient, requestPendingUpload, type DbClient } from '@premier/db';
+
+import { finalizeSiteVisitUpload } from './site-visit-attachments';
 
 loadEnv({ path: path.resolve(__dirname, '../../../.env.test') });
 
@@ -18,10 +23,7 @@ const canRun = () =>
 
 describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
   const ORG1 = 'a0000000-0000-0000-0000-000000000001';
-  let createServiceClient: typeof import('@premier/db').createServiceClient;
-  let requestPendingUpload: typeof import('@premier/db').requestPendingUpload;
-  let finalizeSiteVisitUpload: typeof import('./site-visit-attachments').finalizeSiteVisitUpload;
-  let admin: import('@premier/db').DbClient;
+  let admin: DbClient;
   let ownerId: string;
   let customerId: string;
   let propertyId: string;
@@ -31,40 +33,38 @@ describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
   const createdStoragePaths: string[] = [];
 
   beforeAll(async () => {
-    const dbModule = await import('@premier/db');
-    createServiceClient = dbModule.createServiceClient;
-    requestPendingUpload = dbModule.requestPendingUpload;
-    finalizeSiteVisitUpload = (await import('./site-visit-attachments')).finalizeSiteVisitUpload;
     admin = createServiceClient();
 
     // record_request_triage() relies on auth.uid(), which is NULL for the
     // service-role key — needs a real authenticated session, not admin.
-    const { createClient } = await import('@supabase/supabase-js');
     const ownerEmail = `e2e-attach-owner-${Date.now()}@example.com`;
     const ownerPassword = `E2eAttach_${Math.random().toString(36).slice(2)}!1`;
-    const { data: createdOwner } = await admin.auth.admin.createUser({ email: ownerEmail, password: ownerPassword, email_confirm: true });
-    ownerId = createdOwner!.user.id;
+    const { data: createdOwner, error: createOwnerErr } = await admin.auth.admin.createUser({ email: ownerEmail, password: ownerPassword, email_confirm: true });
+    if (createOwnerErr || !createdOwner.user) throw createOwnerErr ?? new Error('Failed to create owner fixture');
+    ownerId = createdOwner.user.id;
     await admin.from('org_members').insert({ org_id: ORG1, user_id: ownerId, role: 'owner', status: 'active' });
     const ownerClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     await ownerClient.auth.signInWithPassword({ email: ownerEmail, password: ownerPassword });
 
-    const { data: customer } = await admin
+    const { data: customer, error: customerErr } = await admin
       .from('customers')
       .insert({ org_id: ORG1, type: 'residential', first_name: 'E2E_ATTACH', last_name: 'Fixture', source: 'manual_staff_entry' })
       .select('id')
       .single();
-    customerId = customer!.id;
+    if (customerErr || !customer) throw customerErr ?? new Error('Failed to create customer fixture');
+    customerId = customer.id;
 
-    const { data: property } = await admin
+    const { data: property, error: propertyErr } = await admin
       .from('properties')
       .insert({ org_id: ORG1, address_line_1: '1 E2E Attach Test Way', city: 'Florence', state: 'KY', zip: '41042' })
       .select('id')
       .single();
-    propertyId = property!.id;
+    if (propertyErr || !property) throw propertyErr ?? new Error('Failed to create property fixture');
+    propertyId = property.id;
 
-    const { data: request } = await admin
+    const { data: request, error: requestErr } = await admin
       .from('service_requests')
       .insert({
         org_id: ORG1, request_number: `E2E-ATTACH-${Date.now()}`, source: 'manual', status: 'reviewing', priority: 'normal',
@@ -73,7 +73,8 @@ describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
       })
       .select('id')
       .single();
-    requestId = request!.id;
+    if (requestErr || !request) throw requestErr ?? new Error('Failed to create service request fixture');
+    requestId = request.id;
 
     const { data: triageResult, error: triageErr } = await ownerClient.rpc('record_request_triage', {
       p_request_id: requestId, p_decision: 'site_visit_required', p_reason: 'E2E attachment test',
@@ -111,7 +112,7 @@ describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
 
   it('processes a valid JPEG end-to-end: EXIF stripped, dims correct, idempotent retry, no duplicate', async () => {
     const original = await sharp({ create: { width: 30, height: 15, channels: 3, background: { r: 10, g: 200, b: 30 } } })
-      .withMetadata({ exif: { IFD0: { Orientation: '6' }, GPS: { GPSLatitude: '1/1,1/1,1/1', GPSLatitudeRef: 'N', GPSLongitude: '1/1,1/1,1/1', GPSLongitudeRef: 'W' } } })
+      .withMetadata({ exif: { IFD0: { Orientation: '6' } } })
       .jpeg()
       .toBuffer();
 
@@ -134,8 +135,8 @@ describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
     createdStoragePaths.push(result1.data.storagePath);
 
     const { data: vaultRow } = await admin.from('vault_items').select('*').eq('id', result1.data.vaultItemId).single();
-    expect(vaultRow.storage_object_key).toBe(result1.data.storagePath);
-    expect(vaultRow.storage_object_key).toContain(`${ORG1}/site_visit/${siteVisitId}/`);
+    expect(vaultRow!.storage_object_key).toBe(result1.data.storagePath);
+    expect(vaultRow!.storage_object_key).toContain(`${ORG1}/site_visit/${siteVisitId}/`);
 
     const { data: sanitizedFile } = await admin.storage.from('site-visit-attachments').download(result1.data.storagePath);
     const sanitizedBuffer = Buffer.from(await sanitizedFile!.arrayBuffer());
@@ -151,7 +152,7 @@ describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
     expect(count).toBe(1);
 
     const { data: pendingRow } = await admin.from('pending_uploads').select('status').eq('id', target.data.uploadId).single();
-    expect(pendingRow.status).toBe('finalized');
+    expect(pendingRow!.status).toBe('finalized');
 
     const { data: pendingStillThere } = await admin.storage.from('site-visit-attachments').list(`${ORG1}/pending`);
     expect((pendingStillThere ?? []).some((o) => o.name === target.data.uploadId)).toBe(false);
@@ -171,8 +172,8 @@ describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
     expect(result.success).toBe(false);
 
     const { data: pendingRow } = await admin.from('pending_uploads').select('status, rejection_reason').eq('id', target.data.uploadId).single();
-    expect(pendingRow.status).toBe('rejected');
-    expect(pendingRow.rejection_reason).toBe('mime_mismatch');
+    expect(pendingRow!.status).toBe('rejected');
+    expect(pendingRow!.rejection_reason).toBe('mime_mismatch');
   });
 
   it('rejects a decoded image exceeding the pixel-count guard', async () => {
@@ -188,7 +189,7 @@ describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
     const result = await finalizeSiteVisitUpload(admin, target.data.uploadId);
     expect(result.success).toBe(false);
     const { data: pendingRow } = await admin.from('pending_uploads').select('rejection_reason').eq('id', target.data.uploadId).single();
-    expect(pendingRow.rejection_reason).toBe('decompression_bomb_guard');
+    expect(pendingRow!.rejection_reason).toBe('decompression_bomb_guard');
   });
 
   it('rejects undecodable garbage bytes', async () => {
@@ -204,7 +205,7 @@ describe.runIf(canRun())('finalizeSiteVisitUpload (premier-crm-e2e)', () => {
     const result = await finalizeSiteVisitUpload(admin, target.data.uploadId);
     expect(result.success).toBe(false);
     const { data: pendingRow } = await admin.from('pending_uploads').select('rejection_reason').eq('id', target.data.uploadId).single();
-    expect(pendingRow.rejection_reason).toBe('undecodable');
+    expect(pendingRow!.rejection_reason).toBe('undecodable');
   });
 
   it('rejects an unsupported declared MIME type before any upload occurs', async () => {
