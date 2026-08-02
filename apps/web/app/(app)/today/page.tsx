@@ -9,6 +9,7 @@ import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { signOutAction } from './actions';
+import { OrgSwitcher } from './_components/org-switcher';
 
 interface TodayJob {
   id: string;
@@ -96,7 +97,7 @@ export default async function TodayPage() {
     );
   }
 
-  const { orgId, orgName, role } = orgContextResult.data;
+  const { orgId, orgName, role, hasMultipleOrgs, availableOrgs } = orgContextResult.data;
   const canManageTeam = role === 'owner' || role === 'admin';
 
   const startOfDay = new Date();
@@ -221,11 +222,15 @@ export default async function TodayPage() {
           </div>
         </div>
 
-        <div className="inline-flex max-w-full items-center rounded-full border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
-          <span className="truncate">
-            {orgName} • <span className="capitalize">{role}</span>
-          </span>
-        </div>
+        {hasMultipleOrgs && availableOrgs ? (
+          <OrgSwitcher currentOrgId={orgId} availableOrgs={availableOrgs} />
+        ) : (
+          <div className="inline-flex max-w-full items-center rounded-full border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+            <span className="truncate">
+              {orgName} • <span className="capitalize">{role}</span>
+            </span>
+          </div>
+        )}
 
         <p className="text-xs text-muted-foreground">Signed in as {userEmail}</p>
       </header>

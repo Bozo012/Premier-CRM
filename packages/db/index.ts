@@ -40,6 +40,7 @@ export {
   type OrgInvite,
   getActiveOrgContext,
   type ActiveOrgContext,
+  type AvailableOrgMembership,
   type OrgMemberRole,
   addQuoteLineItem,
   createQuoteRequest,

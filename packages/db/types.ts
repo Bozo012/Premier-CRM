@@ -4517,6 +4517,7 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          active_org_id: string | null
           avatar_url: string | null
           created_at: string
           full_name: string | null
@@ -4525,6 +4526,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          active_org_id?: string | null
           avatar_url?: string | null
           created_at?: string
           full_name?: string | null
@@ -4533,6 +4535,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          active_org_id?: string | null
           avatar_url?: string | null
           created_at?: string
           full_name?: string | null
@@ -4540,7 +4543,15 @@ export type Database = {
           phone?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_profiles_active_org_id_fkey"
+            columns: ["active_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_prompts: {
         Row: {
@@ -5379,6 +5390,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      bootstrap_demonstration_organization: {
+        Args: { p_initiator_user_id: string }
+        Returns: string
       }
       cancel_scheduling_slot_booking: {
         Args: {
@@ -6546,6 +6561,7 @@ export type Database = {
         Args: { p_site_visit_id: string }
         Returns: undefined
       }
+      switch_active_org: { Args: { p_org_id: string }; Returns: undefined }
       undo_site_visit_start: {
         Args: { p_site_visit_id: string }
         Returns: undefined

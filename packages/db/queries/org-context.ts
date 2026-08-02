@@ -5,10 +5,20 @@ import type { Database } from '../types';
 
 export type OrgMemberRole = Database['public']['Enums']['user_role'];
 
+export interface AvailableOrgMembership {
+  orgId: string;
+  orgName: string;
+  role: OrgMemberRole;
+}
+
 export interface ActiveOrgContext {
   orgId: string;
   role: OrgMemberRole;
   orgName: string;
+  /** True only when this account holds more than one active membership. */
+  hasMultipleOrgs: boolean;
+  /** Populated only when hasMultipleOrgs is true — every active membership, for rendering a switcher. */
+  availableOrgs?: AvailableOrgMembership[];
 }
 
 /**
@@ -29,13 +39,19 @@ export interface ActiveOrgContext {
  * Contract:
  *  - Zero active memberships -> `ErrorCode.NOT_FOUND`. Callers should render
  *    a clear "no active organization" state, never a fabricated placeholder.
- *  - Exactly one active membership -> `ok({ orgId, role, orgName })`.
- *  - More than one active membership -> `ErrorCode.CONFLICT`. This product
- *    currently supports exactly one active org per user; silently picking
- *    one would hide a real data problem, so this is surfaced instead of
- *    resolved automatically. If multi-org support becomes a real product
- *    requirement, replace this branch with an explicit org selector rather
- *    than loosening the check.
+ *  - Exactly one active membership -> `ok({ orgId, role, orgName, hasMultipleOrgs: false })`.
+ *  - More than one active membership (Premier CRM Demonstration org support,
+ *    2026-08-02) -> resolved via `user_profiles.active_org_id`, a
+ *    per-account preference set ONLY by the guarded `switch_active_org()`
+ *    RPC (never written directly, never trusted from a client-supplied
+ *    value here). If that preference points at one of the caller's own
+ *    active memberships, it wins. Otherwise this deterministically defaults
+ *    to the OLDEST active membership (by `org_members.joined_at` ascending)
+ *    — never a random/unstable choice, and never a membership added later
+ *    silently taking over a user's default org. `hasMultipleOrgs: true` and
+ *    `availableOrgs` are populated so the UI can render a switcher; every
+ *    existing call site that only destructures `{ orgId, role, orgName }`
+ *    keeps working unchanged.
  *
  * Never trust a client-supplied org_id in place of this lookup — always
  * resolve the caller's own active membership server-side first.
@@ -46,9 +62,10 @@ export async function getActiveOrgContext(
 ): Promise<Result<ActiveOrgContext>> {
   const { data, error } = await client
     .from('org_members')
-    .select('org_id, role, organizations(name)')
+    .select('org_id, role, joined_at, organizations(name)')
     .eq('user_id', userId)
-    .eq('status', 'active');
+    .eq('status', 'active')
+    .order('joined_at', { ascending: true });
 
   if (error) {
     return err(ErrorCode.DB_ERROR, error.message);
@@ -63,17 +80,36 @@ export async function getActiveOrgContext(
     );
   }
 
-  if (rows.length > 1) {
-    return err(
-      ErrorCode.CONFLICT,
-      `This account has ${rows.length} active organization memberships, but only one is supported today. Contact an owner to resolve which one is correct.`
-    );
+  if (rows.length === 1) {
+    const [row] = rows;
+    return ok({
+      orgId: row!.org_id,
+      role: row!.role,
+      orgName: row!.organizations?.name?.trim() || 'Unknown organization',
+      hasMultipleOrgs: false,
+    });
   }
 
-  const [row] = rows;
+  const { data: profile } = await client
+    .from('user_profiles')
+    .select('active_org_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const preferredRow = profile?.active_org_id
+    ? rows.find((row) => row.org_id === profile.active_org_id)
+    : undefined;
+  const activeRow = preferredRow ?? rows[0]!; // rows sorted by joined_at ascending — oldest first if no valid preference.
+
   return ok({
-    orgId: row!.org_id,
-    role: row!.role,
-    orgName: row!.organizations?.name?.trim() || 'Unknown organization',
+    orgId: activeRow.org_id,
+    role: activeRow.role,
+    orgName: activeRow.organizations?.name?.trim() || 'Unknown organization',
+    hasMultipleOrgs: true,
+    availableOrgs: rows.map((row) => ({
+      orgId: row.org_id,
+      orgName: row.organizations?.name?.trim() || 'Unknown organization',
+      role: row.role,
+    })),
   });
 }
