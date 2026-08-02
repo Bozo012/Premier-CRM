@@ -173,11 +173,14 @@ fix the underlying env mismatch — do not remove or bypass the check.
 
 ## Request → site visit → estimate → quote workflow
 
-Added on `feature/request-site-visit-estimate-workflow` — backend, staff
-UI, customer portal presentation, and Storage/upload finalization are all
+**Live in production** since 2026-08-02 (merged via PR #80, commit `15078a3`,
+plus a same-day hotfix PR #81, commit `9a376b3`). Backend, staff UI,
+customer portal presentation, and Storage/upload finalization are all
 complete; see `docs/implementation/request-site-visit-estimate-workflow.md`
-for the full report. Extends the request-to-payment lifecycle with an
-explicit, audited front half:
+for the full report and `docs/production/deployments/
+2026-08-02-site-visit-workflow-deployment.md` for the deployment/smoke-test
+record. Extends the request-to-payment lifecycle with an explicit, audited
+front half:
 
 ```
 service request → triage (remote_estimate | site_visit_required | direct_work_order)
@@ -213,6 +216,15 @@ mismatch is treated as a security defect, not a UX bug):
 `canTriageRequests`, `canCreateDirectWorkOrder`,
 `canManageInspectionTemplates`, `canEditEstimate`,
 `canApproveEstimatePricing`, `canCreateQuote`, `canSendQuote`.
+
+**A capability existing in this map is not the same as it being enforced.**
+`canSendQuote` was defined here and passed the TS/SQL parity test from day
+one, but wasn't actually wired into the quote-send action until a same-day
+production hotfix (PR #81) — the action checked the older, broader
+`canSendEstimates` instead. Found during production validation, fixed, and
+covered by dedicated tests (`apps/web/app/(app)/quotes/actions.test.ts`).
+When adding a new capability, grep for where it's actually checked, not just
+where it's defined, before considering the wiring done.
 
 **Staff UI**: `apps/web/app/(app)/requests/[taskId]/page.tsx` (triage panel,
 folded into the request detail page — includes the structured
