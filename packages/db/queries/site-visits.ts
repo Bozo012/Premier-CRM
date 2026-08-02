@@ -42,11 +42,12 @@ export interface SiteVisitDetail {
   activeAppointment: { id: string; scheduledStart: string; scheduledEnd: string; assignedUserId: string | null } | null;
 }
 
-export async function getSiteVisitById(client: DbClient, siteVisitId: string): Promise<Result<SiteVisitDetail>> {
+export async function getSiteVisitById(client: DbClient, siteVisitId: string, orgId: string): Promise<Result<SiteVisitDetail>> {
   const { data: visit, error } = await client
     .from('site_visits')
     .select('id, org_id, status, service_request_id, assigned_user_id, started_at, completed_at, cancelled_at, cancellation_reason, inspection_responses, inspection_template_version_id')
     .eq('id', siteVisitId)
+    .eq('org_id', orgId)
     .maybeSingle();
   if (error) return err(ErrorCode.DB_ERROR, error.message);
   if (!visit) return err(ErrorCode.NOT_FOUND, 'Site visit not found.');

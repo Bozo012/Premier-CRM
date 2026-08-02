@@ -276,6 +276,22 @@ export async function saveSiteVisitInspectionAction(
 ): Promise<Result<null>> {
   const contextResult = await getWorkflowActionContext();
   if (!contextResult.success) return contextResult;
+  const { orgId } = contextResult.data;
+
+  // save_site_visit_inspection() runs as service_role (no auth.uid()), so it
+  // cannot itself check actor/org membership — that responsibility belongs
+  // entirely to this server action, which is the only caller. Verify the
+  // target visit actually belongs to the caller's org via the RLS-scoped
+  // client before doing anything else with it.
+  const supabaseForOrgCheck = await getServerSupabase();
+  const { data: visitOrgCheck, error: visitOrgCheckError } = await supabaseForOrgCheck
+    .from('site_visits')
+    .select('id')
+    .eq('id', siteVisitId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (visitOrgCheckError) return err(ErrorCode.DB_ERROR, visitOrgCheckError.message);
+  if (!visitOrgCheck) return err(ErrorCode.NOT_FOUND, 'Site visit not found.');
 
   const validation = validateInspectionResponses(responsesPatch, templateFieldDefinitions);
   if (!validation.valid) {
@@ -358,6 +374,23 @@ export async function requestSiteVisitPhotoUploadAction(input: {
 export async function finalizeSiteVisitPhotoUploadAction(uploadId: string): Promise<Result<{ vaultItemId: string; storagePath: string }>> {
   const contextResult = await getWorkflowActionContext();
   if (!contextResult.success) return contextResult;
+  const { orgId } = contextResult.data;
+
+  // finalizeSiteVisitUpload() runs with the service client and has no org
+  // context of its own — verify the pending upload belongs to the caller's
+  // org before finalizing it (mirrors the check saveSiteVisitInspectionAction
+  // does for the same reason: the underlying operation can't check auth.uid()
+  // itself).
+  const supabase = await getServerSupabase();
+  const { data: pendingOrgCheck, error: pendingOrgCheckError } = await supabase
+    .from('pending_uploads')
+    .select('id')
+    .eq('id', uploadId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (pendingOrgCheckError) return err(ErrorCode.DB_ERROR, pendingOrgCheckError.message);
+  if (!pendingOrgCheck) return err(ErrorCode.NOT_FOUND, 'Pending upload not found.');
+
   const serviceClient = createServiceClient();
   return finalizeSiteVisitUpload(serviceClient, uploadId);
 }

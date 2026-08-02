@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { ErrorCode, err, hasCapability, ok, type Result } from '@premier/shared';
+import { ErrorCode, err, hasCapability, ok, type OrgRole, type Result } from '@premier/shared';
 import {
   createDraftQuote,
   createEstimateLineItem,
@@ -39,7 +39,7 @@ export interface PropertyPickerItem {
 }
 
 async function getEstimateActionContext(): Promise<
-  Result<{ orgId: string; userId: string }>
+  Result<{ orgId: string; userId: string; role: OrgRole }>
 > {
   const supabase = await getServerSupabase();
   const {
@@ -61,7 +61,7 @@ async function getEstimateActionContext(): Promise<
     return err(ErrorCode.FORBIDDEN, 'Your role does not have permission to create or edit estimates.');
   }
 
-  return ok({ orgId, userId: user.id });
+  return ok({ orgId, userId: user.id, role });
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +215,17 @@ export async function createQuoteFromEstimateAction(
   if (!contextResult.success) {
     return contextResult;
   }
-  const { orgId, userId } = contextResult.data;
+  const { orgId, userId, role } = contextResult.data;
+
+  // getEstimateActionContext() only checks canCreateEstimates (which
+  // subcontractors hold, since they can draft/edit estimates) — quote
+  // creation specifically requires canCreateQuote, a narrower, separate
+  // capability subcontractors never hold. This is the legacy/manual-estimate
+  // quote-creation path (triage-originated estimates use the gated
+  // create_quote_from_estimate RPC instead, which checks this itself).
+  if (!hasCapability(role, 'canCreateQuote')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not have permission to create quotes.');
+  }
 
   const estimateId =
     typeof formData.get('estimateId') === 'string'

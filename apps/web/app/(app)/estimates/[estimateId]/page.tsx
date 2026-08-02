@@ -167,7 +167,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
         locked={!!estimate.pricingReviewedAt}
       />
 
-      {estimate.sourceSiteVisitId ? (
+      {estimate.isQuoteEligibilityGated ? (
         <PricingReviewPanel estimateId={estimate.id} pricingReviewedAt={estimate.pricingReviewedAt} />
       ) : null}
 
@@ -175,7 +175,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Quotes</h2>
-          {!estimate.sourceSiteVisitId &&
+          {!estimate.isQuoteEligibilityGated &&
           estimate.status !== 'converted' &&
           estimate.status !== 'declined' &&
           estimate.status !== 'expired' ? (

@@ -14,6 +14,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { getSiteVisitById } from '@premier/db';
 import type { Database } from '@premier/db';
 import { hasApiTestCredentials } from './utils/auth';
 
@@ -284,6 +285,22 @@ test.describe('request → site visit → estimate → quote workflow bot', () =
     test('10. org2 staff cannot act on org1 site visit (cross-org denial)', async () => {
       const { error } = await org2Staff.client.rpc('start_site_visit', { p_site_visit_id: siteVisitId });
       expect(error).not.toBeNull();
+    });
+
+    test('10b. getSiteVisitById() (service-role query layer) is org-scoped — a real defect found by audit and fixed', async () => {
+      // Regression test for a real IDOR: getSiteVisitById() originally took
+      // no orgId and was called with the service-role client (which bypasses
+      // RLS entirely), so any authenticated staff user of ANY org could read
+      // any other org's full site-visit detail — including inspection
+      // responses, customer PII, and cancellation reasons — just by
+      // navigating to /site-visits/{uuid}. Fixed by adding an explicit
+      // org_id filter; this proves the fix, not just that the function runs.
+      const correctOrgResult = await getSiteVisitById(admin, siteVisitId, ORG1);
+      expect(correctOrgResult.success).toBe(true);
+
+      const wrongOrgResult = await getSiteVisitById(admin, siteVisitId, org2Id);
+      expect(wrongOrgResult.success).toBe(false);
+      if (!wrongOrgResult.success) expect(wrongOrgResult.error).toContain('not found');
     });
   });
 

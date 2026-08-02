@@ -49,6 +49,15 @@ export interface EstimateDetail extends EstimateListItem {
   sourceSiteVisitId: string | null;
   pricingReviewedAt: string | null;
   pricingReviewedBy: string | null;
+  /**
+   * True when the source service_requests row has triage_decision set —
+   * i.e. this estimate is gated by enforce_quote_eligibility() regardless
+   * of path (both remote_estimate and site_visit_required-originated
+   * estimates are gated; only pre-triage-system manual estimates are not).
+   * Drives which quote-creation UI (gated pricing-review panel vs. the
+   * legacy ungated button) the estimate page shows.
+   */
+  isQuoteEligibilityGated: boolean;
 }
 
 export interface EstimateLineItem {
@@ -243,6 +252,16 @@ export async function getEstimateById(
     createdByName = profile?.full_name?.trim() || null;
   }
 
+  let isQuoteEligibilityGated = false;
+  if (row.service_request_id) {
+    const { data: sourceRequest } = await client
+      .from('service_requests')
+      .select('triage_decision')
+      .eq('id', row.service_request_id)
+      .maybeSingle();
+    isQuoteEligibilityGated = sourceRequest?.triage_decision != null;
+  }
+
   return ok({
     id: row.id,
     estimateNumber: row.estimate_number,
@@ -262,6 +281,7 @@ export async function getEstimateById(
     sourceSiteVisitId: row.source_site_visit_id ?? null,
     pricingReviewedAt: row.pricing_reviewed_at ?? null,
     pricingReviewedBy: row.pricing_reviewed_by ?? null,
+    isQuoteEligibilityGated,
     customer: cust
       ? {
           id: cust.id,

@@ -34,7 +34,7 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
   }
 
   const serviceClient = createServiceClient();
-  const result = await getSiteVisitById(serviceClient, siteVisitId);
+  const result = await getSiteVisitById(serviceClient, siteVisitId, orgContextResult.data.orgId);
 
   if (!result.success) {
     return (

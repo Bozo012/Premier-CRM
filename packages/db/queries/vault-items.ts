@@ -62,7 +62,20 @@ export async function requestPendingUpload(
     return err(ErrorCode.VALIDATION_ERROR, 'File is too large. Maximum size is 15MB.');
   }
 
-  const countQuery = client.from('vault_items').select('id', { count: 'exact', head: true });
+  // Verify the referenced entity actually belongs to the caller's org before
+  // creating any pending_uploads row — entity_id has no FK constraint, and
+  // nothing else in this path checks that the caller's own org (which RLS
+  // already confirms they're a member of) matches the entity they're
+  // attaching a photo to.
+  const entityOrgQuery =
+    input.entityType === 'site_visit'
+      ? client.from('site_visits').select('id').eq('id', input.entityId).eq('org_id', input.orgId).maybeSingle()
+      : client.from('estimates').select('id').eq('id', input.entityId).eq('org_id', input.orgId).maybeSingle();
+  const { data: entityOwnership, error: entityOwnershipError } = await entityOrgQuery;
+  if (entityOwnershipError) return err(ErrorCode.DB_ERROR, entityOwnershipError.message);
+  if (!entityOwnership) return err(ErrorCode.NOT_FOUND, `${input.entityType.replace('_', ' ')} not found.`);
+
+  const countQuery = client.from('vault_items').select('id', { count: 'exact', head: true }).eq('org_id', input.orgId);
   const { count, error: countError } =
     input.entityType === 'site_visit'
       ? await countQuery.eq('site_visit_id', input.entityId)
