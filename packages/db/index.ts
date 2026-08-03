@@ -65,6 +65,7 @@ export {
   proposeChangeOrderRevision,
   respondToChangeOrderRevision,
   withdrawChangeOrderRevision,
+  createDepositInvoice,
   getDepositState,
   setDepositRequirement,
   waiveDepositRequirement,
