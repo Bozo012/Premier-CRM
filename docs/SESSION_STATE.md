@@ -1,7 +1,7 @@
 # Session State
 
 ## Last Updated
-2026-08-03 (Premier CRM Demonstration organization **fully populated with a permanent, verified dataset** covering all three triage paths. Three real production defects found and fixed during population. Kevin retains safe access to both PPM and Demo. Brandon still not added. PPM remains blank.)
+2026-08-03 (Premier CRM Demonstration organization **fully populated with a permanent, verified dataset** covering all three triage paths. Three real production defects found and fixed during population. Brandon's Demo onboarding started then **deferred by Kevin** before first-login verification. Kevin created his own dedicated Demo employee test account (`sommerskevin3@gmail.com`) and is personally UI-testing the platform, with a repeatable training scenario prepared. PPM remains blank.)
 
 ## One coherent story so far
 
@@ -29,14 +29,16 @@
     - **PR #84**: `create_quote_from_estimate()` never recalculated quote totals — every RPC-created quote was left at $0.00. Fixed with a SQL trigger (`recalc_quote_totals()`) on `quote_line_items`.
     - **PR #85**: `generateFinalInvoiceFromWorking()` had the identical bug on the invoice side. Fixed the same way (`recalc_invoice_totals()` trigger on `invoice_line_items`).
     - All three merged to `main`, migrations applied to both `premier-crm-e2e` and `premier-crm-prod`, deployed, covered by new permanent regression tests.
-16. **Stopping point reached**: Demo organization population is complete and verified. **Brandon onboarding and Platform v1.0 tagging remain explicitly not authorized.**
+16. **Brandon's Demo onboarding was started, then explicitly deferred by Kevin** before first-login verification. A real structural conflict was found first (the real accept-invite flow refuses to activate anything when a user has more than one pending invite — Brandon already had a pending PPM one, which Kevin's instructions forbid touching) and Kevin approved a one-time exception: Demo `org_members` row created directly (`ebdd5826-...`, employee), email confirmed via the Admin API, a Supabase-native password-reset email triggered. Kevin then changed plans before Brandon's first login — Brandon's account is preserved exactly as left (Demo membership intact, PPM invite untouched), but no login/capability verification was performed. Full status: `docs/implementation/brandon-demo-onboarding-and-observation.md`.
+17. **Kevin created his own dedicated Demo employee test account** — his real, pre-existing `sommerskevin3@gmail.com` account (already a legitimate PPM employee, one of the 4 pre-existing PPM members) was added to Demo as `employee` (`org_members.id = ec13d3e3-...`). A repeatable "Kevin UI Observation Scenario" training record (`SR-000012`, site visit `2422de29-...`, left `awaiting_scheduling`) was prepared for him to work through manually via the real UI. Observation framework: `docs/implementation/kevin-demo-ui-observation.md`.
+18. **Stopping point reached**: Demo organization population is complete and verified; Kevin's own UI-testing setup is ready. **Brandon's further onboarding, Platform v1.0 tagging, and Base44 work remain explicitly not authorized. Waiting on Kevin's UI feedback before any interface changes.**
 
 ## Current Branches
-- CRM: `main` at `44cd6d5` (includes PR #80–#85). Feature/hotfix branches merged and deleted per-PR from this phase onward.
+- CRM: `main` at `44cd6d5` (includes PR #80–#85). Feature/hotfix branches merged and deleted per-PR from this phase onward. No code changes this sub-phase (Brandon/Kevin account setup was production-data-only).
 - Marketing site (`premier-property-maintenance`): `main` at `8807fa9` (unchanged this phase).
 
 ## Current Goal
-Both real organizations (Premier Property Maintenance and Premier CRM Demonstration) exist in production; Demo now has a complete, permanent, verified demonstration dataset covering all three triage paths. Next phase (not yet authorized): onboard Brandon, tag Platform v1.0, or begin Base44 work.
+Both real organizations (Premier Property Maintenance and Premier CRM Demonstration) exist in production; Demo has a complete, permanent, verified demonstration dataset covering all three triage paths, plus a prepared training scenario for Kevin's own hands-on UI testing. Next: wait for Kevin's friction reports and iterate one at a time. Longer-term, not yet authorized: resume Brandon's onboarding, tag Platform v1.0, or begin Base44 work.
 
 ## Business policy decisions locked in
 - Employee pricing-approval capability stays owner/admin-only (`canApproveEstimatePricing`).

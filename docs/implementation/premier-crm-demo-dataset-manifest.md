@@ -95,6 +95,19 @@ Full chain, using Dana Whitfield (residential, from Stage 1): service request �
 
 Uses Bramwell Retail Group (commercial, from Stage 1) — service request deduped onto the existing customer/property (property A). **Authorization boundary proved at the real callable RPC before the real triage was attempted**: a temporary employee-role Demo-only user and a temporary subcontractor-role Demo-only user (both synthetic `.example` addresses, both belonging only to the Demo org) each attempted `record_request_triage(decision='direct_work_order', ...)` and were both denied (`Role {employee|subcontractor} does not have canCreateDirectWorkOrder`) with zero mutation — the service request's status remained `new` and zero jobs existed for Bramwell afterward. Only then did the driver (owner role) perform the real triage: `direct_work_order`, `authorization_type='standing_agreement'`, `authorization_reference='DEMO-STANDING-MAINTENANCE-AGREEMENT-001'`, `not_to_exceed_amount=$350.00` — creating **exactly one job, no estimate, no site visit**. All authorization fields verified preserved on the job row. No deposit requirement was created (deliberate, per this scenario). Job scheduled (`apply_job_scheduling` auto-created the working invoice); 2 line items added ($135 labor + $105 material = **$240.00**, under the $350 not-to-exceed amount, verified before and after each total check); final invoice generated (**$240.00**) and paid in full via the demonstration check-payment method (`DEMO-CHECK-2001`).
 
+## Stage 6 — Kevin's Demo employee test account + UI Observation Scenario
+
+| Record | ID | Category |
+|---|---|---|
+| Kevin's Demo test account (`sommerskevin3@gmail.com`, real auth user) | `daaecd54-5c4d-49cb-8d79-96ac3a705504` | Real account, pre-existing — also has an unchanged, pre-existing real PPM `employee` membership |
+| Demo `org_members` row (new, role `employee`) | `ec13d3e3-b6a9-494a-a0da-da54f1a6155f` | **Permanent** — Kevin's own dedicated Demo test identity |
+| Kevin UI Observation Scenario — service request (`SR-000012`) | `cb7e6d82-a61e-474c-b344-51b8382a2155` | **Repeatable/resettable training record** — not part of the polished Scenario A/B showcase |
+| Kevin UI Observation Scenario — site visit (`awaiting_scheduling`) | `2422de29-aa04-4386-be5f-03786904d43e` | **Repeatable/resettable training record** |
+
+Full detail, sign-in instructions, and the live findings log: `docs/implementation/kevin-demo-ui-observation.md`. No password reset was performed for `sommerskevin3@gmail.com` — the account already had a confirmed email and working password from prior use.
+
+**Brandon's onboarding was deferred by Kevin** before first-login verification — his Demo `org_members` row (`ebdd5826-bacc-48b8-9ec6-bbccfcd2d3ef`, role `employee`) was already created in an earlier step and is **preserved, not deleted**, per Kevin's explicit instruction not to touch it further without a separate request. Full status: `docs/implementation/brandon-demo-onboarding-and-observation.md`.
+
 ## Stage 5 — Temporary identity cleanup
 
 The org-membership half of cleanup for all three temporary population-driver identities succeeded cleanly: all three `org_members` rows were deleted, leaving the Demo org with exactly one member (Kevin, owner). The temporary employee and subcontractor auth users were fully deleted (`auth.users` row and all) since nothing referenced them — they only ever made denied, no-op RPC calls.

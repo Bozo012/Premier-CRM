@@ -76,6 +76,10 @@ Kevin's original PPM membership (`org_members.id = aaf3f37b-97e0-4404-a0af-fd439
 
 A round-trip preference test (set `active_org_id` to Demo directly, verify resolution follows it, clear it, verify resolution returns to PPM) was performed and Kevin's original `null` preference state was fully restored afterward. The guarded RPC's write-path authorization was **not** exercised with Kevin's specific real session (would require his real password, which was never obtained or handled) — that boundary is proven generically with real signed-in temporary accounts in `tests/e2e/multi-org-switching-bot.spec.ts` (6/6 passing), which exercises the identical code path any real multi-org account — including Kevin's — goes through.
 
+**Note (2026-08-03)**: `user_profiles.active_org_id` for Kevin's owner account (`234ecd59-...`) is now observed as explicitly `PPM` (not `null`) — it still resolves correctly to PPM either way (explicit preference or oldest-membership default), so this has no functional effect; likely set by Kevin using the real org switcher himself at some point rather than by any script in this session. Not investigated further since the resolved behavior is correct and unchanged.
+
+**Kevin's second Demo identity**: separately, his own real personal account (`sommerskevin3@gmail.com`, a pre-existing PPM `employee` account, distinct from his owner login) was added to Demo as `employee` to use as a dedicated hands-on UI-testing account — see `docs/implementation/kevin-demo-ui-observation.md`.
+
 ## 8. Organization-switching behavior
 
 - Active organization is explicit, resolved server-side on every request via `getActiveOrgContext()` — never inferred from a client-supplied value.
@@ -114,7 +118,9 @@ Verified directly against production, not assumed from prior notes (which turned
 | PPM `org_members` row | **None exists** |
 | Invite history | 4 total attempts: 2 revoked for `brandonjfleenor28@gmail.com`, 1 revoked for a differently-spelled `fleenor.brandon7@gmail.com`, 1 **currently pending** (employee role, PPM org, expires 2026-08-15) |
 
-Since Brandon has zero existing memberships, adding a Demo membership later would not affect any existing PPM state. **Not added — awaiting explicit approval**, per instruction.
+Since Brandon has zero existing memberships, adding a Demo membership later would not affect any existing PPM state.
+
+**Update (2026-08-03)**: Demo onboarding was subsequently started and then explicitly **deferred by Kevin** before first-login verification. Full detail: `docs/implementation/brandon-demo-onboarding-and-observation.md`. Current preserved state: Demo `org_members` row exists (`ebdd5826-bacc-48b8-9ec6-bbccfcd2d3ef`, role `employee`), email confirmed, PPM invite (`5b33004b-...`) untouched and still pending, **no first-login or capability verification performed**, no Brandon Training Scenario created. Kevin is instead personally UI-testing via his own dedicated Demo employee test account — see §7 and `docs/implementation/kevin-demo-ui-observation.md`.
 
 ## 11. Demo dataset — populated (Phase 4)
 
