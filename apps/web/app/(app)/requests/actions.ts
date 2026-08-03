@@ -290,7 +290,14 @@ export async function markRequestReviewedAction(
 ): Promise<MarkRequestReviewedActionState> {
   const contextResult = await getRequestActionContext();
   if (!contextResult.success) return contextResult;
-  const { orgId } = contextResult.data;
+  const { orgId, role } = contextResult.data;
+
+  // Marking a request reviewed is part of the same request-workflow
+  // lifecycle as triage — reuse canTriageRequests rather than inventing a
+  // separate permission (see docs/security/service-requests-authorization-audit.md).
+  if (!hasCapability(role, 'canTriageRequests')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not have permission to review requests.');
+  }
 
   const requestId = readString(formData, 'taskId');
   if (!requestId) {

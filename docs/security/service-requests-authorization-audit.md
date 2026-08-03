@@ -260,3 +260,87 @@ Only genuine product-policy questions — not implementation details that follow
 Per instruction, this audit stops here. No migration was created, no grants or RLS policies were modified, no test files were added, no application code was changed, the public PPM site was not touched, nothing was deployed, no production data was modified, Base44 was not started, F2/F4/F6/F7 were not addressed, and the `forge-v1.0.0` tag was not moved.
 
 Waiting for explicit approval before implementing `service_requests`/`estimates`/`site_visits` authorization hardening.
+
+---
+
+## 14. Implementation addendum — Forge V1.0.1 (2026-08-03)
+
+**Status: implemented and verified on `premier-crm-e2e`. Not yet applied to `premier-crm-prod`. Not merged. Not deployed.**
+
+Kevin approved Option A (§10) plus the following decisions, all implemented as described:
+
+1. **Option A applied to all three tables**: `authenticated`'s INSERT/UPDATE/DELETE grants revoked on `service_requests`, `estimates`, and `site_visits`; each table's broad `FOR ALL` policy replaced with a narrow `FOR SELECT`-only policy gated on `user_is_in_org(org_id)`.
+2. **`customer_insert_own_portal_service_requests` (SR-4) removed** — re-confirmed via exhaustive search (including the separate `premier-property-maintenance` marketing-site repo's portal implementation) that no application code depends on it before dropping it.
+3. **`markRequestReviewedAction` (SR-3) gained a capability gate** — reused `canTriageRequests` rather than inventing a new permission, since marking a request "reviewing" is part of the same request-workflow lifecycle as triage. `viewer` is now denied with a plain-language error; owner/admin/employee/subcontractor unaffected.
+4. **DELETE fully revoked on all three tables, no soft-delete added** — matches the jobs/quotes precedent from Batch A. Service-role E2E test cleanup is unaffected (uses the service-role client, not `authenticated`).
+5. **Release classification confirmed as Forge V1.0.1.** `forge-v1.0.0` was not moved. The `forge-v1.0.1` tag was **not** created during this implementation task, per instruction.
+6. **Customers and properties excluded from this patch**, recorded as the next focused authorization-audit target. Base44 remains blocked pending this patch's production deployment and verification.
+
+### Implementation branch
+
+`fix/service-requests-authorization-hardening`, based on `origin/main` at `5f6b7c1` (audit PR #96, merged prior to this implementation).
+
+### Migration
+
+`supabase/migrations/20260803080000_harden_service_requests_estimates_site_visits.sql` — applied to `premier-crm-e2e` via the Supabase MCP `apply_migration` tool; **not yet applied to `premier-crm-prod`**.
+
+### Grants/policies before → after (all three tables, same pattern)
+
+| | Before | After |
+|---|---|---|
+| `authenticated` grants | SELECT, INSERT, UPDATE, DELETE | SELECT only |
+| Policy | `FOR ALL` (broad, org-membership only) | `FOR SELECT` (org-membership only) |
+
+`service_requests` additionally: `customer_insert_own_portal_service_requests` dropped; `customer_select_own_service_requests` (portal customers' own-request read) is untouched. `site_visits` has no customer-portal policy at all, unchanged. `estimates` has no customer-facing policy at all, unchanged.
+
+Post-migration state verified directly on `premier-crm-e2e` via `information_schema.role_table_grants` and `pg_policies` — matches the intended state exactly on all three tables.
+
+### Important accuracy correction — `site_visits` grant-layer finding
+
+While re-validating the write-path audit before writing the migration, I found that `site_visits`'s `authenticated` role **already had zero INSERT/UPDATE/DELETE grants**, on both `premier-crm-e2e` and `premier-crm-prod`, predating this migration entirely — most likely revoked alongside `save_site_visit_inspection`'s own `authenticated` EXECUTE-grant revocation in an earlier migration (`20260802020200_site_visit_lifecycle_rpcs.sql`). Only the `internal_org_site_visits` RLS policy text was stale/misleading (it read as permissive, but the underlying GRANT already blocked any write attempt from reaching it). This means the original audit's claim that `site_visits` shared "the same broad-write vulnerability" as `service_requests`/`estimates` was **not accurate at the grant layer** for `site_visits` specifically — it was a live vulnerability for `service_requests` and `estimates`, but a defense-in-depth/consistency fix (not a new closure) for `site_visits`. The migration is still correct and necessary for `site_visits` (RLS-policy consistency, and a backstop against a future accidental re-GRANT), but this severity distinction should be understood when reviewing this patch's actual production risk reduction.
+
+### Test coverage
+
+- **Unit**: `apps/web/app/(app)/requests/actions.test.ts` — new `describe('request-review authorization boundary (markRequestReviewedAction)', ...)` block, 7 new tests (owner/admin/employee/subcontractor allowed, viewer denied with plain-language error and zero DB calls, unauthenticated denied before the capability check, denial holds when the action is invoked directly). Full suite: **187/187 pass**.
+- **E2E (new)**: `tests/e2e/authorization-service-requests-bot.spec.ts`, 30 tests covering INSERT/UPDATE/DELETE denial across all five roles and cross-org on all three tables, a 7-case parameterized sensitive-field UPDATE-denial loop on `service_requests` (including `org_id`, `customer_id`/`property_id`, triage fields, status, and generated relationships), a combined side-effects/no-mutation check, authorized-SELECT and cross-org-SELECT read-behavior checks, and a check that the removed portal-insert policy no longer permits a portal-shaped INSERT. **30/30 pass** against `premier-crm-e2e` post-migration.
+  - One transient authoring bug was found and fixed during verification: the `sensitiveUpdateCases` array was originally a literal evaluated at `describe`-body time, before `beforeAll` assigned `otherOrgId`/`customerId`/`propertyId` — the `org_id` and `customer_id`/`property_id` cases were silently sending empty PATCH bodies (JSON-stringified `undefined`), which no-op rather than exercising the boundary, producing 2 false-pass-looking failures (`error: null`, correctly flagged as unexpected by the test's own assertion). I directly verified via a `SET LOCAL role authenticated` transaction simulation against a live fixture row that raw Postgres correctly returns `42501 permission denied` for both an `org_id` UPDATE and a `customer_id`/`property_id` UPDATE — confirming this was a test-authoring bug, not a security gap. Fixed by converting each case to a factory function evaluated inside the test body, after fixtures exist.
+
+### Legitimate-workflow regression verification
+
+Ran the full affected suite (`customer-intake-bot`, `employee-estimate-workflow-bot`, `estimate-pricing-approval-presentation-bot`, `estimate-pricing-review-handoff-bot`, `estimates-lifecycle-bot`, `quote-response-bot`, `quote-totals-recalc-bot`, `request-conversion-bot`, `request-site-visit-workflow-bot`) against a clean dev server pointed at `premier-crm-e2e` post-migration. Final result: **all pass except one pre-existing, unrelated flake** — `employee-estimate-workflow-bot.spec.ts` test 12 ("only one shared customer exists") fails intermittently on a customers-list-page locator timing issue; it does not touch `service_requests`/`estimates`/`site_visits` grants, RLS, or the `markRequestReviewedAction` capability gate, and is not attributable to this patch. `customer-intake-bot.spec.ts` test 7 ("owner marks a new request as reviewing") — which directly exercises the new `markRequestReviewedAction` capability gate through the real UI — passes.
+
+(An earlier run of this same suite showed 5 failures; those were traced to an operational mistake during this task, not a code defect — a concurrent `pnpm --filter web build` was run in the background while the dev server serving the E2E suite was live, and `next build`/`next dev` share the same `.next` output directory, corrupting it mid-run. The dev server was restarted with a clean `.next` and the affected specs were re-run cleanly, confirming this.)
+
+### Full validation (Phase 7)
+
+- `pnpm test`: **187/187 pass**.
+- `pnpm typecheck`: **pass**, zero errors.
+- `pnpm --filter web build`: **pass**, zero errors.
+
+### Unresolved adjacent findings (not addressed by this patch, unchanged from the original audit)
+
+- SR-1/SR-2 (customer_id/property_id FK cross-org consistency not enforced at the DB layer) — out of scope, listed in §9/§12 as a customers/properties-audit-adjacent gap.
+- Customers and properties themselves — explicitly next audit target per Kevin's decision.
+- F2/F4/F6/F7 (from the original Forge V1 readiness audit) — not addressed, out of scope.
+
+### Production deployment plan (prepared, not executed)
+
+1. Confirm this implementation PR has been reviewed and explicitly approved for production deployment.
+2. Re-confirm `premier-crm-prod`'s current grants/policies on `service_requests`/`estimates`/`site_visits` match the documented pre-migration state (no drift since the original audit).
+3. Apply `20260803080000_harden_service_requests_estimates_site_visits.sql` to `premier-crm-prod` via `npx supabase db push --linked` (not the MCP `apply_migration` tool, to keep prod's migration version numbering aligned with local filenames — established convention).
+4. Verify post-apply grants/policies on `premier-crm-prod` directly (`information_schema.role_table_grants`, `pg_policies`) match the intended end state exactly, on all three tables.
+5. Run `pnpm db:types` and commit the regenerated `packages/db/types.ts` if it changes (expected: no change, since no columns were added/removed).
+6. Merge the implementation PR to `main`.
+7. Confirm the Vercel production deployment triggered by the merge succeeds (check via `list_deployments`/`get_deployment`).
+8. Smoke-test in production as an owner-role user: confirm request review, estimate creation from a request, and site-visit scheduling still work end-to-end (all legitimate paths use service-role/RPC, so this should be a no-op change from the user's perspective).
+9. Directly attempt a same-shape unauthorized direct-REST write against `premier-crm-prod` as a real non-owner staff account (mirroring the E2E suite's own tests) to confirm the production grant/policy change is actually live, not just applied.
+10. Monitor `get_logs`/`get_advisors` on `premier-crm-prod` for any unexpected permission-denied errors from legitimate traffic in the hour following deployment — this would indicate an undiscovered legitimate write dependency that the write-path audit missed.
+11. If step 10 surfaces a genuine legitimate dependency: do not re-grant broadly; identify the exact path and route it through a service-role server action or a new narrowly-scoped `SECURITY DEFINER` RPC, matching the existing pattern.
+12. Update `docs/SESSION_STATE.md` to record production deployment completion and the exact verification results.
+13. Confirm with Kevin that Base44 is now unblocked for the customers/properties surface, pending the next focused audit.
+14. Schedule (do not start without separate approval) the customers/properties authorization audit as the next security-track item.
+15. Create and publish the `forge-v1.0.1` tag only after production verification (steps 1-10) passes — not before, and not as part of this implementation task.
+
+**Estimated production risk: Low.** The write-path audit (§4, re-confirmed twice) found zero legitimate authenticated-client dependency on direct writes to any of the three tables; every legitimate write already goes through a service-role server action or a `SECURITY DEFINER` RPC, both unaffected by revoking `authenticated`'s base-table grants. `site_visits` is grant-layer already-safe in production today (see correction above), further reducing the incremental risk for that one table specifically.
+
+**Recommended production-rollout prompt** (for Kevin to issue when ready): *"Approve production deployment of the Forge V1.0.1 authorization-hardening patch (branch `fix/service-requests-authorization-hardening`, migration `20260803080000_harden_service_requests_estimates_site_visits.sql`). Apply the migration to `premier-crm-prod`, merge the implementation PR, verify the Vercel deployment, and run the production verification steps in §14's deployment plan. Do not create the `forge-v1.0.1` tag until verification passes."*

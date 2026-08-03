@@ -34,7 +34,11 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
-import { createEstimateFromRequestAction, createJobFromRequestAction } from './actions';
+import {
+  createEstimateFromRequestAction,
+  createJobFromRequestAction,
+  markRequestReviewedAction,
+} from './actions';
 
 const REQUEST_ID = '33333333-3333-3333-3333-333333333333';
 const ORG_ID = 'org-1';
@@ -158,5 +162,79 @@ describe('remote-estimate conversion path is unaffected by the Batch A fix', () 
     const result = await createEstimateFromRequestAction(null, buildFormData(REQUEST_ID));
 
     expect(result.success).toBe(true);
+  });
+});
+
+// Regression coverage for the Forge V1.0.1 security patch
+// (docs/security/service-requests-authorization-audit.md, Finding SR-3):
+// markRequestReviewedAction() had no capability check at all — any
+// signed-in org member, including viewer, could mark a request reviewed.
+// Fixed by reusing the existing canTriageRequests capability (request
+// review is part of the same request-workflow lifecycle as triage), not
+// by inventing a new permission.
+describe('request-review authorization boundary (markRequestReviewedAction)', () => {
+  function buildReviewFormData(requestId: string): FormData {
+    const fd = new FormData();
+    fd.set('taskId', requestId);
+    return fd;
+  }
+
+  function mockServiceClientForReview() {
+    fromMock.mockImplementation((table: string) => {
+      if (table === 'service_requests') {
+        return { update: () => ({ eq: () => ({ eq: () => Promise.resolve({ error: null }) }) }) };
+      }
+      throw new Error(`Unexpected table in test: ${table}`);
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createServiceClientMock.mockReturnValue({ from: fromMock });
+    logActivityMock.mockResolvedValue(undefined);
+  });
+
+  for (const role of ['owner', 'admin', 'employee', 'subcontractor'] as const) {
+    it(`${role} can mark a request reviewed (canTriageRequests)`, async () => {
+      mockSignedInAs(role);
+      mockServiceClientForReview();
+
+      const result = await markRequestReviewedAction(null, buildReviewFormData(REQUEST_ID));
+
+      expect(result.success).toBe(true);
+    });
+  }
+
+  it('viewer CANNOT mark a request reviewed — denied at the action boundary before any DB call', async () => {
+    mockSignedInAs('viewer');
+
+    const result = await markRequestReviewedAction(null, buildReviewFormData(REQUEST_ID));
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain('review requests');
+      expect(result.error).not.toContain('canTriageRequests');
+    }
+    expect(createServiceClientMock).not.toHaveBeenCalled();
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('cross-org / unauthenticated: getRequestActionContext failure is returned before the capability check ever runs', async () => {
+    getServerSupabaseMock.mockResolvedValue({
+      auth: { getUser: () => Promise.resolve({ data: { user: null }, error: null }) },
+    });
+
+    const result = await markRequestReviewedAction(null, buildReviewFormData(REQUEST_ID));
+
+    expect(result.success).toBe(false);
+    expect(createServiceClientMock).not.toHaveBeenCalled();
+  });
+
+  it('remains denied even when the action is invoked directly, without going through the UI button', async () => {
+    mockSignedInAs('viewer');
+
+    const result = await markRequestReviewedAction(null, buildReviewFormData(REQUEST_ID));
+
+    expect(result.success).toBe(false);
   });
 });
