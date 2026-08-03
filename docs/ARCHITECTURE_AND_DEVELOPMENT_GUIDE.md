@@ -238,3 +238,50 @@ with a line-items editor and a pricing-review panel gating quote creation).
 `getMySiteVisitSummary()` with the portal-scoped (RLS-authenticated) client
 for every one of the customer's own requests — the only site-visit data the
 portal ever reads.
+
+## Multi-organization active-org selection
+
+**Live in production** since 2026-08-02 (PR #82, merge commit `2d51546`).
+Built as a prerequisite for creating the Premier CRM Demonstration
+organization: `getActiveOrgContext()` (called from ~36 existing sites)
+previously hard-rejected any account belonging to more than one active
+`org_members` row, which would have broken Kevin's real PPM session the
+moment a second membership was added for him. Full design/verification
+record: `docs/implementation/premier-crm-demonstration-organization.md`.
+
+**Mechanism**: a nullable `user_profiles.active_org_id` preference column,
+written only through a guarded RPC:
+
+```
+switch_active_org(p_org_id) — SECURITY DEFINER, verifies the caller has an
+  active org_members row for p_org_id before writing the preference;
+  granted to `authenticated` because it is self-service and self-verifying.
+```
+
+`getActiveOrgContext()`'s resolution order, with **zero signature changes**
+at any call site: a single active membership resolves exactly as before
+(`hasMultipleOrgs: false`); more than one active membership uses the stored
+`active_org_id` if it matches one of the caller's own memberships, otherwise
+falls back deterministically to the **oldest** membership by `joined_at` —
+never a random or newest-wins default, so adding a second org to an account
+never silently changes which org that account lands in.
+
+**RLS vs. preference — do not conflate the two.** Table-level access is
+governed by genuine active `org_members` rows (`user_is_in_org()`), not by
+`active_org_id`. A multi-org user can read either org's data at the RLS
+layer regardless of which org is "active" — the preference only controls
+which org the *application* queries and displays by default (see
+`tests/e2e/multi-org-switching-bot.spec.ts` test 4b for the explicit,
+intentionally-documented proof of this).
+
+**UI**: `apps/web/app/(app)/today/_components/org-switcher.tsx` (client
+component, renders only when `hasMultipleOrgs`), wired through
+`switchActiveOrgAction` in `apps/web/app/(app)/today/actions.ts`.
+
+**New capability precedent**: `bootstrap_demonstration_organization()` is
+the second RPC in this codebase (after this workflow's `save_site_visit_inspection`)
+that is deliberately **not** granted to `authenticated` — it is
+`service_role`-only, idempotent by slug, invoked exclusively via a one-off
+internal administrative script, with no UI route calling it. Use this as
+the template for any future "internal-only, no general-purpose feature"
+RPC: guard by grant, not by hoping the UI never calls it.
