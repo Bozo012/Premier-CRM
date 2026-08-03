@@ -56,12 +56,12 @@ This sentence is for architecture/planning documentation. It is not displayed an
 
 ---
 
-## Demo organization rename (implemented)
+## Demo organization rename (live in production)
 
 - **Before**: `organizations.name = 'Premier CRM Demonstration'`
-- **After**: `organizations.name = 'Forge Demonstration'`
-- **Unchanged**: `id` (`a0c9b59d-77d9-48ad-9760-8555c9ed8fe5`), `slug` (`premier-crm-demonstration` — treated as a stable technical identifier, not renamed during Forge V1), `timezone`, all memberships, customer accounts, properties, workflow records, invoices/payments, Storage paths, and historical audit records.
-- Implemented via a new, additive migration (`supabase/migrations/20260803060000_forge_demo_org_display_name.sql`), not by editing the immutable original bootstrap migration — see the naming audit §5 and §9 for the full rationale and rollback plan.
+- **After (confirmed live)**: `organizations.name = 'Forge Demonstration'`
+- **Unchanged, confirmed by direct query against `premier-crm-prod`**: `id` (`a0c9b59d-77d9-48ad-9760-8555c9ed8fe5`), `slug` (`premier-crm-demonstration` — treated as a stable technical identifier, not renamed during Forge V1), `timezone` (`America/New_York`), memberships (3), customers (2), properties (3), service requests (4), invoices (5), and all historical audit records.
+- Implemented via a new, additive migration (`supabase/migrations/20260803060000_forge_demo_org_display_name.sql`), not by editing the immutable original bootstrap migration. Applied to `premier-crm-e2e` first (no-op — that org was never bootstrapped there), then to `premier-crm-prod` via `npx supabase db push --linked` — see `docs/SESSION_STATE.md` for the full deployment record.
 
 ---
 
