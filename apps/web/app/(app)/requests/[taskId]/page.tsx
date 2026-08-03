@@ -35,6 +35,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   }
   const { orgId, role } = orgContextResult.data;
   const canCreateDirectWorkOrder = hasCapability(role as OrgRole, 'canCreateDirectWorkOrder');
+  const canTriageRequests = hasCapability(role as OrgRole, 'canTriageRequests');
 
   const result = await getRequestById(supabase, { taskId, orgId });
 
@@ -105,7 +106,11 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
           jobId={request.jobId}
           siteVisitId={request.siteVisitId}
         />
-        <ActionsCard request={request} canCreateDirectWorkOrder={canCreateDirectWorkOrder} />
+        <ActionsCard
+          request={request}
+          canCreateDirectWorkOrder={canCreateDirectWorkOrder}
+          canTriageRequests={canTriageRequests}
+        />
       </div>
     </main>
   );
@@ -225,9 +230,11 @@ function PropertyCard({ request }: { request: RequestDetail }) {
 function ActionsCard({
   request,
   canCreateDirectWorkOrder,
+  canTriageRequests,
 }: {
   request: RequestDetail;
   canCreateDirectWorkOrder: boolean;
+  canTriageRequests: boolean;
 }) {
   const isReviewed = request.status !== 'new';
   const hasEstimate = !!request.estimateId;
@@ -273,7 +280,7 @@ function ActionsCard({
           </>
         )}
 
-        {!isReviewed ? (
+        {!isReviewed && canTriageRequests ? (
           <MarkReviewedButton taskId={request.id} />
         ) : null}
       </div>
