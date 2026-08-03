@@ -14,6 +14,7 @@ import {
 } from '@premier/shared';
 import {
   createChangeOrderDraft,
+  createDepositInvoice,
   createDraftInvoiceFromJob,
   createDraftQuote,
   createSchedulingSlot,
@@ -449,6 +450,32 @@ export async function waiveDepositAction(
 
   revalidatePath(`/jobs/${jobId}`);
   return ok({ jobId });
+}
+
+export type CreateDepositInvoiceActionState = Result<{ jobId: string; invoiceId: string }>;
+
+export async function createDepositInvoiceAction(
+  _previousState: CreateDepositInvoiceActionState | null,
+  formData: FormData
+): Promise<CreateDepositInvoiceActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, role, userId } = access.data;
+
+  if (!hasCapability(role, 'canManageDeposits')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit managing deposits.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  if (!jobId) return err(ErrorCode.VALIDATION_ERROR, 'Job ID is required.');
+
+  const serviceClient = createServiceClient();
+  const result = await createDepositInvoice(serviceClient, { orgId, jobId, actorUserId: userId });
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/invoices/${result.data.invoiceId}`);
+  return ok({ jobId, invoiceId: result.data.invoiceId });
 }
 
 // ---------------------------------------------------------------------------

@@ -39,6 +39,7 @@ import { CreateSchedulingSlotForm } from '../_components/create-scheduling-slot-
 import { DepositRequirementForm } from '../_components/deposit-requirement-form';
 import { GenerateFinalInvoiceButton } from '../_components/generate-final-invoice-button';
 import { ScheduleJobForm } from '../_components/schedule-job-form';
+import { CreateDepositInvoiceButton } from '../_components/create-deposit-invoice-button';
 import { WaiveDepositButton } from '../_components/waive-deposit-button';
 
 interface JobDetailPageProps {
@@ -474,7 +475,21 @@ function DepositCard({
           </p>
         ) : null}
         {status === 'none' ? <DepositRequirementForm jobId={jobId} /> : null}
-        {status === 'required' ? <WaiveDepositButton jobId={jobId} /> : null}
+        {status === 'required' && !depositState?.requirement?.deposit_invoice_id ? (
+          <div className="flex flex-col gap-2">
+            <CreateDepositInvoiceButton jobId={jobId} />
+            <WaiveDepositButton jobId={jobId} />
+          </div>
+        ) : null}
+        {status === 'required' && depositState?.requirement?.deposit_invoice_id ? (
+          <p className="text-sm text-muted-foreground">
+            Deposit invoice created, awaiting payment —{' '}
+            <a className="underline" href={`/invoices/${depositState.requirement.deposit_invoice_id}`}>
+              view it
+            </a>
+            .
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );

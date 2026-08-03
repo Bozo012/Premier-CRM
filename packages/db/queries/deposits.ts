@@ -10,8 +10,11 @@ import { ErrorCode, err, ok, type Result } from '@premier/shared';
 
 import type { DbClient } from '../client';
 import type { Database } from '../types';
+import { addInvoiceLineItem } from './invoices';
 
 export type JobDeposit = Database['public']['Tables']['job_deposits']['Row'];
+
+const DEPOSIT_INVOICE_UNIQUE_VIOLATION = '23505';
 
 export type DepositPaymentStatus =
   | 'none'
@@ -159,4 +162,115 @@ export async function waiveDepositRequirement(
   });
 
   return ok({ requirement: data });
+}
+
+/**
+ * Creates the kind='deposit' invoice for a job's already-`required` deposit
+ * requirement, and links it back via job_deposits.deposit_invoice_id — the
+ * step no application code previously performed (found while populating the
+ * Demo organization; see docs/implementation/deposit-invoice-creation.md).
+ * Idempotent: a second call for the same job returns the existing deposit
+ * invoice rather than creating a duplicate, both via the fast-path lookup
+ * and, under a genuine race, via `invoices_one_deposit_per_job` catching the
+ * unique_violation and re-selecting the winner — same pattern as
+ * generateEstimateFromSiteVisit / createJobFromAcceptedQuote.
+ */
+export async function createDepositInvoice(
+  client: DbClient,
+  args: { orgId: string; jobId: string; actorUserId: string }
+): Promise<Result<{ invoiceId: string; alreadyExisted: boolean }>> {
+  const { data: requirement, error: requirementError } = await client
+    .from('job_deposits')
+    .select('*')
+    .eq('org_id', args.orgId)
+    .eq('job_id', args.jobId)
+    .maybeSingle();
+
+  if (requirementError) return err(ErrorCode.DB_ERROR, requirementError.message);
+  if (!requirement || requirement.requirement_status !== 'required') {
+    return err(ErrorCode.VALIDATION_ERROR, 'This job has no active deposit requirement to invoice.');
+  }
+
+  if (requirement.deposit_invoice_id) {
+    const { data: existing } = await client
+      .from('invoices')
+      .select('id, status')
+      .eq('id', requirement.deposit_invoice_id)
+      .maybeSingle();
+    if (existing && existing.status !== 'void') {
+      return ok({ invoiceId: existing.id, alreadyExisted: true });
+    }
+  }
+
+  let amount = requirement.required_amount;
+  if (amount === null && requirement.required_percentage !== null) {
+    const { data: job, error: jobError } = await client
+      .from('jobs')
+      .select('quoted_total')
+      .eq('id', args.jobId)
+      .eq('org_id', args.orgId)
+      .maybeSingle();
+    if (jobError) return err(ErrorCode.DB_ERROR, jobError.message);
+    if (!job?.quoted_total) {
+      return err(
+        ErrorCode.VALIDATION_ERROR,
+        'This job has a percentage-based deposit but no quoted total to calculate it from.'
+      );
+    }
+    amount = Math.round(job.quoted_total * (requirement.required_percentage / 100) * 100) / 100;
+  }
+  if (amount === null) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Deposit requirement has no amount or percentage set.');
+  }
+
+  const { data: invoice, error: insertError } = await client
+    .from('invoices')
+    .insert({ org_id: args.orgId, job_id: args.jobId, kind: 'deposit', status: 'draft', title: 'Deposit invoice' })
+    .select('id')
+    .single();
+
+  if (insertError) {
+    if (insertError.code === DEPOSIT_INVOICE_UNIQUE_VIOLATION) {
+      const { data: raceWinner } = await client
+        .from('invoices')
+        .select('id')
+        .eq('job_id', args.jobId)
+        .eq('kind', 'deposit')
+        .neq('status', 'void')
+        .maybeSingle();
+      if (raceWinner) return ok({ invoiceId: raceWinner.id, alreadyExisted: true });
+    }
+    return err(ErrorCode.DB_ERROR, insertError.message);
+  }
+
+  const lineItemResult = await addInvoiceLineItem(client, {
+    orgId: args.orgId,
+    input: {
+      invoiceId: invoice.id,
+      name: 'Deposit',
+      description: 'Deposit required before scheduling/work begins.',
+      unit: 'ea',
+      quantity: 1,
+      unitPrice: amount,
+    },
+  });
+  if (!lineItemResult.success) return lineItemResult;
+
+  const { error: linkError } = await client
+    .from('job_deposits')
+    .update({ deposit_invoice_id: invoice.id })
+    .eq('org_id', args.orgId)
+    .eq('job_id', args.jobId);
+  if (linkError) return err(ErrorCode.DB_ERROR, linkError.message);
+
+  await client.from('activity_log').insert({
+    org_id: args.orgId,
+    entity_type: 'job',
+    entity_id: args.jobId,
+    event_type: 'deposit_invoice_created',
+    message: 'Deposit invoice created.',
+    actor_user_id: args.actorUserId,
+  });
+
+  return ok({ invoiceId: invoice.id, alreadyExisted: false });
 }

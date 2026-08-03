@@ -165,6 +165,7 @@ export {
   type ChangeOrderThreadDetail,
 } from './change-orders';
 export {
+  createDepositInvoice,
   getDepositState,
   setDepositRequirement,
   waiveDepositRequirement,
