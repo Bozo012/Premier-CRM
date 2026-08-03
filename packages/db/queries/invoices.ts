@@ -689,34 +689,24 @@ export async function updateInvoiceMetadata(
 // same as the quotes module does for quote_line_items.
 // ---------------------------------------------------------------------------
 
+/**
+ * Recalculates subtotal/tax_amount/total for an invoice. The arithmetic
+ * itself lives in exactly one place — the recalc_invoice_totals() SQL
+ * function (migration 20260803040000) — so this stays a thin wrapper
+ * rather than a second copy of the formula that could drift from it. A
+ * database trigger on invoice_line_items already calls the same SQL
+ * function automatically on every insert/update/delete (covering
+ * generateFinalInvoiceFromWorking()'s raw line-item copy, which doesn't go
+ * through this TS layer at all); this explicit call after each of this
+ * file's own mutations is a defensive belt-and-suspenders, not the primary
+ * mechanism. Never touches amount_paid — owned exclusively by the
+ * apply_payment_to_invoice() payment trigger.
+ */
 async function recalcInvoiceTotals(
   client: DbClient,
   args: { invoiceId: string; orgId: string }
 ): Promise<void> {
-  const { data: invoice } = await client
-    .from('invoices')
-    .select('tax_pct, discount_amount, status')
-    .eq('id', args.invoiceId)
-    .eq('org_id', args.orgId)
-    .maybeSingle();
-
-  const taxPct = invoice?.tax_pct ?? 0;
-  const discountAmount = invoice?.discount_amount ?? 0;
-
-  const { data: agg } = await client
-    .from('invoice_line_items')
-    .select('total')
-    .eq('invoice_id', args.invoiceId);
-
-  const subtotal = (agg ?? []).reduce((sum, row) => sum + (row.total ?? 0), 0);
-  const taxAmount = Math.round(subtotal * (taxPct / 100) * 100) / 100;
-  const total = subtotal + taxAmount - discountAmount;
-
-  await client
-    .from('invoices')
-    .update({ subtotal, tax_amount: taxAmount, total })
-    .eq('id', args.invoiceId)
-    .eq('org_id', args.orgId);
+  await client.rpc('recalc_invoice_totals', { p_invoice_id: args.invoiceId });
 }
 
 async function assertDraftInvoice(
