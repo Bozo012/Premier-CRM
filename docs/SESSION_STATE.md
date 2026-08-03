@@ -1,7 +1,7 @@
 # Session State
 
 ## Last Updated
-2026-08-03 (Premier CRM Demonstration organization **fully populated with a permanent, verified dataset** covering all three triage paths. Three real production defects found and fixed during population. Brandon's Demo onboarding started then **deferred by Kevin** before first-login verification. Kevin created his own dedicated Demo employee test account (`sommerskevin3@gmail.com`) and completed the first real UI-observation checkpoint — found and fixed 2 more presentation defects on the estimate page (PR #86, commit `96a40e6`, deployed), including a new employee-to-owner pricing-review handoff. PPM remains blank.)
+2026-08-03 (**Pre-Base44 Workflow Refinement phase complete.** Today-page role-aware "Needs your attention" action queue, mobile bottom-nav containment fix, and inspection-form list-field clarity all shipped (PR #87, commit `cca3ba7`, deployed to `app.ppmnky.com`, verified READY). Hazards-section proposal, request-list density recommendation, `docs/ux/base44-handoff.md`, and `docs/ux/base44-compatibility-spike-plan.md` written as design-only deliverables — none implemented. **Forge/Foundry naming audit is the next checkpoint** (approved naming model: product = Forge, umbrella = Foundry, business = Premier Property Maintenance, unchanged); the Base44 compatibility spike waits behind it. **Forge V1 has not yet been tagged.** Base44 work has not begun.)
 
 ## One coherent story so far
 
@@ -31,14 +31,23 @@
     - All three merged to `main`, migrations applied to both `premier-crm-e2e` and `premier-crm-prod`, deployed, covered by new permanent regression tests.
 16. **Brandon's Demo onboarding was started, then explicitly deferred by Kevin** before first-login verification. A real structural conflict was found first (the real accept-invite flow refuses to activate anything when a user has more than one pending invite — Brandon already had a pending PPM one, which Kevin's instructions forbid touching) and Kevin approved a one-time exception: Demo `org_members` row created directly (`ebdd5826-...`, employee), email confirmed via the Admin API, a Supabase-native password-reset email triggered. Kevin then changed plans before Brandon's first login — Brandon's account is preserved exactly as left (Demo membership intact, PPM invite untouched), but no login/capability verification was performed. Full status: `docs/implementation/brandon-demo-onboarding-and-observation.md`.
 17. **Kevin created his own dedicated Demo employee test account** — his real, pre-existing `sommerskevin3@gmail.com` account (already a legitimate PPM employee, one of the 4 pre-existing PPM members) was added to Demo as `employee` (`org_members.id = ec13d3e3-...`). A repeatable "Kevin UI Observation Scenario" training record (`SR-000012`, site visit `2422de29-...`, left `awaiting_scheduling`) was prepared for him to work through manually via the real UI. Observation framework: `docs/implementation/kevin-demo-ui-observation.md`.
-18. **Stopping point reached**: Demo organization population is complete and verified; Kevin's own UI-testing setup is ready. **Brandon's further onboarding, Platform v1.0 tagging, and Base44 work remain explicitly not authorized. Waiting on Kevin's UI feedback before any interface changes.**
+18. **Kevin's first UI-observation checkpoint fixed** (PR #86, commit `96a40e6`): raw "Approve pricing" button/error shown to employees replaced with a real employee-to-owner pricing-review handoff (`pricing_review_status`, submit-for-review, return-for-changes-with-note, line-item locking while pending); stale "Schedule site visit" control removed from site-visit-generated estimates.
+19. **Pre-Base44 Workflow Refinement phase complete** (PR #87, commit `cca3ba7`, deployed and verified): role-aware "Needs your attention" Today action queue (pricing-review/create-quote/send-quote tasks, capability-gated, org-scoped, no separate dismissal state — see `packages/db/queries/today-actions.ts` and `docs/ux/base44-handoff.md` §5); mobile bottom-nav badge-crowding fix (corner-positioned badge, safe-area padding); inspection-form measurement/quantity/material list fields given visible per-column labels (`COLUMN_META` in `inspection-form.tsx`) fixing the ambiguous raw-key placeholder issue from Kevin's observation. New `today-action-queue-bot.spec.ts` (7 tests). Design-only deliverables written, not implemented: `docs/ux/hazards-section-proposal.md`, `docs/ux/request-list-density-recommendation.md`, `docs/ux/base44-handoff.md`, `docs/ux/base44-compatibility-spike-plan.md`.
+
+## Clean Checkpoint (established this phase, per instruction)
+- `main` HEAD: `cca3ba7` (PR #87 squash-merge).
+- Production deployment: `dpl_7KiYKjW6rdb7r2ZHYWDaDV7KFvCj`, state `READY`, aliased to `app.ppmnky.com`, confirmed serving commit `cca3ba7`.
+- Working tree: clean at time of this checkpoint (only this doc-update commit pending).
+- `pnpm test`: 138/138 pass. `pnpm typecheck`: clean across all packages. `pnpm --filter web build`: clean.
+- No uncommitted naming edits exist. Base44 work has not begun. Forge V1 has not been tagged.
+- **Next checkpoint**: Forge/Foundry naming audit (read-only, `docs/architecture/forge-foundry-naming-audit.md`, on a dedicated branch, e.g. `chore/forge-brand-separation`) — not started as of this checkpoint. The Base44 compatibility spike remains queued behind it; Forge V1 will not be tagged until the naming checkpoint and spike are both complete and approved.
 
 ## Current Branches
-- CRM: `main` at `96a40e6` (includes PR #80–#86). Feature/hotfix branches merged and deleted per-PR from this phase onward.
+- CRM: `main` at `cca3ba7` (includes PR #80–#87). Feature/hotfix branches merged and deleted per-PR from this phase onward.
 - Marketing site (`premier-property-maintenance`): `main` at `8807fa9` (unchanged this phase).
 
 ## Current Goal
-Both real organizations (Premier Property Maintenance and Premier CRM Demonstration) exist in production; Demo has a complete, permanent, verified demonstration dataset covering all three triage paths, plus a prepared training scenario for Kevin's own hands-on UI testing. Next: wait for Kevin's friction reports and iterate one at a time. Longer-term, not yet authorized: resume Brandon's onboarding, tag Platform v1.0, or begin Base44 work.
+Both real organizations (Premier Property Maintenance and Premier CRM Demonstration) exist in production; Demo has a complete, permanent, verified demonstration dataset. The Pre-Base44 Workflow Refinement phase (Today action queue, mobile-nav fix, inspection-form clarity, plus the hazards/request-list/Base44-handoff/spike-plan design deliverables) is complete, tested, and deployed. Next, in order: (1) Forge/Foundry naming audit — read-only, for Kevin's approval, not yet started; (2) approved naming implementation, if any; (3) Base44 compatibility spike (plan prepared in `docs/ux/base44-compatibility-spike-plan.md`, not run); (4) Forge V1 baseline tag, only after the above. Not yet authorized: Brandon's further onboarding, any V1 tag, Base44 implementation work, Resend configuration.
 
 ## Business policy decisions locked in
 - Employee pricing-approval capability stays owner/admin-only (`canApproveEstimatePricing`).
@@ -67,10 +76,10 @@ Both real organizations (Premier Property Maintenance and Premier CRM Demonstrat
 - Production marketing site: `www.ppmnky.com` / `ppmnky.com`, serving commit `8807fa9` (unchanged this phase).
 
 ## Test Status (final, this phase)
-`pnpm typecheck` clean; `pnpm test` 124/124 (was 118 at start of Phase 4; +6 deposit-invoice-action authorization tests). New permanent e2e coverage this phase: `deposit-invoice-creation-bot` (7/7), `quote-totals-recalc-bot` (4/4), `invoice-totals-recalc-bot` (4/4). Full regression re-verified against `premier-crm-e2e`: `request-site-visit-workflow-bot` (20/20), `integrated-lifecycle-bot` (3/3), `working-invoice-protection-bot` (2/2) — all clean when run without dev-server worker contention (parallel-worker runs showed a known, pre-existing timing flake unrelated to these changes, confirmed by clean isolated reruns). `pnpm --filter web build` clean throughout.
+`pnpm typecheck` clean across all packages; `pnpm test` 138/138 (up from 124 — includes the pricing-review handoff and Today-action-queue unit coverage added across PRs #86–#87). New permanent e2e coverage this phase: `today-action-queue-bot` (7/7) — role visibility, task-lifecycle transitions, cross-org isolation, capability-restricted roles. Full regression re-verified against `premier-crm-e2e`: `request-site-visit-workflow-bot` (20/20), `integrated-lifecycle-bot` (3/3, isolated — confirmed the same known pre-existing worker-contention flake when run alongside other suites, not a regression), `estimate-pricing-approval-presentation-bot` + `estimate-pricing-review-handoff-bot` (14/14, no regression to the PR #86 handoff). `pnpm --filter web build` clean.
 
 ## Next Exact Step
-Awaiting explicit approval before: onboarding Brandon, or tagging Platform v1.0. Base44 work not begun.
+Begin the read-only Forge/Foundry naming audit on a dedicated branch (e.g. `chore/forge-brand-separation`), producing `docs/architecture/forge-foundry-naming-audit.md` for Kevin's review. Do not implement any rename yet. Base44 compatibility spike and Forge V1 tagging remain queued behind Kevin's approval of that audit. Brandon's further onboarding remains separately not authorized.
 
 ## Checkpoint Routine (unchanged)
 Update this file after each meaningful milestone and before/after any production action. Commit in small logical checkpoints. Never commit secrets. Never leave important decisions only in chat history.
