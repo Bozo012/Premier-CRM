@@ -164,8 +164,98 @@ This is not a broad "the product isn't ready" verdict — the vast majority of t
 
 ---
 
-## Stopping point
+## Stopping point (original audit, 2026-08-03)
 
 Per instruction, this audit stops here. No repairs were implemented, no migrations were created, no code was merged, nothing was deployed, Resend was not configured, no PPM data was altered, no repositories/domains/infrastructure were renamed, Base44 was not started, and Forge V1 was not tagged.
 
 Waiting for explicit selection of: Batch A, Batch B, Batch C, Batch D, the V1 tag, or the Base44 compatibility spike.
+
+---
+
+## Batch A — Production Verification (2026-08-03, dated addendum — original audit evidence above is unmodified)
+
+Status: Batch A (Findings F1, F2's-sibling-fix-scope, F3, plus the database-boundary hardening found during validation) is implemented, merged, deployed to production, and independently verified in production. This section records that verification. It does not alter anything in the sections above.
+
+### Timeline and artifacts
+
+- **PR #92** (`fix/forge-v1-batch-a-authorization`) — action-layer fix (commit `26df65b`) + database-boundary fix (commit `623d0a9`) — **merged** via squash, merge commit **`9cd737b`**.
+- **PR #91** (this audit document) — **merged** via squash immediately prior to this addendum, merge commit `2dbe8a7`, so this document could live on `main` for the addendum below. Original audit content above is byte-identical to what PR #91 contained; only this addendum is new.
+- **main HEAD**: `2dbe8a7` (PR #92 then PR #91, in that order).
+- **Production deployment**: Vercel `dpl_Toh88Xdwgn6Zx6PtBLJavbyxvWBv`, state `READY`, aliased to `app.ppmnky.com`, confirmed serving commit `9cd737b` (the PR #92 merge commit) before the migration was applied.
+- **Migration**: `supabase/migrations/20260803070000_harden_jobs_and_quote_creation_boundary.sql`, applied to `premier-crm-prod` (`apnbpcauqrjvkoleisde`) via `npx supabase db push --linked` after confirming a dry run showed exactly this one migration pending.
+
+### Prior vs. new grants/policies (production, directly queried)
+
+| | Before | After |
+|---|---|---|
+| `jobs` grants (`authenticated`) | SELECT, INSERT, UPDATE, DELETE | **SELECT only** |
+| `quotes` grants (`authenticated`) | SELECT, INSERT, UPDATE, DELETE | **SELECT only** |
+| `jobs` grants (`service_role`) | full (SELECT/INSERT/UPDATE/DELETE/...) | **unchanged** |
+| `quotes` grants (`service_role`) | full | **unchanged** |
+| `jobs` policy | `org_isolation_jobs` (`FOR ALL`, org-only) | `jobs_select_org_members` (`FOR SELECT` only) + `customer_select_own_jobs` (unchanged) |
+| `quotes` policy | `org_isolation_quotes` (`FOR ALL`, org-only) | `quotes_select_org_members` (`FOR SELECT` only) |
+| `service_requests` / `activity_log` | unchanged | **unchanged** (confirmed by direct query — not touched by this migration) |
+
+### Production denial evidence (**production-executed**, not E2E)
+
+Verified directly against `premier-crm-prod` using real, already-existing production accounts (Kevin — owner on both PPM and Demo; `e2e-admin-bot@example.com` — admin, PPM only; `delivered+e2e-employee-persistent@resend.dev` — employee, PPM only), via `SET LOCAL role authenticated; SET LOCAL request.jwt.claims = '{"sub":"<real user id>"}'` inside a transaction (each attempt either errored — auto-aborting the transaction — or was explicitly rolled back; zero commits occurred in any of the checks below):
+
+- **Owner** (Kevin, real PPM owner) — direct `jobs` INSERT into PPM: **denied**, `42501 permission denied for table jobs`.
+- **Admin** (`e2e-admin-bot`, real PPM admin) — direct `jobs` INSERT into PPM: **denied**, same error.
+- **Employee** (`delivered+e2e-employee-persistent`, real PPM employee) — direct `jobs` INSERT into PPM: **denied**, same error.
+- **Cross-org** (`e2e-admin-bot`, PPM-only, not a Demo member) — direct `jobs` INSERT into Demo's `org_id`: **denied**, same error (grant-level denial fires before RLS/org-membership is even evaluated).
+- **Employee** — direct `quotes` INSERT into PPM: **denied**, `42501 permission denied for table quotes`.
+- **Owner** (Kevin, real Demo owner) — direct `quotes` INSERT into Demo: **denied**, same error.
+- **Cross-org** (`e2e-admin-bot`) — direct `quotes` INSERT into Demo: **denied**, same error.
+- **UPDATE** (Kevin, real Demo owner) on a real existing Demo job (`3a406c47-...`, "Deck repair"): **denied**, `42501 permission denied for table jobs`. Row confirmed unchanged afterward (`title` still "Deck repair").
+- **DELETE** (Kevin, same job): **denied**, same error. Row confirmed still present.
+- **SELECT still works correctly**: Kevin (real Demo owner) selecting Demo `jobs` → returns 2 rows (matches known count). `e2e-admin-bot` (PPM-only) selecting Demo `jobs` → returns 0 rows (RLS-filtered, not an error — correct cross-org SELECT behavior, unaffected by this migration since SELECT was never revoked).
+- **Zero side effects confirmed**: post-check query shows `ppm_jobs=0`, `ppm_quotes=0` (unchanged), `demo_jobs=2`, `demo_quotes=3` (unchanged from the pre-migration baseline), and zero rows matching the test-attempt title pattern anywhere.
+
+**Subcontractor and viewer roles do not currently exist as accounts in production** (only owner/admin/employee are populated) — their denial is **E2E-only evidence**: `authorization-batch-a-bot.spec.ts` tests 7–8 (subcontractor/viewer INSERT denial on `jobs`) and test 12 (subcontractor INSERT denial on `quotes`), run against `premier-crm-e2e` with the identical migration applied. Given the migration removes the `authenticated` grant entirely (not a role-conditional policy), this is a uniform mechanism — the owner/admin denial already proven in production is the *strongest* case, and subcontractor/viewer would fail through the identical grant-level check, not a role-specific branch that could behave differently. Flagged explicitly per instruction rather than asserted as production-proven.
+
+### Legitimate workflow evidence
+
+- **E2E-only** (identical migration + identical app commit family, run against `premier-crm-e2e` this same day): `integrated-lifecycle-bot` (accepted-quote → exactly one job, idempotent on duplicate acceptance), `quote-response-bot`, `scheduling-bot` (`apply_job_scheduling()` RPC path), `estimate-pricing-review-handoff-bot`, `request-site-visit-workflow-bot` (including the live capability-parity test), `request-conversion-bot` (the legitimate admin-role direct-work-order conversion path) — 38/38 passing.
+- **Production read-only + code-path inspection**: every jobs/quotes write path was audited before writing the migration (staff server actions, the customer share-token portal action, every `SECURITY DEFINER` RPC) and confirmed to use either `createServiceClient()` (service-role, unaffected by the `authenticated` REVOKE) or `apply_job_scheduling()` (RPC, `SECURITY DEFINER`, also unaffected). No client-side component anywhere in `apps/web` writes to `jobs`/`quotes` directly (confirmed by repository-wide grep). This was not re-executed as a new production write in this phase — it is the same audit performed before the migration was written, re-cited here as the basis for why no production functional regression was expected, combined with the direct production SELECT checks above confirming the schema/data itself is intact and reachable.
+- No new job, quote, invoice, deposit, or change-order was created in production as part of this verification — all production checks were either pure reads or writes inside a transaction that errored or was explicitly rolled back.
+
+### Test totals (this phase)
+
+- `pnpm test`: 180/180 (unchanged from Batch A implementation, re-confirmed before merge).
+- `authorization-batch-a-bot.spec.ts`: 15/15 (E2E, `premier-crm-e2e`).
+- Affected regression suite: 38/38 (E2E, `premier-crm-e2e`).
+- `pnpm typecheck`: clean.
+- `pnpm --filter web build`: clean.
+- Production: 12 direct-write denial checks + 2 SELECT-behavior checks + row-integrity checks, all as documented above — 0 failures, 0 unexpected successes, 0 side effects.
+
+### PPM blank-state and Demo health confirmation
+
+- PPM (`a0000000-0000-0000-0000-000000000001`): 0 customers, 0 jobs, 0 quotes — unchanged before and after this entire phase.
+- Demo (`a0c9b59d-77d9-48ad-9760-8555c9ed8fe5`, "Forge Demonstration"): 2 customers, 2 jobs, 3 quotes — unchanged before and after this entire phase.
+- 2 organizations total in production — no new organization created or removed.
+
+### Finding disposition
+
+- **F1 (direct-work-order authorization bypass)**: **CLOSED.** Action layer (capability check + hidden UI) and database layer (RLS + grants) both verified in production.
+- **F3 (draft-quote-from-job authorization bypass, plus its two sibling bypasses in `quotes/actions.ts`)**: **CLOSED.** Same two-layer verification.
+- **F2 (`createEstimateFromRequestAction` triage-state desync)**: unchanged, still open, explicitly out of Batch A scope.
+- **F4 (duplicate legacy/canonical UI on the request-detail page)**: unchanged, still open, explicitly out of Batch A scope.
+- **New finding — `service_requests` broad-authenticated-write pattern** (discovered during the database-boundary audit for Batch A, documented in the migration's own comments and the prior implementation report): **NOT CLOSED, and explicitly not classified as closed.** Classification: **a candidate for a future, separate security-focused batch — not Batch B general coverage, not Batch D cosmetic hardening, and not a V1 blocker.** Reasoning: `service_requests` retains a broad `internal_org_service_requests` (`FOR ALL`, org-membership-only) policy, meaning a signed-in org member could directly write `triage_decision`, `job_id`, or `estimate_id` without calling `record_request_triage()`. Concrete impact: this could forge a request's triage-audit trail or misattach an already-existing job/estimate to a request, which is a data-integrity/audit-trail concern — but with `jobs`/`quotes` INSERT now closed, it **cannot** be used to fabricate a *new* unauthorized job or quote the way F1/F3 could. It is therefore materially narrower than the closed findings and does not block the V1 tag on its own; it should be tracked and fixed deliberately rather than folded into this migration's scope (which was correctly limited to the two confirmed Batch A-equivalent operations).
+- **F5 (Reviewer 2's `payments` RLS claim)**: remains **REFUTED**, unchanged from the original audit — not re-touched this phase.
+- **F6 (`customer_archetype_defaults` missing RLS)**: remains open, unchanged, still a Kevin decision per §8 item 1 of the original audit.
+- **F7 (e2e-bot accounts with standing PPM access)**: remains open, unchanged, still a Kevin decision per §8 item 2 — and directly relevant here, since two of those same accounts (`e2e-admin-bot@example.com`, `delivered+e2e-employee-persistent@resend.dev`) were the ones used for this phase's production verification (a real, if narrow, secondary justification for keeping them a little longer, though the underlying access-cleanup decision remains Kevin's).
+
+### Revised release verdict
+
+**READY WITH NON-BLOCKING FOLLOW-UPS.**
+
+Both confirmed release-blocking findings (F1, F3, plus their sibling bypasses) are closed at both the application and database layers, verified independently in production with zero side effects and zero regressions to legitimate workflows. The remaining open items (F2, F4, F6, F7, and the newly-discovered `service_requests` pattern) are all narrower in scope and severity than the original two blockers, do not enable fabrication of new unauthorized business records, and are appropriately deferred to future batches per Kevin's explicit scope control on this migration.
+
+---
+
+## Stopping point (production verification phase, 2026-08-03)
+
+Per instruction, this phase stops here. PR #92 is merged and deployed; the migration is applied to production and verified; PR #91's original audit evidence is unmodified above. Forge V1 has not been tagged. Batches B, C, and D have not been started. `service_requests` hardening has not been started. The Base44 compatibility spike has not been started.
+
+Waiting for explicit approval before tagging Forge V1 or beginning another batch.
