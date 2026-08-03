@@ -19,7 +19,7 @@ import {
   type JobQuoteSummary,
   type WorkingInvoiceDetail,
 } from '@premier/db';
-import { ErrorCode } from '@premier/shared';
+import { ErrorCode, hasCapability, type OrgRole } from '@premier/shared';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,7 +72,8 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
       </PageShell>
     );
   }
-  const { orgId } = orgContextResult.data;
+  const { orgId, role } = orgContextResult.data;
+  const canCreateQuote = hasCapability(role as OrgRole, 'canCreateQuote');
 
   const serviceClient = createServiceClient();
 
@@ -439,7 +440,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <JobQuotesCard jobId={job.id} quotes={quotes} />
+        <JobQuotesCard jobId={job.id} quotes={quotes} canCreateQuote={canCreateQuote} />
         <JobInvoicesCard jobId={job.id} invoices={invoices} />
         <DepositCard jobId={job.id} depositState={depositState} />
         <WorkingInvoiceCard jobId={job.id} workingInvoice={workingInvoice} />
@@ -625,9 +626,11 @@ function ChangeOrdersCard({
 function JobQuotesCard({
   jobId,
   quotes,
+  canCreateQuote,
 }: {
   jobId: string;
   quotes: JobQuoteSummary[];
+  canCreateQuote: boolean;
 }) {
   return (
     <Card className="md:col-span-2 xl:col-span-1">
@@ -641,7 +644,7 @@ function JobQuotesCard({
               No quotes are attached to this job yet. Start with a draft quote, then
               line items and send flow can layer on next.
             </p>
-            <CreateDraftQuoteButton jobId={jobId} />
+            {canCreateQuote ? <CreateDraftQuoteButton jobId={jobId} /> : null}
           </div>
         ) : (
           <div className="space-y-3">
@@ -680,7 +683,7 @@ function JobQuotesCard({
             <Button asChild variant="outline">
               <Link href={`/quotes/${quotes[0]?.quote.id}`}>Open latest quote</Link>
             </Button>
-            <CreateDraftQuoteButton jobId={jobId} />
+            {canCreateQuote ? <CreateDraftQuoteButton jobId={jobId} /> : null}
           </div>
         )}
       </CardContent>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { getActiveOrgContext, getRequestById, type RequestDetail } from '@premier/db';
+import { hasCapability, type OrgRole } from '@premier/shared';
 
 import { getRequestIntakePath, getRequestIntakePathLabel } from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
@@ -32,7 +33,8 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   if (!orgContextResult.success) {
     return <ErrorPage>{orgContextResult.error}</ErrorPage>;
   }
-  const { orgId } = orgContextResult.data;
+  const { orgId, role } = orgContextResult.data;
+  const canCreateDirectWorkOrder = hasCapability(role as OrgRole, 'canCreateDirectWorkOrder');
 
   const result = await getRequestById(supabase, { taskId, orgId });
 
@@ -103,7 +105,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
           jobId={request.jobId}
           siteVisitId={request.siteVisitId}
         />
-        <ActionsCard request={request} />
+        <ActionsCard request={request} canCreateDirectWorkOrder={canCreateDirectWorkOrder} />
       </div>
     </main>
   );
@@ -220,7 +222,13 @@ function PropertyCard({ request }: { request: RequestDetail }) {
   );
 }
 
-function ActionsCard({ request }: { request: RequestDetail }) {
+function ActionsCard({
+  request,
+  canCreateDirectWorkOrder,
+}: {
+  request: RequestDetail;
+  canCreateDirectWorkOrder: boolean;
+}) {
   const isReviewed = request.status !== 'new';
   const hasEstimate = !!request.estimateId;
   const hasJob = !!request.jobId;
@@ -259,7 +267,9 @@ function ActionsCard({ request }: { request: RequestDetail }) {
         ) : (
           <>
             {canStartFlow ? <CreateEstimateButton requestId={request.id} /> : null}
-            {canStartFlow ? <CreateJobButton requestId={request.id} /> : null}
+            {canStartFlow && canCreateDirectWorkOrder ? (
+              <CreateJobButton requestId={request.id} />
+            ) : null}
           </>
         )}
 

@@ -99,6 +99,14 @@ export async function createDraftQuoteAction(
     return access;
   }
 
+  // Creating a quote is a narrower capability than most job actions —
+  // subcontractors are deliberately excluded (see canCreateQuote in
+  // packages/shared/permissions.ts), matching the estimate-driven quote
+  // creation path (estimates/actions.ts's createQuoteFromEstimateAction).
+  if (!hasCapability(access.data.role, 'canCreateQuote')) {
+    return err(ErrorCode.FORBIDDEN, 'Only an owner, admin, or employee can create a quote.');
+  }
+
   const parsed = CreateQuoteFromJobInputSchema.safeParse({
     jobId: formData.get('jobId'),
   });

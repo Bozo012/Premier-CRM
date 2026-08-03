@@ -459,7 +459,10 @@ export async function createDraftQuoteAction(
   _prevState: CreateDraftQuoteActionState | null,
   formData: FormData
 ): Promise<CreateDraftQuoteActionState> {
-  const contextResult = await getQuoteActionContext('canCreateEstimates');
+  // Creating a quote (as opposed to editing an existing one) is gated by
+  // canCreateQuote, not the broader canCreateEstimates — subcontractors are
+  // deliberately excluded (packages/shared/permissions.ts).
+  const contextResult = await getQuoteActionContext('canCreateQuote');
   if (!contextResult.success) {
     return contextResult;
   }
@@ -503,7 +506,10 @@ export async function createStandaloneQuoteAction(
   _prevState: CreateStandaloneQuoteActionState | null,
   formData: FormData
 ): Promise<CreateStandaloneQuoteActionState> {
-  const contextResult = await getQuoteActionContext('canCreateEstimates');
+  // Same reasoning as createDraftQuoteAction above — this also creates a new
+  // quote (via a backing estimate), so it's gated by canCreateQuote, not
+  // canCreateEstimates.
+  const contextResult = await getQuoteActionContext('canCreateQuote');
   if (!contextResult.success) {
     return contextResult;
   }

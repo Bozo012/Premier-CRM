@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { ErrorCode, err, ok, type Result } from '@premier/shared';
+import { ErrorCode, err, hasCapability, ok, type OrgRole, type Result } from '@premier/shared';
 import { createServiceClient, getActiveOrgContext, logActivity } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
@@ -14,6 +14,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 interface RequestActionContext {
   orgId: string;
   userId: string;
+  role: OrgRole;
 }
 
 async function getRequestActionContext(): Promise<Result<RequestActionContext>> {
@@ -32,7 +33,11 @@ async function getRequestActionContext(): Promise<Result<RequestActionContext>> 
     return err(orgContextResult.code, orgContextResult.error);
   }
 
-  return ok({ orgId: orgContextResult.data.orgId, userId: user.id });
+  return ok({
+    orgId: orgContextResult.data.orgId,
+    userId: user.id,
+    role: orgContextResult.data.role as OrgRole,
+  });
 }
 
 function readString(formData: FormData, key: string): string {
@@ -211,7 +216,16 @@ export async function createJobFromRequestAction(
 ): Promise<CreateJobFromRequestActionState> {
   const contextResult = await getRequestActionContext();
   if (!contextResult.success) return contextResult;
-  const { orgId, userId } = contextResult.data;
+  const { orgId, userId, role } = contextResult.data;
+
+  // A direct work order skips quoting/pricing review entirely, matching the
+  // guarded record_request_triage(decision='direct_work_order') RPC's own
+  // restriction — this legacy "second door" must enforce the same boundary,
+  // not a looser one, or it becomes exactly the casual bypass that RPC was
+  // built to prevent.
+  if (!hasCapability(role, 'canCreateDirectWorkOrder')) {
+    return err(ErrorCode.FORBIDDEN, 'Only an owner or admin can create a direct work order.');
+  }
 
   const requestId = readString(formData, 'requestId');
   if (!requestId) {
