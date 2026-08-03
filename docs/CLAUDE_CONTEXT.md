@@ -1,4 +1,4 @@
-# Claude Context — Premier CRM
+# Claude Context — Forge
 
 Durable project context for any Claude Code session working in this repo. Read this once per session; it links to the detailed docs rather than repeating them. For *current* execution status (what's done, what's next, what's blocked), read `docs/SESSION_STATE.md` instead — this file is architecture and rules, not a status report.
 

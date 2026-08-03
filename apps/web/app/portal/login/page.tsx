@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { PRODUCT_NAME } from '@premier/shared';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,11 +27,11 @@ export default async function PortalLoginPage({ searchParams }: PortalLoginPageP
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header className="space-y-2 text-center">
         <Link href="/portal" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
-          Premier customer portal
+          Premier Property Maintenance customer portal
         </Link>
         <h1 className="text-3xl font-semibold tracking-tight">Sign in to your customer account</h1>
         <p className="text-sm text-muted-foreground">
-          Customer portal accounts use Supabase Auth and are separate from internal Premier roles.
+          Customer portal accounts use Supabase Auth and are separate from internal {PRODUCT_NAME} roles.
         </p>
       </header>
 
@@ -70,7 +72,7 @@ export default async function PortalLoginPage({ searchParams }: PortalLoginPageP
           <CardHeader>
             <CardTitle>Create account</CardTitle>
             <CardDescription>
-              Create a normal customer account. This does not add you to Premier staff or org_members.
+              Create a normal customer account. This does not add you to {PRODUCT_NAME} staff or org_members.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -16,7 +16,7 @@ export async function signOutAction(): Promise<void> {
 /**
  * Switches the signed-in user's active organization for accounts with more
  * than one active membership (e.g. Kevin in both Premier Property
- * Maintenance and Premier CRM Demonstration). Delegates entirely to the
+ * Maintenance and Forge Demonstration). Delegates entirely to the
  * guarded switch_active_org() RPC, which verifies the caller actually holds
  * an active membership in the target org before writing anything — this
  * action never writes org_members or user_profiles directly. Revalidates

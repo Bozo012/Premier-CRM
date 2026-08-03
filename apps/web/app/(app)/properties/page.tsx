@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -7,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+export const metadata: Metadata = { title: 'Properties' };
 
 interface PropertiesPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

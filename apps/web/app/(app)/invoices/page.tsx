@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -10,6 +11,8 @@ import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { NewInvoiceDialog } from './_components/new-invoice-dialog';
+
+export const metadata: Metadata = { title: 'Invoices' };
 
 const STATUS_FILTERS: Array<{ label: string; value?: InvoiceStatus }> = [
   { label: 'All invoices' },

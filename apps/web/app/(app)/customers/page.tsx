@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -10,6 +11,8 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { ArchetypeBadge } from './_components/archetype-badge';
 import { CustomerSearchInput } from './_components/customer-search-input';
+
+export const metadata: Metadata = { title: 'Customers' };
 
 interface CustomersPageProps {
   // Next 15 App Router: searchParams arrives as a Promise.

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -10,6 +11,8 @@ import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { NewQuoteDialog } from './_components/new-quote-dialog';
+
+export const metadata: Metadata = { title: 'Quotes' };
 
 const STATUS_FILTERS: Array<{ label: string; value?: QuoteStatus }> = [
   { label: 'All quotes' },

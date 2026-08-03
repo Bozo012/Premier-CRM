@@ -13,6 +13,8 @@
 
 import { Resend } from 'resend';
 
+import { PRODUCT_NAME } from '@premier/shared';
+
 function getResendClient(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -834,7 +836,7 @@ function buildQuoteRespondedEmailHtml(args: QuoteRespondedEmailBodyArgs): string
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
           <tr>
             <td style="background:#1e293b;padding:20px 28px;">
-              <p style="margin:0;color:#f8fafc;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Premier CRM</p>
+              <p style="margin:0;color:#f8fafc;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">${PRODUCT_NAME}</p>
             </td>
           </tr>
           <tr>

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -11,6 +12,8 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { signOutAction } from './actions';
 import { OrgSwitcher } from './_components/org-switcher';
+
+export const metadata: Metadata = { title: 'Today' };
 
 interface TodayJob {
   id: string;

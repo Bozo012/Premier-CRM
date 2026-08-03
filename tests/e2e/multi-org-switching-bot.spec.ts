@@ -1,5 +1,5 @@
 /**
- * multi-org-switching-bot: proves the Premier CRM Demonstration
+ * multi-org-switching-bot: proves the Forge Demonstration
  * organization's prerequisite — a real staff account belonging to more
  * than one active org — is handled safely: switch_active_org() is
  * guarded (denies switching to a non-member org), a switch actually

@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 
 /**
- * Premier CRM — Playwright config for the repeatable QA bot suite.
+ * Forge — Playwright config for the repeatable QA bot suite.
  *
  * Design goals:
  *  - Safe by default: points at a local/dev server, never production.
@@ -99,7 +99,7 @@ export default defineConfig({
     },
   ],
 
-  // Intentionally NOT using webServer: auto-start here, because Premier CRM needs
+  // Intentionally NOT using webServer: auto-start here, because Forge needs
   // real Supabase env vars wired up. Local/dev/test data setup is documented in
   // tests/e2e/README.md — the person running the suite starts `pnpm dev` themselves
   // so they stay in control of which environment the bots point at.

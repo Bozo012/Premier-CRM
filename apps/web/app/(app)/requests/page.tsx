@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -6,6 +7,8 @@ import { getActiveOrgContext, listRequests, type RequestListItem } from '@premie
 import { OrgContextError } from '@/components/org-context-error';
 import { getRequestIntakePath, getRequestIntakePathLabel } from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+export const metadata: Metadata = { title: 'Requests' };
 
 interface RequestsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

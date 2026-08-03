@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -10,6 +11,8 @@ import { ScheduleForm } from '../_components/schedule-form';
 import { LifecycleButtons } from '../_components/lifecycle-buttons';
 import { InspectionForm } from '../_components/inspection-form';
 import { GenerateEstimateButton } from '../_components/generate-estimate-button';
+
+export const metadata: Metadata = { title: 'Site Visits' };
 
 interface SiteVisitDetailPageProps {
   params: Promise<{ siteVisitId: string }>;

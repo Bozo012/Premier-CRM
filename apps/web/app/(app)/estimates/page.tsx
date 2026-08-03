@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -5,6 +6,8 @@ import { getActiveOrgContext, listEstimates, type EstimateListItem, type Estimat
 
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+export const metadata: Metadata = { title: 'Estimates' };
 
 interface EstimatesPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
