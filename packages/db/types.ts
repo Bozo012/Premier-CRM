@@ -5844,6 +5844,10 @@ export type Database = {
         }
       }
       purge_old_location_events: { Args: never; Returns: number }
+      recalc_invoice_totals: {
+        Args: { p_invoice_id: string }
+        Returns: undefined
+      }
       recalc_quote_totals: { Args: { p_quote_id: string }; Returns: undefined }
       record_request_triage: {
         Args: {
