@@ -47,22 +47,28 @@ export function AppBottomNav({ requestsBadge }: AppBottomNavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <nav className="fixed inset-x-0 bottom-0 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <ul className="mx-auto grid w-full max-w-5xl grid-cols-6 text-xs">
         {navItems.map((item) => {
           const active = item.isActive(pathname);
 
           return (
-            <li key={item.href} className="flex">
+            <li key={item.href} className="flex min-w-0">
               <Link
                 href={item.href}
                 className={cn(
-                  'inline-flex min-h-14 w-full items-center justify-center gap-1 px-2 py-3 transition-colors',
+                  'relative inline-flex min-h-14 w-full min-w-0 items-center justify-center px-0.5 py-3 transition-colors sm:px-2',
                   active ? 'font-semibold text-foreground' : 'text-muted-foreground'
                 )}
               >
-                {item.label}
-                {item.href === '/requests' ? requestsBadge : null}
+                {/* Badge floats in the corner instead of sitting inline after the
+                    label — inline placement was what caused "Customers" and
+                    "Requests" to visually run together on narrow screens, since a
+                    2-digit count could push the label wider than its grid column. */}
+                {item.href === '/requests' && requestsBadge ? (
+                  <span className="absolute right-1 top-1">{requestsBadge}</span>
+                ) : null}
+                <span className="w-full truncate text-center leading-tight">{item.label}</span>
               </Link>
             </li>
           );
