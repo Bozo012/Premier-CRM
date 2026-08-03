@@ -1,6 +1,6 @@
 # Forge / Foundry Naming Audit — Read-Only (Phase F1)
 
-Status: **read-only audit and proposal.** No code, tests, metadata, documentation content (other than this file), infrastructure, or organization records have been modified as part of this phase. Nothing here is implemented. Approval from Kevin is required before any Phase F2 implementation begins.
+Status: **Phase F1 (this document) was read-only, as originally written below — preserved as written.** Kevin approved the audit and the proposed scope; Phase F2 was implemented, merged (PR #89, squash commit `8da54d7`), deployed (Vercel `dpl_CRw8Pbyb7A8pGjEgsgYKZUeE6nAz`, READY, `app.ppmnky.com`), and the Demo-org display-name migration was applied to production. See `docs/architecture/forge-foundry-brand-boundaries.md` for the current, active state of the naming model and `docs/SESSION_STATE.md` for the full deployment record. The rest of this document is the original Phase F1 audit, unedited.
 
 Branch: `chore/forge-brand-separation`, based on `main` at `b253cc1` (Pre-Base44 Workflow Refinement phase, PRs #87–#88, complete and deployed).
 
@@ -229,10 +229,10 @@ Consumed by the ~7 application files in §3 instead of each hardcoding the strin
 
 ## Release gate (restated per instruction)
 
-- The Forge rename (Phase F2) must be explicitly approved by Kevin before any implementation begins — this audit is the artifact requiring that approval, not a green light in itself.
-- The rename must be merged, deployed, and verified in production before any "Forge V1 readiness" audit begins.
-- The Forge V1 readiness audit is the next checkpoint after a successful rename — not run as part of this phase.
-- The Base44 compatibility spike remains blocked until both the naming checkpoint and the V1-readiness sequencing are explicitly approved, in that order. Nothing in this document authorizes the spike.
+- The Forge rename (Phase F2) must be explicitly approved by Kevin before any implementation begins — this audit is the artifact requiring that approval, not a green light in itself. **Done: approved, implemented, merged, deployed, and verified in production (`8da54d7`, `dpl_CRw8Pbyb7A8pGjEgsgYKZUeE6nAz`).**
+- The rename must be merged, deployed, and verified in production before any "Forge V1 readiness" audit begins. **Done — see `docs/SESSION_STATE.md` for the full verification record.**
+- The Forge V1 readiness audit is the next checkpoint after a successful rename — **not yet started, requires Kevin's separate explicit authorization.**
+- The Base44 compatibility spike remains blocked until both the naming checkpoint and the V1-readiness sequencing are explicitly approved, in that order. Nothing in this document authorizes the spike — **still not started.**
 
 ---
 
