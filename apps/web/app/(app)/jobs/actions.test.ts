@@ -10,13 +10,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // tests prove the authorization boundary directly at the server-action call
 // site.
 
-const { getServerSupabaseMock, getActiveOrgContextMock, createServiceClientMock, createDepositInvoiceMock } =
-  vi.hoisted(() => ({
-    getServerSupabaseMock: vi.fn(),
-    getActiveOrgContextMock: vi.fn(),
-    createServiceClientMock: vi.fn(),
-    createDepositInvoiceMock: vi.fn(),
-  }));
+const {
+  getServerSupabaseMock,
+  getActiveOrgContextMock,
+  createServiceClientMock,
+  createDepositInvoiceMock,
+  createDraftQuoteMock,
+} = vi.hoisted(() => ({
+  getServerSupabaseMock: vi.fn(),
+  getActiveOrgContextMock: vi.fn(),
+  createServiceClientMock: vi.fn(),
+  createDepositInvoiceMock: vi.fn(),
+  createDraftQuoteMock: vi.fn(),
+}));
 
 vi.mock('@/lib/supabase-server', () => ({
   getServerSupabase: getServerSupabaseMock,
@@ -37,7 +43,7 @@ vi.mock('@premier/db', () => ({
   // Unused by createDepositInvoiceAction but required for module-level imports elsewhere in the file.
   createChangeOrderDraft: vi.fn(),
   createDraftInvoiceFromJob: vi.fn(),
-  createDraftQuote: vi.fn(),
+  createDraftQuote: createDraftQuoteMock,
   createSchedulingSlot: vi.fn(),
   generateFinalInvoiceFromWorking: vi.fn(),
   getJobById: vi.fn(),
@@ -48,7 +54,7 @@ vi.mock('@premier/db', () => ({
   withdrawChangeOrderRevision: vi.fn(),
 }));
 
-import { createDepositInvoiceAction } from './actions';
+import { createDepositInvoiceAction, createDraftQuoteAction } from './actions';
 
 const JOB_ID = '22222222-2222-2222-2222-222222222222';
 const ORG_ID = 'org-1';
@@ -112,5 +118,71 @@ describe('deposit-invoice creation authorization boundary', () => {
     const result = await createDepositInvoiceAction(null, buildFormData(JOB_ID));
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.invoiceId).toBe('inv-1');
+  });
+});
+
+// Regression coverage for the Forge V1 readiness audit's Batch A finding
+// (docs/releases/forge-v1-readiness-audit.md, Finding F3):
+// createDraftQuoteAction() resolved the actor's role but never checked
+// canCreateQuote before calling createDraftQuote(), letting subcontractors
+// (deliberately excluded from canCreateQuote) create draft quotes from a
+// job page. Every sibling action in this file already checks a capability
+// before mutating — this one didn't.
+describe('draft-quote creation authorization boundary (createDraftQuoteAction)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createServiceClientMock.mockReturnValue({});
+  });
+
+  for (const role of ['owner', 'admin', 'employee'] as const) {
+    it(`${role} can create a draft quote from a job (canCreateQuote)`, async () => {
+      mockSignedInAs(role);
+      createDraftQuoteMock.mockResolvedValue({ success: true, data: { id: 'quote-1' } });
+
+      const result = await createDraftQuoteAction(null, buildFormData(JOB_ID));
+
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.quoteId).toBe('quote-1');
+      expect(createDraftQuoteMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ orgId: ORG_ID })
+      );
+    });
+  }
+
+  for (const role of ['subcontractor', 'viewer'] as const) {
+    it(`${role} CANNOT create a draft quote from a job — denied at the action boundary, no quote created`, async () => {
+      mockSignedInAs(role);
+
+      const result = await createDraftQuoteAction(null, buildFormData(JOB_ID));
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toContain('quote');
+        // Plain-language error only — never leak the raw capability identifier.
+        expect(result.error).not.toContain('canCreateQuote');
+      }
+      // Denial must leave quote/job/activity state unchanged.
+      expect(createDraftQuoteMock).not.toHaveBeenCalled();
+    });
+  }
+
+  it('remains denied even when the action is invoked directly, without going through the UI button', async () => {
+    mockSignedInAs('subcontractor');
+
+    const result = await createDraftQuoteAction(null, buildFormData(JOB_ID));
+
+    expect(result.success).toBe(false);
+    expect(createDraftQuoteMock).not.toHaveBeenCalled();
+  });
+
+  it('canCreateEstimates does not implicitly grant canCreateQuote (subcontractor holds canCreateEstimates but must still be denied)', async () => {
+    const { hasCapability } = await import('@premier/shared');
+    expect(hasCapability('subcontractor', 'canCreateEstimates')).toBe(true);
+    expect(hasCapability('subcontractor', 'canCreateQuote')).toBe(false);
+
+    mockSignedInAs('subcontractor');
+    const result = await createDraftQuoteAction(null, buildFormData(JOB_ID));
+    expect(result.success).toBe(false);
   });
 });
