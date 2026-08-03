@@ -1057,41 +1057,22 @@ type QuoteLineItemInsert =
  * Reads the current tax_pct and discount_amount from the quote so the
  * caller doesn't have to pass them.
  */
+/**
+ * Recalculates subtotal/tax_amount/total for a quote. The arithmetic itself
+ * lives in exactly one place — the recalc_quote_totals() SQL function
+ * (migration 20260803030000) — so this stays a thin wrapper rather than a
+ * second copy of the formula that could drift from it. A database trigger
+ * on quote_line_items already calls the same SQL function automatically on
+ * every insert/update/delete (covering create_quote_from_estimate()'s raw
+ * SQL line-item copy, which doesn't go through this TS layer at all); this
+ * explicit call after each of this file's own mutations is a defensive
+ * belt-and-suspenders, not the primary mechanism.
+ */
 async function recalcQuoteTotals(
   client: DbClient,
   args: { orgId: string; quoteId: string }
 ): Promise<void> {
-  // Fetch the quote's current tax and discount settings.
-  const { data: quote } = await client
-    .from('quotes')
-    .select('tax_pct, discount_amount')
-    .eq('id', args.quoteId)
-    .eq('org_id', args.orgId)
-    .maybeSingle();
-
-  const taxPct = quote?.tax_pct ?? 0;
-  const discountAmount = quote?.discount_amount ?? 0;
-
-  // Sum all line totals for this quote (total_quoted is a generated column).
-  const { data: agg } = await client
-    .from('quote_line_items')
-    .select('total_quoted')
-    .eq('quote_id', args.quoteId)
-    .eq('org_id', args.orgId);
-
-  const subtotal = (agg ?? []).reduce(
-    (sum, row) => sum + (row.total_quoted ?? 0),
-    0
-  );
-
-  const taxAmount = Math.round(subtotal * (taxPct / 100) * 100) / 100;
-  const total = subtotal + taxAmount - discountAmount;
-
-  await client
-    .from('quotes')
-    .update({ subtotal, tax_amount: taxAmount, total })
-    .eq('id', args.quoteId)
-    .eq('org_id', args.orgId);
+  await client.rpc('recalc_quote_totals', { p_quote_id: args.quoteId });
 }
 
 export async function addQuoteLineItem(
