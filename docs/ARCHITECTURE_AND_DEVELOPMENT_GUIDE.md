@@ -285,3 +285,30 @@ that is deliberately **not** granted to `authenticated` — it is
 internal administrative script, with no UI route calling it. Use this as
 the template for any future "internal-only, no general-purpose feature"
 RPC: guard by grant, not by hoping the UI never calls it.
+
+## Lesson: a raw multi-row `INSERT` into a totals-bearing table is a trap
+
+Found twice in one afternoon while populating the Premier CRM Demonstration
+organization (`docs/implementation/premier-crm-demonstration-organization.md`
+§12): `create_quote_from_estimate()` and `generateFinalInvoiceFromWorking()`
+each copy line items into a new parent row via a raw multi-row `INSERT`,
+and neither ever recalculated the parent's `subtotal`/`tax_amount`/`total`
+afterward. Both `quotes.total` and `invoices.total` are **plain stored
+columns**, not generated — the only code that ever recalculated them was a
+private per-file TS helper (`recalcQuoteTotals()` / `recalcInvoiceTotals()`)
+called exclusively from the hand-written add/update/remove-line-item
+functions. Any other insert path — an RPC, a bulk copy, a future migration
+— silently produced a row with correctly-priced line items and a `$0.00`
+total.
+
+**Fixed the same way both times, now the standing pattern**: one SQL
+function per totals-bearing table (`recalc_quote_totals(uuid)`,
+`recalc_invoice_totals(uuid)`) as the single source of truth, fired by an
+`AFTER INSERT/UPDATE/DELETE` trigger on the child line-items table — so
+every write path converges automatically, including ones that don't yet
+exist. The TS helpers now call the SQL function instead of duplicating the
+formula. **If a future table stores computed totals derived from child
+rows, give it this same trigger from the start** — a private TS helper
+called from only *some* of the table's write paths is not a substitute for
+a database-enforced invariant, exactly like the capability-wiring lesson
+above.

@@ -116,40 +116,38 @@ Verified directly against production, not assumed from prior notes (which turned
 
 Since Brandon has zero existing memberships, adding a Demo membership later would not affect any existing PPM state. **Not added — awaiting explicit approval**, per instruction.
 
-## 11. Proposed Demo dataset (design only — not populated)
+## 11. Demo dataset — populated (Phase 4)
 
-Realistic, fictional names/addresses; no real PPM customer, financial, or employee data cloned. Prefer real application workflows over direct SQL wherever a path exists (§6 notes the one exception).
+**Populated and verified in production**, 2026-08-03. Full record-by-record manifest (every ID, permanent vs. repeatable classification, reset guidance): `docs/implementation/premier-crm-demo-dataset-manifest.md`. Summary:
 
-| Element | Fictional identity / real workflow |
+| Element | Result |
 |---|---|
-| Residential customer | "Angela Whitfield", 123 Maple Grove Ln, Lexington, KY — created via `/customers/new` |
-| Commercial customer | "Riverbend Property Group" (property manager type) — created via `/customers/new` |
-| Properties | Angela's home; Riverbend's two managed properties (456 Commerce Way Suite 100; 789 Oakhill Plaza), both Lexington, KY |
-| Public intake | One initial service request created via the minimum controlled setup in §6 (direct insert, clearly documented as such — not a real public-form submission, since none exists for Demo) |
-| Remote-estimate path | Triage decision `remote_estimate` on a second request, via the real triage panel |
-| Site-visit-required path | Full lifecycle via real UI: triage → schedule → reschedule once → start → inspect (2 real distinct findings, at least one photo) → complete → generate estimate |
-| Direct-work-order path | Triage decision `direct_work_order` with structured authorization (`written_customer_authorization` type) via the real triage panel |
-| Appointment scheduling/rescheduling | Part of the site-visit-required path above |
-| Inspection findings/photos | Part of the site-visit-required path above — recommend at least 2 genuinely distinct real or realistic photos (the production smoke test's one-fixture limitation should not be repeated here if avoidable) |
-| Estimate generation | Real `generate_estimate_from_site_visit()` RPC via the UI |
-| Pricing approval | Kevin (owner) via the real pricing-review panel |
-| Quote sending/acceptance | Real quote-send action; acceptance via a real Demo customer portal account (see below) |
-| Job creation/scheduling | Real accepted-quote → job flow (unmodified by this work) |
-| Deposit requirement | Real deposit-management action |
-| Working invoice | Real job-in-progress working invoice flow |
-| Change order | Real propose/respond change-order flow, exercised from both the staff and portal sides |
-| Final invoice | Real generate-final-invoice action |
-| Payment | **Decision needed before populating**: recommend a manual/no-real-money payment record (this schema's existing manual payment-recording path, not a real Stripe/processor charge) — flagging explicitly rather than defaulting silently |
-| Customer portal visibility | Real portal accounts for Angela and Riverbend's contact, exercising the same customer-safe projections already proven in the site-visit workflow |
-| Staff-role differences | Requires at least one additional Demo-org staff member beyond Kevin (e.g., an `employee` and a `subcontractor`) — real invite-and-accept flow, with clearly Demo-labeled fictional identities (not `E2E_TEST_`-style naming, since these are permanent) |
-| Timeline history | Populates automatically via `activity_log` as every workflow above executes — no separate step |
+| Residential customer | Dana Whitfield, 482 Fernwood Lane, Rivergate, OH — real `createCustomer()` |
+| Commercial customer | Bramwell Retail Group, two properties (1200 & 1204 Harbor Commerce Way) — real `createCustomer()`/`createPropertyForCustomer()` |
+| Customer portal account | Dana Whitfield — real, permanent, synthetic email (`.example` TLD) |
+| Scenario A — remote estimate | Full lifecycle: request → triage → estimate → pricing approval → quote sent ($230.00, correct) |
+| Scenario B — site-visit lifecycle | Full lifecycle: request → triage → schedule → **reschedule** (history preserved) → start → inspection (2 passes, 2 real photos) → complete → estimate (idempotency proven) → pricing approval → quote ($455.00) → accepted → job → scheduled → deposit requirement + invoice ($150, paid) → change order (proposed, customer-approved, incorporated once) → working invoice ($520.00) → final invoice ($520.00, paid) |
+| Scenario C — direct work order | Request → triage `direct_work_order` (`standing_agreement`, NTE $350) → **authorization boundary proved** (employee/subcontractor denied at the RPC, zero mutation) → exactly 1 job, no estimate/quote → scheduled → working invoice ($240, under NTE) → final invoice (paid) |
+| Payment method | Manual/offline "check" method throughout — clearly labeled fictional (`DEMO-CHECK-*` references), no Stripe/real processor ever invoked |
+| Staff-role differences | Proved via temporary Demo-only employee/subcontractor test accounts (per the approved population plan), not permanent personas — both denied `canCreateDirectWorkOrder` correctly, then deleted |
+| Timeline history | Populated automatically via `activity_log` throughout — no separate step |
 
-**This dataset has not been created.** Populating it is a separate, not-yet-approved next step.
+## 12. Production defects found and fixed during population
 
-## 12. Known limitations / intentionally not initialized
+Three real, pre-existing production defects were discovered while populating this dataset — none were introduced by this phase, and all were found, contained, fixed, tested, and deployed before continuing, following the same audit-and-hotfix discipline as the original site-visit-workflow deployment's `canSendQuote` incident:
 
-- Numbering sequences are global across all organizations (§5) — a Demo request/estimate/invoice number will not start at 1.
+1. **No application path ever created a `kind='deposit'` invoice** (`job_deposits.deposit_invoice_id` existed but nothing ever set it). Fixed by PR #83 (`createDepositInvoice()`, `canManageDeposits`-gated, migration `invoices_one_deposit_per_job`).
+2. **`create_quote_from_estimate()` never recalculated quote totals** — every RPC-created quote (both triage paths) was left at $0.00 despite correct line items. Fixed by PR #84 (`recalc_quote_totals()` SQL function + trigger on `quote_line_items`).
+3. **`generateFinalInvoiceFromWorking()` never recalculated invoice totals** — same defect shape, on final invoices. Fixed by PR #85 (`recalc_invoice_totals()` SQL function + trigger on `invoice_line_items`).
+
+All three are merged to `main`, migrations applied to both `premier-crm-e2e` and `premier-crm-prod`, deployed, and covered by new permanent regression tests (`deposit-invoice-creation-bot`, `quote-totals-recalc-bot`, `invoice-totals-recalc-bot`). Production is currently serving commit `44cd6d5`.
+
+## 13. Known limitations / intentionally not initialized
+
+- Numbering sequences are global across all organizations (§5) — Demo request/estimate/invoice numbers continued PPM's counters rather than starting at 1 (observed: `SR-000009` through `SR-000011`). Pre-existing platform limitation, not introduced or worked around by this population. **Recommended before Platform v1.0**: per-organization numbering sequences.
 - Website content/marketing-site configuration is not applicable to Demo and was not initialized.
 - Geofences start empty for Demo (no seeding trigger exists for these).
 - No organization-deletion/deprovisioning tooling was built or considered in this phase — out of scope.
-- `docs/PREMIER_PLATFORM_VISION.md` was not created — no new architectural decision in this phase warranted it; it remains a later, explicit Milestone/Phase deliverable.
+- The working invoice is not auto-seeded from the accepted quote — staff (or, here, the population script mirroring real staff action) must manually confirm the original quoted scope onto it via the standard line-item editor. This is existing, intentional architecture (an actuals/extras ledger), not a defect.
+- The temporary population "driver" identity could not be deleted (FK-referenced as the audit-trail actor on 32 permanent Demo records) — retained but fully inert (zero org memberships, banned ~100 years, synthetic non-deliverable email). See the manifest's Stage 5 section for full detail.
+- `docs/PREMIER_PLATFORM_VISION.md` was not created — no new architectural decision in this phase warranted it.
