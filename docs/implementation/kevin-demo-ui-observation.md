@@ -47,10 +47,28 @@ For each piece of friction, report:
 
 I'll classify each one as: blocking defect / functional bug / permission-security defect / major UX friction / minor UX friction / enhancement / training-documentation issue — then recommend: immediate scoped fix, pre-v1.0 cleanup, Base44 redesign item, or no-change/training-clarification-only. I won't fix anything until you've reported it.
 
-## Findings log
+## Checkpoint 1 (2026-08-03)
 
-_(pending — no findings yet; this section fills in as you report issues)_
+Kevin completed the employee-side walkthrough through estimate generation
+and stopped at pricing approval, as intended (owner pricing approval is
+correctly out of employee reach). Working correctly: site-visit scheduling,
+start, inspection entry, autosave, completion, estimate generation, line-item
+display. Employee account correctly lacks `canApproveEstimatePricing`. The
+estimate generated during this checkpoint (`estimates.id = 144ffde5-afcf-4a88-b772-e89e98d6597a`,
+still `draft`) is a byproduct of Kevin's own walkthrough — treat it as part
+of the repeatable training scenario, not the polished Phase 4 showcase.
+
+## Findings log
 
 | # | Screen/route | Task | Expected | Actual | Severity | Recommendation | Status |
 |---|---|---|---|---|---|---|---|
-| — | — | — | — | — | — | — | — |
+| 1 | `/estimates/[estimateId]` | Employee views a draft estimate awaiting pricing approval | No actionable control the employee can't use; a clear way to signal the estimate is ready for owner review | An active "Approve pricing" button was rendered; clicking it surfaced the raw error `Role does not have canApproveEstimatePricing`. No way to submit for review at all. | Functional/UX defect (not a permission-boundary failure — backend correctly denied it) | Immediate scoped fix | **Fixed** — PR #86, commit `96a40e6`, deployed. Added a full submit/approve/return-for-changes/resubmit handoff (`PricingReviewPanel` rewrite + `request_estimate_pricing_review`/`return_estimate_pricing_for_changes` RPCs). Employee/subcontractor now see "Submit for pricing review" and plain-language status text; owner/admin see who submitted and when, plus Approve/Return for changes. 14 new tests. |
+| 2 | `/estimates/[estimateId]` | View an estimate generated from a completed site visit | No stale "Schedule site visit" control (visit is already done) | Legacy `AdvanceStatusButton` still rendered "Schedule site visit" for any `draft`-status estimate, regardless of origin | Functional UX defect | Immediate scoped fix | **Fixed** — same PR. Estimates with `source_site_visit_id` set now show "Generated from completed site visit" + a link to the visit instead. Remote/manual-estimate scheduling (no source site visit) unchanged. |
+| 3 | Bottom navigation (mobile) | General navigation | Clear, tappable separation between sections | "Customers" and "Requests" visually run together; badge placement adds crowding | Major UX friction | Upcoming UI refinement pass | Documented, not yet addressed |
+| 4 | Request list (mobile) | Scanning the request queue | Compact, scannable cards | Cards are tall; repeated phone/email fields on every card slow scanning | Mobile-density friction | Upcoming UI refinement pass | Documented, not yet addressed |
+| 5 | Inspection form — measurement fields | Entering a measurement (label / value / unit) | Clear which input is which | Row layout ambiguous — e.g. `10 \| value \| Ft` gives no visual cue which column is label vs. numeric value vs. unit | Major UX friction | Upcoming UI refinement pass (hazards/inspection-form pass specifically) | Documented, not yet addressed |
+| 6 | Site-visit inspection form (overall) | Full inspection entry | — | Functionally worked; long-form usability and the hazards section need refinement | Minor UX friction / enhancement | Upcoming UI refinement pass — waiting on Kevin's detailed notes before touching the template/UI | Documented, not yet addressed |
+
+## Next checkpoint
+
+Findings #1 and #2 are live in production — Kevin can resume the training scenario (`estimates.id = 144ffde5-...`) and submit it for pricing review through the real new flow, switch to the owner account to approve (or return for changes) it, then continue through quote creation/sending as originally planned. Findings #3–6 are recorded for the upcoming UI refinement pass and were not touched this round, per scope.

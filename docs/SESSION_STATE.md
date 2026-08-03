@@ -1,7 +1,7 @@
 # Session State
 
 ## Last Updated
-2026-08-03 (Premier CRM Demonstration organization **fully populated with a permanent, verified dataset** covering all three triage paths. Three real production defects found and fixed during population. Brandon's Demo onboarding started then **deferred by Kevin** before first-login verification. Kevin created his own dedicated Demo employee test account (`sommerskevin3@gmail.com`) and is personally UI-testing the platform, with a repeatable training scenario prepared. PPM remains blank.)
+2026-08-03 (Premier CRM Demonstration organization **fully populated with a permanent, verified dataset** covering all three triage paths. Three real production defects found and fixed during population. Brandon's Demo onboarding started then **deferred by Kevin** before first-login verification. Kevin created his own dedicated Demo employee test account (`sommerskevin3@gmail.com`) and completed the first real UI-observation checkpoint — found and fixed 2 more presentation defects on the estimate page (PR #86, commit `96a40e6`, deployed), including a new employee-to-owner pricing-review handoff. PPM remains blank.)
 
 ## One coherent story so far
 
@@ -34,7 +34,7 @@
 18. **Stopping point reached**: Demo organization population is complete and verified; Kevin's own UI-testing setup is ready. **Brandon's further onboarding, Platform v1.0 tagging, and Base44 work remain explicitly not authorized. Waiting on Kevin's UI feedback before any interface changes.**
 
 ## Current Branches
-- CRM: `main` at `44cd6d5` (includes PR #80–#85). Feature/hotfix branches merged and deleted per-PR from this phase onward. No code changes this sub-phase (Brandon/Kevin account setup was production-data-only).
+- CRM: `main` at `96a40e6` (includes PR #80–#86). Feature/hotfix branches merged and deleted per-PR from this phase onward.
 - Marketing site (`premier-property-maintenance`): `main` at `8807fa9` (unchanged this phase).
 
 ## Current Goal
