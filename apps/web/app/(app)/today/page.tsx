@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { getActiveOrgContext } from '@premier/db';
+import { getActiveOrgContext, getTodayActionItems, type TodayActionItem } from '@premier/db';
+import type { OrgRole } from '@premier/shared';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -116,6 +117,7 @@ export default async function TodayPage() {
     requestsResult,
     todayJobsResult,
     quoteActivityResult,
+    actionItemsResult,
   ] = await Promise.all([
     supabase.from('customers').select('*', { count: 'exact', head: true }).eq('org_id', orgId),
     supabase.from('properties').select('address_line_1, city, state, zip').eq('org_id', orgId),
@@ -142,6 +144,7 @@ export default async function TodayPage() {
       .gte('created_at', recentActivitySince.toISOString())
       .order('created_at', { ascending: false })
       .limit(10),
+    getTodayActionItems(supabase, { orgId, role: role as OrgRole }),
   ]);
 
   if (customersResult.error || propertiesResult.error || jobsResult.error) {
@@ -178,6 +181,13 @@ export default async function TodayPage() {
     if (!quote) return false;
     if (entry.event_type === 'quote_accepted') return !quote.job_id;
     return true;
+  });
+
+  const actionItems = actionItemsResult.success ? actionItemsResult.data : [];
+  const sortedActionItems = [...actionItems].sort((a, b) => {
+    const aTime = a.kind === 'pricing_review_requested' ? a.submittedAt : a.kind === 'create_quote' ? a.approvedAt : a.createdAt;
+    const bTime = b.kind === 'pricing_review_requested' ? b.submittedAt : b.kind === 'create_quote' ? b.approvedAt : b.createdAt;
+    return new Date(aTime).getTime() - new Date(bTime).getTime();
   });
 
   const fullName = profileResult.data?.full_name ?? null;
@@ -234,6 +244,44 @@ export default async function TodayPage() {
 
         <p className="text-xs text-muted-foreground">Signed in as {userEmail}</p>
       </header>
+
+      {sortedActionItems.length > 0 || pendingQuoteActivity.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Needs your attention
+          </h2>
+          <Card>
+            <CardContent className="divide-y pt-6">
+              {sortedActionItems.map((item) => (
+                <ActionItemRow key={`${item.kind}-${'estimateId' in item ? item.estimateId : item.quoteId}`} item={item} />
+              ))}
+              {pendingQuoteActivity.map((entry) => {
+                const quote = quoteById.get(entry.entity_id);
+                const quoteLabel = quote?.title?.trim() || quote?.quote_number || 'Quote';
+                const isAccepted = entry.event_type === 'quote_accepted';
+                return (
+                  <div key={entry.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">
+                        {isAccepted ? 'Quote accepted — ' : 'Quote declined — '}
+                        {quoteLabel}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {entry.message ?? (isAccepted ? 'Ready to create a job when you are.' : '')}
+                      </p>
+                    </div>
+                    <Button asChild size="sm" variant={isAccepted ? 'default' : 'outline'}>
+                      <Link href={`/quotes/${entry.entity_id}`}>
+                        {isAccepted ? 'Review & create job' : 'View quote'}
+                      </Link>
+                    </Button>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
@@ -418,41 +466,6 @@ export default async function TodayPage() {
         </Card>
       </section>
 
-      {pendingQuoteActivity.length > 0 ? (
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Needs attention
-          </h2>
-          <Card>
-            <CardContent className="divide-y pt-6">
-              {pendingQuoteActivity.map((entry) => {
-                const quote = quoteById.get(entry.entity_id);
-                const quoteLabel = quote?.title?.trim() || quote?.quote_number || 'Quote';
-                const isAccepted = entry.event_type === 'quote_accepted';
-                return (
-                  <div key={entry.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-medium">
-                        {isAccepted ? 'Quote accepted — ' : 'Quote declined — '}
-                        {quoteLabel}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {entry.message ?? (isAccepted ? 'Ready to create a job when you are.' : '')}
-                      </p>
-                    </div>
-                    <Button asChild size="sm" variant={isAccepted ? 'default' : 'outline'}>
-                      <Link href={`/quotes/${entry.entity_id}`}>
-                        {isAccepted ? 'Review & create job' : 'View quote'}
-                      </Link>
-                    </Button>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </section>
-      ) : null}
-
       <section>
         <Card>
           <CardHeader>
@@ -471,6 +484,62 @@ export default async function TodayPage() {
         </Card>
       </section>
     </main>
+  );
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+}
+
+function ActionItemRow({ item }: { item: TodayActionItem }) {
+  if (item.kind === 'pricing_review_requested') {
+    return (
+      <div className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">
+            {item.estimateNumber} — {item.title}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {item.customerName ?? 'No customer'} • {formatMoney(item.proposedTotal)}
+            {item.submittedByName ? ` • Submitted by ${item.submittedByName}` : ''}
+          </p>
+          <p className="text-xs font-medium text-amber-700">Awaiting your review</p>
+        </div>
+        <Button asChild size="sm">
+          <Link href={`/estimates/${item.estimateId}`}>Review estimate</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (item.kind === 'create_quote') {
+    return (
+      <div className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">
+            {item.estimateNumber} — {item.title}
+          </p>
+          <p className="text-xs text-muted-foreground">{item.customerName ?? 'No customer'}</p>
+          <p className="text-xs font-medium text-emerald-700">Pricing approved — ready to quote</p>
+        </div>
+        <Button asChild size="sm">
+          <Link href={`/estimates/${item.estimateId}`}>Create quote</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+      <div className="space-y-0.5">
+        <p className="text-sm font-medium">{item.quoteNumber ?? item.title ?? 'Quote'}</p>
+        <p className="text-xs text-muted-foreground">{item.customerName ?? 'No customer'}</p>
+        <p className="text-xs font-medium text-blue-700">Draft quote ready — send quote</p>
+      </div>
+      <Button asChild size="sm">
+        <Link href={`/quotes/${item.quoteId}`}>Send quote</Link>
+      </Button>
+    </div>
   );
 }
 

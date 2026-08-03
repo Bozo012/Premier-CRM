@@ -236,6 +236,24 @@ function FieldEditor({
   }
 }
 
+/**
+ * Human-readable label/placeholder/input-type per raw column key — fixes a
+ * real UX defect found in Kevin's Demo UI observation: rows previously
+ * showed the raw key name ("value", "unit") as placeholder text only, with
+ * no visible label and identical-looking inputs, so a filled-in row like
+ * "10 | value | Ft" gave no visual cue which box was which.
+ */
+const COLUMN_META: Record<string, { label: string; placeholder: string; type: 'text' | 'number'; widthClass: string }> = {
+  label: { label: 'Measurement name', placeholder: 'e.g. Deck width', type: 'text', widthClass: 'sm:flex-[2]' },
+  value: { label: 'Value', placeholder: 'e.g. 6x8', type: 'text', widthClass: 'sm:flex-1' },
+  item: { label: 'Item', placeholder: 'e.g. Deck boards', type: 'text', widthClass: 'sm:flex-[2]' },
+  quantity: { label: 'Quantity', placeholder: 'e.g. 3', type: 'number', widthClass: 'sm:flex-1' },
+  material: { label: 'Material', placeholder: 'e.g. 5/4x6 PT board', type: 'text', widthClass: 'sm:flex-[2]' },
+  estimatedQuantity: { label: 'Estimated quantity', placeholder: 'e.g. 3 boards (12ft)', type: 'text', widthClass: 'sm:flex-[2]' },
+  notes: { label: 'Notes', placeholder: 'Optional', type: 'text', widthClass: 'sm:flex-[2]' },
+  unit: { label: 'Unit', placeholder: 'e.g. ft', type: 'text', widthClass: 'sm:flex-1' },
+};
+
 function ListFieldEditor({
   field,
   value,
@@ -271,27 +289,37 @@ function ListFieldEditor({
         {field.label}
         {field.required ? <span className="ml-0.5 text-red-500">*</span> : null}
       </label>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {rows.map((row, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-2">
-            {columns.map((col) => (
-              <input
-                key={col}
-                type="text"
-                placeholder={col}
-                disabled={readOnly}
-                value={(row[col] as string) ?? ''}
-                onChange={(e) => updateRow(i, col, e.target.value)}
-                className="flex h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm shadow-sm disabled:opacity-70"
-              />
-            ))}
+          <div key={i} className="space-y-2 rounded-md border bg-muted/20 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+              {columns.map((col) => {
+                const meta = COLUMN_META[col] ?? { label: col, placeholder: col, type: 'text' as const, widthClass: 'sm:flex-1' };
+                return (
+                  <div key={col} className={`min-w-0 ${meta.widthClass}`}>
+                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {meta.label}
+                    </label>
+                    <input
+                      type={meta.type}
+                      inputMode={meta.type === 'number' ? 'decimal' : undefined}
+                      placeholder={meta.placeholder}
+                      disabled={readOnly}
+                      value={(row[col] as string) ?? ''}
+                      onChange={(e) => updateRow(i, col, e.target.value)}
+                      className="flex h-10 w-full min-w-0 rounded-md border border-input bg-background px-2.5 text-sm shadow-sm disabled:opacity-70"
+                    />
+                  </div>
+                );
+              })}
+            </div>
             {!readOnly ? (
               <button
                 type="button"
                 onClick={() => removeRow(i)}
                 className="text-xs font-medium text-red-600 hover:underline"
               >
-                Remove
+                Remove row
               </button>
             ) : null}
           </div>
@@ -301,7 +329,7 @@ function ListFieldEditor({
         <button
           type="button"
           onClick={addRow}
-          className="text-xs font-medium text-foreground underline-offset-2 hover:underline"
+          className="inline-flex h-9 items-center text-xs font-medium text-foreground underline-offset-2 hover:underline"
         >
           + Add row
         </button>
