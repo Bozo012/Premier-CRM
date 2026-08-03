@@ -8,6 +8,7 @@ import {
   listEstimateLineItems,
   listQuotesForEstimate,
 } from '@premier/db';
+import { hasCapability, type OrgRole } from '@premier/shared';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -39,7 +40,9 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
   }
 
   const serviceClient = createServiceClient();
-  const { orgId } = orgContextResult.data;
+  const { orgId, role } = orgContextResult.data;
+  const canApprovePricing = hasCapability(role as OrgRole, 'canApproveEstimatePricing');
+  const canEditEstimate = hasCapability(role as OrgRole, 'canEditEstimate');
 
   const [result, quotesResult, lineItemsResult] = await Promise.all([
     getEstimateById(supabase, { estimateId, orgId }),
@@ -88,7 +91,19 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
         </p>
       </header>
 
-      <AdvanceStatusButton estimateId={estimate.id} currentStatus={estimate.status} />
+      {estimate.sourceSiteVisitId ? (
+        <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">Generated from completed site visit</p>
+          <Link
+            href={`/site-visits/${estimate.sourceSiteVisitId}`}
+            className="text-sm font-medium underline-offset-2 hover:underline"
+          >
+            View site visit
+          </Link>
+        </div>
+      ) : (
+        <AdvanceStatusButton estimateId={estimate.id} currentStatus={estimate.status} />
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <InfoCard label="Customer">
@@ -164,11 +179,20 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
       <LineItemsSection
         estimateId={estimate.id}
         lineItems={lineItems}
-        locked={!!estimate.pricingReviewedAt}
+        locked={!!estimate.pricingReviewedAt || estimate.pricingReviewStatus === 'pending_review'}
       />
 
       {estimate.isQuoteEligibilityGated ? (
-        <PricingReviewPanel estimateId={estimate.id} pricingReviewedAt={estimate.pricingReviewedAt} />
+        <PricingReviewPanel
+          estimateId={estimate.id}
+          pricingReviewedAt={estimate.pricingReviewedAt}
+          pricingReviewStatus={estimate.pricingReviewStatus}
+          pricingReviewRequestedAt={estimate.pricingReviewRequestedAt}
+          pricingReviewRequestedByName={estimate.pricingReviewRequestedByName}
+          pricingReviewChangesRequestedNote={estimate.pricingReviewChangesRequestedNote}
+          canApprovePricing={canApprovePricing}
+          canEditEstimate={canEditEstimate}
+        />
       ) : null}
 
       {/* Quotes section */}

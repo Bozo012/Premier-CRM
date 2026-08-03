@@ -49,6 +49,11 @@ export interface EstimateDetail extends EstimateListItem {
   sourceSiteVisitId: string | null;
   pricingReviewedAt: string | null;
   pricingReviewedBy: string | null;
+  /** NULL (draft) | 'pending_review' | 'changes_requested'. NEVER 'approved' — approval is derived solely from pricingReviewedAt, see packages/db/queries/site-visits.ts's RPC wrappers. */
+  pricingReviewStatus: 'pending_review' | 'changes_requested' | null;
+  pricingReviewRequestedAt: string | null;
+  pricingReviewRequestedByName: string | null;
+  pricingReviewChangesRequestedNote: string | null;
   /**
    * True when the source service_requests row has triage_decision set —
    * i.e. this estimate is gated by enforce_quote_eligibility() regardless
@@ -204,6 +209,10 @@ export async function getEstimateById(
       source_site_visit_id,
       pricing_reviewed_at,
       pricing_reviewed_by,
+      pricing_review_status,
+      pricing_review_requested_at,
+      pricing_review_requested_by,
+      pricing_review_changes_requested_note,
       customers (
         id,
         first_name,
@@ -252,6 +261,16 @@ export async function getEstimateById(
     createdByName = profile?.full_name?.trim() || null;
   }
 
+  let pricingReviewRequestedByName: string | null = null;
+  if (row.pricing_review_requested_by) {
+    const { data: profile } = await client
+      .from('user_profiles')
+      .select('full_name')
+      .eq('id', row.pricing_review_requested_by)
+      .maybeSingle();
+    pricingReviewRequestedByName = profile?.full_name?.trim() || null;
+  }
+
   let isQuoteEligibilityGated = false;
   if (row.service_request_id) {
     const { data: sourceRequest } = await client
@@ -281,6 +300,10 @@ export async function getEstimateById(
     sourceSiteVisitId: row.source_site_visit_id ?? null,
     pricingReviewedAt: row.pricing_reviewed_at ?? null,
     pricingReviewedBy: row.pricing_reviewed_by ?? null,
+    pricingReviewStatus: (row.pricing_review_status ?? null) as EstimateDetail['pricingReviewStatus'],
+    pricingReviewRequestedAt: row.pricing_review_requested_at ?? null,
+    pricingReviewRequestedByName,
+    pricingReviewChangesRequestedNote: row.pricing_review_changes_requested_note ?? null,
     isQuoteEligibilityGated,
     customer: cust
       ? {
