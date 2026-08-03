@@ -1,11 +1,11 @@
 # Resume Prompt
 
-Copy-paste this entire block into a fresh Claude Code session after an abrupt shutdown (power/internet loss) to resume Premier CRM work accurately.
+Copy-paste this entire block into a fresh Claude Code session after an abrupt shutdown (power/internet loss) to resume Forge work accurately.
 
 ---
 
 ```
-Open C:\dev\Premier-CRM and resume the Premier CRM session.
+Open C:\dev\Premier-CRM and resume the Forge session.
 
 Before doing anything else, in this order:
 

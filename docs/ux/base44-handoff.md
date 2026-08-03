@@ -2,6 +2,8 @@
 
 Status: living reference document, current as of the Pre-Base44 Workflow Refinement phase (PR #87, commit `cca3ba7`, following the pricing-review handoff in PR #86, commit `96a40e6`). This document is the single source of truth for what a Base44-driven UI redesign may and may not touch. It does not authorize the Base44 compatibility spike itself — see `docs/ux/base44-compatibility-spike-plan.md` for the spike's scope, which still requires separate explicit approval to run.
 
+The software product is **Forge** (approved naming — see `docs/architecture/forge-foundry-brand-boundaries.md`). Premier Property Maintenance is the first business operating on it; the Demo organization is now named **Forge Demonstration**. Any historical reference to "Premier CRM" in older documents predates this rename and is preserved as written.
+
 ---
 
 ## 1. What Base44 MAY change
@@ -145,7 +147,7 @@ A UI redesign may change how/where org-switching is presented, but must call thr
 
 ## 10. Demo org and scenarios (safe sandbox for redesign testing)
 
-Org `Premier CRM Demonstration` (`a0c9b59d-77d9-48ad-9760-8555c9ed8fe5`, slug `premier-crm-demonstration`) is a permanent, populated dataset in production covering all three triage paths (Scenario A: remote estimate; Scenario B: full site-visit lifecycle with reschedule, photos, change order, deposit+final invoices; Scenario C: direct work order). Kevin holds an owner membership on Demo separate from his real PPM employee membership. **This is the recommended environment for any Base44 visual work/screenshots** — real PPM production data must never appear in design mockups, screenshots, or shared artifacts. Full detail: `docs/implementation/premier-crm-demonstration-organization.md`.
+Org `Forge Demonstration` (renamed from "Premier CRM Demonstration" — see `docs/architecture/forge-foundry-naming-audit.md`; id `a0c9b59d-77d9-48ad-9760-8555c9ed8fe5`, slug `premier-crm-demonstration` unchanged) is a permanent, populated dataset in production covering all three triage paths (Scenario A: remote estimate; Scenario B: full site-visit lifecycle with reschedule, photos, change order, deposit+final invoices; Scenario C: direct work order). Kevin holds an owner membership on Demo separate from his real PPM employee membership. **This is the recommended environment for any Base44 visual work/screenshots** — real PPM production data must never appear in design mockups, screenshots, or shared artifacts. Full detail: `docs/implementation/premier-crm-demonstration-organization.md`.
 
 ## 11. State names and meanings (for consistent redesign copy)
 

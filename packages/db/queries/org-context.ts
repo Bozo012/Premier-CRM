@@ -40,7 +40,7 @@ export interface ActiveOrgContext {
  *  - Zero active memberships -> `ErrorCode.NOT_FOUND`. Callers should render
  *    a clear "no active organization" state, never a fabricated placeholder.
  *  - Exactly one active membership -> `ok({ orgId, role, orgName, hasMultipleOrgs: false })`.
- *  - More than one active membership (Premier CRM Demonstration org support,
+ *  - More than one active membership (Forge Demonstration org support,
  *    2026-08-02) -> resolved via `user_profiles.active_org_id`, a
  *    per-account preference set ONLY by the guarded `switch_active_org()`
  *    RPC (never written directly, never trusted from a client-supplied

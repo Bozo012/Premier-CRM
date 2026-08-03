@@ -1,6 +1,8 @@
-# Premier CRM
+# Forge
 
 A contractor CRM with a semantic vault, learning AI assistant, and location-aware automation. Built first for Premier Property Maintenance LLC. Open-source release planned (AGPL-3.0) after stable production use.
+
+Forge is the software platform; Premier Property Maintenance is the first business operating on it — see `docs/architecture/forge-foundry-brand-boundaries.md`.
 
 ---
 

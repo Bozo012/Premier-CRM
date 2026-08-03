@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -8,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+export const metadata: Metadata = { title: 'Jobs' };
 
 const STATUS_FILTERS: Array<{ label: string; value?: JobStatus }> = [
   { label: 'All jobs' },

@@ -4,8 +4,9 @@
  * service_role (never directly callable by an authenticated client). This
  * test creates and fully removes its own throwaway invocation of the
  * bootstrap function — it does NOT touch or assume anything about the real,
- * permanent Premier CRM Demonstration organization that a one-off
- * administrative script creates in production.
+ * permanent Forge Demonstration organization (renamed from "Premier CRM
+ * Demonstration" — see docs/architecture/forge-foundry-naming-audit.md)
+ * that a one-off administrative script creates in production.
  */
 import { test, expect } from '@playwright/test';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -91,7 +92,14 @@ test.describe('demonstration organization bootstrap bot', () => {
 
   test('4. the created organization has the expected identity and timezone', async () => {
     const { data: org } = await admin.from('organizations').select('name, slug, timezone').eq('id', demoOrgId!).single();
-    expect(org.name).toBe('Premier CRM Demonstration');
+    // The RPC itself still inserts the literal 'Premier CRM Demonstration'
+    // name for a brand-new org (that migration is immutable) — but against
+    // premier-crm-e2e/prod the org already exists, so this call returns the
+    // existing row, whose display name was renamed to 'Forge Demonstration'
+    // by migration 20260803060000. Accept either so this test passes both
+    // against a fresh database (migrations only) and the real, already-
+    // renamed environments.
+    expect(['Premier CRM Demonstration', 'Forge Demonstration']).toContain(org.name);
     expect(org.slug).toBe('premier-crm-demonstration');
     expect(org.timezone).toBe('America/New_York');
   });

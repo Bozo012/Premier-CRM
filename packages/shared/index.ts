@@ -3,6 +3,7 @@ export { ok, err } from './result';
 export type { Result } from './result';
 export { hasCapability } from './permissions';
 export type { Capability, OrgRole } from './permissions';
+export { PRODUCT_NAME, ECOSYSTEM_NAME } from './brand';
 export {
   AddInvoiceLineItemInputSchema,
   CreateInvoiceFromJobInputSchema,

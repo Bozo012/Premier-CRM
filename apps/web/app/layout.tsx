@@ -2,18 +2,23 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 
+import { PRODUCT_NAME } from '@premier/shared';
+
 import { Toaster } from '@/components/ui/sonner';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Premier CRM',
+  title: {
+    default: PRODUCT_NAME,
+    template: `${PRODUCT_NAME} — %s`,
+  },
   description: 'Premier Property Maintenance field operations.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Premier',
+    title: PRODUCT_NAME,
   },
   icons: {
     apple: '/icon-192.png',

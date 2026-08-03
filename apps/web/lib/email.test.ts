@@ -136,4 +136,59 @@ describe('email lifecycle templates', () => {
 
     expect(result).toEqual({ sent: false });
   });
+
+  // Forge/Foundry naming rollout (docs/architecture/forge-foundry-naming-audit.md):
+  // the internal staff-notification template is the one email that should now
+  // say "Forge" instead of "Premier CRM" — every customer-facing template must
+  // keep saying "Premier Property Maintenance", never "Forge" or "Foundry".
+  it('the internal quote-responded staff notification identifies the product as Forge, not Premier CRM', async () => {
+    const { sendQuoteRespondedNotificationEmail } = await import('./email');
+
+    const result = await sendQuoteRespondedNotificationEmail({
+      toEmails: ['owner@example.com'],
+      customerName: 'Jane Smith',
+      quoteTitle: 'Fence repair',
+      quoteTotal: 500,
+      quoteDetailUrl: '/quotes/abc123',
+      response: 'accepted',
+      declineReason: null,
+    });
+
+    expect(result).toEqual({ sent: true });
+    const html = sendMock.mock.calls[0]?.[0]?.html as string;
+    expect(html).toContain('Forge');
+    expect(html).not.toContain('Premier CRM');
+  });
+
+  it('customer-facing quote and invoice emails still identify Premier Property Maintenance, never Forge', async () => {
+    const { sendQuoteEmail, sendInvoiceEmail } = await import('./email');
+
+    await sendQuoteEmail({
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Smith',
+      quoteTitle: 'Fence repair',
+      quoteTotal: 500,
+      quoteUrl: '/q/token123',
+      validUntil: null,
+    });
+    const quoteHtml = sendMock.mock.calls[0]?.[0]?.html as string;
+    expect(quoteHtml).toContain('Premier Property Maintenance');
+    expect(quoteHtml).not.toContain('Forge');
+    expect(quoteHtml).not.toContain('Foundry');
+
+    sendMock.mockClear();
+
+    await sendInvoiceEmail({
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Smith',
+      invoiceTitle: 'August mowing',
+      invoiceTotal: 250,
+      invoiceUrl: '/i/token456',
+      dueDate: null,
+    });
+    const invoiceHtml = sendMock.mock.calls[0]?.[0]?.html as string;
+    expect(invoiceHtml).toContain('Premier Property Maintenance');
+    expect(invoiceHtml).not.toContain('Forge');
+    expect(invoiceHtml).not.toContain('Foundry');
+  });
 });
