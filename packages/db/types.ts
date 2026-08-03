@@ -1307,6 +1307,10 @@ export type Database = {
           expires_at: string | null
           id: string
           org_id: string
+          pricing_review_changes_requested_note: string | null
+          pricing_review_requested_at: string | null
+          pricing_review_requested_by: string | null
+          pricing_review_status: string | null
           pricing_reviewed_at: string | null
           pricing_reviewed_by: string | null
           property_id: string
@@ -1329,6 +1333,10 @@ export type Database = {
           expires_at?: string | null
           id?: string
           org_id: string
+          pricing_review_changes_requested_note?: string | null
+          pricing_review_requested_at?: string | null
+          pricing_review_requested_by?: string | null
+          pricing_review_status?: string | null
           pricing_reviewed_at?: string | null
           pricing_reviewed_by?: string | null
           property_id: string
@@ -1351,6 +1359,10 @@ export type Database = {
           expires_at?: string | null
           id?: string
           org_id?: string
+          pricing_review_changes_requested_note?: string | null
+          pricing_review_requested_at?: string | null
+          pricing_review_requested_by?: string | null
+          pricing_review_status?: string | null
           pricing_reviewed_at?: string | null
           pricing_reviewed_by?: string | null
           property_id?: string
@@ -5871,6 +5883,10 @@ export type Database = {
         Args: { p_estimate_id: string }
         Returns: undefined
       }
+      request_estimate_pricing_review: {
+        Args: { p_estimate_id: string }
+        Returns: undefined
+      }
       reschedule_site_visit: {
         Args: {
           p_assigned_user_id?: string
@@ -5921,6 +5937,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      return_estimate_pricing_for_changes: {
+        Args: { p_estimate_id: string; p_note: string }
+        Returns: undefined
       }
       role_has_capability: {
         Args: {

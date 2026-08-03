@@ -22,8 +22,10 @@ import {
   generateEstimateFromSiteVisit,
   getActiveOrgContext,
   recordRequestTriage,
+  requestEstimatePricingReview,
   rescheduleSiteVisit,
   reopenEstimateForEdit,
+  returnEstimatePricingForChanges,
   requestPendingUpload,
   saveSiteVisitInspectionTrusted,
   scheduleSiteVisit,
@@ -33,6 +35,8 @@ import {
 
 import { finalizeSiteVisitUpload } from '@/lib/site-visit-attachments';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+import { toUserFacingError } from './error-translation';
 
 // ---------------------------------------------------------------------------
 // Shared auth context — this workflow's RPCs enforce their own capability
@@ -411,6 +415,36 @@ export async function generateEstimateFromSiteVisitAction(siteVisitId: string): 
   return result;
 }
 
+export async function requestEstimatePricingReviewAction(_prevState: Result<null> | null, formData: FormData): Promise<Result<null>> {
+  const contextResult = await getWorkflowActionContext();
+  if (!contextResult.success) return contextResult;
+  const supabase = await getServerSupabase();
+
+  const estimateId = readString(formData, 'estimateId');
+  if (!estimateId) return err(ErrorCode.VALIDATION_ERROR, 'Missing estimate.');
+
+  const result = await requestEstimatePricingReview(supabase, estimateId);
+  if (!result.success) return err(result.code, toUserFacingError(result.error));
+  revalidatePath(`/estimates/${estimateId}`);
+  return result;
+}
+
+export async function returnEstimatePricingForChangesAction(_prevState: Result<null> | null, formData: FormData): Promise<Result<null>> {
+  const contextResult = await getWorkflowActionContext();
+  if (!contextResult.success) return contextResult;
+  const supabase = await getServerSupabase();
+
+  const estimateId = readString(formData, 'estimateId');
+  const note = readString(formData, 'note');
+  if (!estimateId) return err(ErrorCode.VALIDATION_ERROR, 'Missing estimate.');
+  if (!note) return err(ErrorCode.VALIDATION_ERROR, 'A note explaining the requested changes is required.');
+
+  const result = await returnEstimatePricingForChanges(supabase, { estimateId, note });
+  if (!result.success) return err(result.code, toUserFacingError(result.error));
+  revalidatePath(`/estimates/${estimateId}`);
+  return result;
+}
+
 export async function approveEstimatePricingAction(_prevState: Result<null> | null, formData: FormData): Promise<Result<null>> {
   const contextResult = await getWorkflowActionContext();
   if (!contextResult.success) return contextResult;
@@ -420,7 +454,8 @@ export async function approveEstimatePricingAction(_prevState: Result<null> | nu
   if (!estimateId) return err(ErrorCode.VALIDATION_ERROR, 'Missing estimate.');
 
   const result = await approveEstimatePricing(supabase, estimateId);
-  if (result.success) revalidatePath(`/estimates/${estimateId}`);
+  if (!result.success) return err(result.code, toUserFacingError(result.error));
+  revalidatePath(`/estimates/${estimateId}`);
   return result;
 }
 
@@ -433,7 +468,8 @@ export async function reopenEstimateForEditAction(_prevState: Result<null> | nul
   if (!estimateId) return err(ErrorCode.VALIDATION_ERROR, 'Missing estimate.');
 
   const result = await reopenEstimateForEdit(supabase, estimateId);
-  if (result.success) revalidatePath(`/estimates/${estimateId}`);
+  if (!result.success) return err(result.code, toUserFacingError(result.error));
+  revalidatePath(`/estimates/${estimateId}`);
   return result;
 }
 

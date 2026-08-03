@@ -273,6 +273,24 @@ export async function reopenEstimateForEdit(client: DbClient, estimateId: string
   return ok(null);
 }
 
+export async function requestEstimatePricingReview(client: DbClient, estimateId: string): Promise<Result<null>> {
+  const { error } = await client.rpc('request_estimate_pricing_review', { p_estimate_id: estimateId });
+  if (error) return err(ErrorCode.VALIDATION_ERROR, error.message);
+  return ok(null);
+}
+
+export async function returnEstimatePricingForChanges(
+  client: DbClient,
+  args: { estimateId: string; note: string }
+): Promise<Result<null>> {
+  const { error } = await client.rpc('return_estimate_pricing_for_changes', {
+    p_estimate_id: args.estimateId,
+    p_note: args.note,
+  });
+  if (error) return err(ErrorCode.VALIDATION_ERROR, error.message);
+  return ok(null);
+}
+
 export async function createQuoteFromEstimateRpc(client: DbClient, estimateId: string): Promise<Result<string>> {
   const { data, error } = await client.rpc('create_quote_from_estimate', { p_estimate_id: estimateId });
   if (error) return err(ErrorCode.VALIDATION_ERROR, error.message);
