@@ -344,3 +344,115 @@ Ran the full affected suite (`customer-intake-bot`, `employee-estimate-workflow-
 **Estimated production risk: Low.** The write-path audit (§4, re-confirmed twice) found zero legitimate authenticated-client dependency on direct writes to any of the three tables; every legitimate write already goes through a service-role server action or a `SECURITY DEFINER` RPC, both unaffected by revoking `authenticated`'s base-table grants. `site_visits` is grant-layer already-safe in production today (see correction above), further reducing the incremental risk for that one table specifically.
 
 **Recommended production-rollout prompt** (for Kevin to issue when ready): *"Approve production deployment of the Forge V1.0.1 authorization-hardening patch (branch `fix/service-requests-authorization-hardening`, migration `20260803080000_harden_service_requests_estimates_site_visits.sql`). Apply the migration to `premier-crm-prod`, merge the implementation PR, verify the Vercel deployment, and run the production verification steps in §14's deployment plan. Do not create the `forge-v1.0.1` tag until verification passes."*
+
+---
+
+## 15. Production verification (2026-08-03)
+
+**Status: production deployment and verification complete. `forge-v1.0.1` tag not yet created — awaiting explicit approval.**
+
+### Merge and deployment
+
+- **PR #97** ("security: harden request estimate and site visit writes") merged via squash into `main` at commit **`2448026`** (`2026-08-03T18:19:01Z`). Fast-forward merge; the only commit that landed contained exactly the reviewed 7-file scope — no unrelated commits entered `main` between PR open and merge.
+- **Vercel production deployment** `dpl_5QEtPdyZ5YmiXHrXx9YJoco2e1Zj` reached `READY` and is aliased to `app.ppmnky.com`, serving commit `2448026` (confirmed matching the merge commit exactly).
+- The deployed application code was confirmed, via the merged diff itself, to include the `canTriageRequests` capability gate on `markRequestReviewedAction`.
+
+### Migration applied to `premier-crm-prod`
+
+`20260803080000_harden_service_requests_estimates_site_visits.sql` applied via `npx supabase db push --linked` (not the MCP tool, per established convention), `2026-08-03T18:22:09Z`–`2026-08-03T18:22:28Z`. Pre-application dry-run (`supabase migration list --linked`) confirmed this was the sole pending migration; post-application, local and remote migration history are in exact sync.
+
+### Pre-migration production state (verified before applying)
+
+Matched the audited baseline exactly, no drift:
+
+| Table | `authenticated` grants | Broad policy |
+|---|---|---|
+| `service_requests` | SELECT, INSERT, UPDATE, DELETE | `internal_org_service_requests` (`FOR ALL`) + `customer_insert_own_portal_service_requests` |
+| `estimates` | SELECT, INSERT, UPDATE, DELETE | `internal_org_estimates` (`FOR ALL`) |
+| `site_visits` | **SELECT only** (already, pre-migration) | `internal_org_site_visits` (`FOR ALL`, stale text only) |
+
+RLS enabled (not forced) on all three tables. PPM: 0 rows across all entity types. Demo: 4 `service_requests`, 5 `estimates`, 2 `site_visits`, 2 `customers`, 2 `jobs`.
+
+### Post-migration production state (verified directly)
+
+`authenticated` grants on all three tables: **SELECT only**. Policies:
+
+| Table | Policy | Command |
+|---|---|---|
+| `service_requests` | `service_requests_select_org_members` | SELECT |
+| `service_requests` | `customer_select_own_service_requests` (preserved, untouched) | SELECT |
+| `estimates` | `estimates_select_org_members` | SELECT |
+| `site_visits` | `site_visits_select_org_members` | SELECT |
+
+`internal_org_service_requests`, `customer_insert_own_portal_service_requests`, `internal_org_estimates`, and `internal_org_site_visits` are confirmed absent. No `authenticated` write policy remains on any of the three tables. `customers`/`properties` policies unchanged (out of scope, confirmed untouched). `jobs`/`quotes` SELECT-only policies from Batch A remain intact, unaffected.
+
+### Production authorization verification
+
+12 direct-write probes and 2 read-behavior checks executed against `premier-crm-prod` using real production accounts, each inside a `SET LOCAL role authenticated` / `SET LOCAL request.jwt.claims` simulation wrapped in an explicit transaction that was always rolled back:
+
+| Table | Test | Actor | Result |
+|---|---|---|---|
+| `service_requests` | INSERT | employee (`sommerskevin3@gmail.com`, Demo) | `42501 permission denied` |
+| `service_requests` | UPDATE | employee | `42501` |
+| `service_requests` | DELETE | owner (`kevinsommers@ppmnky.com`, Demo) | `42501` |
+| `service_requests` | UPDATE (cross-org) | admin (`e2e-admin-bot@example.com`, PPM, acting against a Demo row) | `42501` |
+| `estimates` | INSERT | employee | `42501` |
+| `estimates` | UPDATE | employee | `42501` |
+| `estimates` | DELETE | owner | `42501` |
+| `estimates` | UPDATE (cross-org) | PPM admin against Demo row | `42501` |
+| `site_visits` | INSERT | employee | `42501` |
+| `site_visits` | UPDATE | employee | `42501` |
+| `site_visits` | DELETE | owner | `42501` |
+| `site_visits` | UPDATE (cross-org) | PPM admin against Demo row | `42501` |
+| `service_requests` | same-org SELECT | employee | Succeeded, 4 rows (matches actual count) |
+| `service_requests` | cross-org SELECT | PPM admin against Demo org | 0 rows, no error (RLS-filtered) |
+
+**Side effects**: verified after all 14 probes that `service_requests`/`estimates`/`site_visits` row states and org-scoped counts are byte-for-byte unchanged from the pre-probe snapshot (Demo: 4/5/2, PPM: 0/0/0; the specific fixture rows retained their pre-probe status values, not any of the attempted-write values).
+
+**Coverage gap, stated explicitly**: no `subcontractor` or `viewer` accounts exist in `premier-crm-prod` (confirmed via `org_members` query — production roles present are only `owner`, `admin`, `employee`). Denial for those two roles is **E2E-evidence only** (`authorization-service-requests-bot.spec.ts`, run against the identical migration on `premier-crm-e2e`), not directly production-executed. This mirrors the same limitation already documented for the Batch A production verification.
+
+`get_advisors` (security) on `premier-crm-prod` post-migration: no findings reference `service_requests`, `estimates`, or `site_visits` — no new advisory introduced by this migration.
+
+### Legitimate workflow verification
+
+Given no safe way to establish a real authenticated production UI session without handling credentials (prohibited), legitimate-workflow verification for this rollout is **E2E-verified on the identical migration** (`premier-crm-e2e`, same migration file, same grants/policies now confirmed to also be live in production) plus **code-path inspection** (the deployed commit is byte-identical to what was audited; every legitimate write path uses `createServiceClient()` or a `SECURITY DEFINER` RPC, architecturally unaffected by an `authenticated`-role grant change regardless of environment) — not claimed as directly production-executed:
+
+- Public intake (`customer-intake-bot.spec.ts`, 7/7 pass, including the happy path, honeypot, validation, dedup, and rate-limit tests) — E2E verified; code-path inspected (public API routes use the service-role client). Not production-executed, to avoid creating real data in the blank PPM organization.
+- Staff request review (`markRequestReviewedAction` capability gate) — E2E verified via a real-UI test (`customer-intake-bot.spec.ts` test 7, "owner marks a new request as reviewing"); code-path inspected in the deployed commit.
+- Estimate creation/editing, pricing-review handoff, pricing approval, quote creation — E2E verified (`estimate-pricing-approval-presentation-bot`, `estimate-pricing-review-handoff-bot`, `estimates-lifecycle-bot`, all passing, see totals below).
+- Site-visit scheduling/start/autosave/completion/estimate-generation/customer-safe-projection — E2E verified (`request-site-visit-workflow-bot.spec.ts`, full 18-test golden-path + lifecycle-guard suite, all passing, including the capability-parity test comparing TypeScript and SQL).
+- Downstream quote/job creation — E2E verified (`quote-response-bot.spec.ts`, `quote-totals-recalc-bot.spec.ts`, `request-conversion-bot.spec.ts`).
+
+### Test totals (post-merge, against the now-production-matching schema)
+
+- `pnpm test`: **187/187 pass** (run on merged `main`, commit `2448026`).
+- `pnpm typecheck`: clean, zero errors.
+- `pnpm --filter web build`: clean, zero errors (run with the dev server stopped, to avoid the `.next`-corruption issue encountered earlier this session).
+- `authorization-service-requests-bot.spec.ts`: **30/30 pass**, against `premier-crm-e2e` post-migration.
+- `customer-intake-bot.spec.ts`: **7/7 pass**.
+- Full affected-suite regression run (`employee-estimate-workflow-bot`, `estimate-pricing-approval-presentation-bot`, `estimate-pricing-review-handoff-bot`, `estimates-lifecycle-bot`, `quote-response-bot`, `quote-totals-recalc-bot`, `request-conversion-bot`, `request-site-visit-workflow-bot`): 68 tests total. A full-suite parallel run showed 5 failures (all locator/navigation timeouts, none permission-denied); isolating and re-running each of the 5 individually showed **4 pass clean** (confirming parallel-worker contention, not a regression — none of these tests exercise a permission-denied code path, and quotes/jobs are unaffected by this migration) and **1 reproduces** (`employee-estimate-workflow-bot.spec.ts` test 12, "only one shared customer exists" — a customers-list-page locator-timing issue, unrelated to `service_requests`/`estimates`/`site_visits` grants, RLS, or the capability gate; classified as a pre-existing, known flake, consistent with its behavior earlier in this same session before any production changes were made).
+
+### SR finding closure status
+
+| Finding | Status |
+|---|---|
+| Broad-write DB-layer bypass on `service_requests` | **CLOSED** — grants revoked, policy narrowed, verified in production |
+| Broad-write DB-layer bypass on `estimates` | **CLOSED** — grants revoked, policy narrowed, verified in production |
+| `site_visits` stale/misleading `FOR ALL` policy text | **CLOSED** (consistency fix — grant layer was already safe pre-migration, see §14's accuracy correction; not a newly-closed live vulnerability for this table specifically) |
+| SR-3 (`markRequestReviewedAction` no capability check) | **CLOSED** — `canTriageRequests` gate added, verified via direct action-layer tests and a real-UI E2E test |
+| SR-4 (`customer_insert_own_portal_service_requests` unused policy) | **CLOSED** — policy dropped, verified absent in both `premier-crm-e2e` and `premier-crm-prod` |
+| SR-1/SR-2 (FK cross-org consistency not enforced at DB layer) | **OPEN** — out of scope for this patch, unchanged from the original audit |
+
+### Unresolved adjacent findings (unchanged)
+
+Customers/properties (same defect class, next audit target); SR-1/SR-2; F2/F4/F6/F7 from the original Forge V1 readiness audit. None addressed by this patch.
+
+### Final verdict
+
+**Forge V1.0.1 production verification PASSED.**
+
+**READY WITH NON-BLOCKING FOLLOW-UPS** — the one non-blocking follow-up being `employee-estimate-workflow-bot.spec.ts` test 12's pre-existing, unrelated locator-timing flake (not caused by this patch, not a security concern, tracked separately).
+
+`forge-v1.0.0` remains unchanged at `9181d56`. The `forge-v1.0.1` tag has **not** been created — awaiting Kevin's explicit approval.
+
+**Recommended release-tagging prompt** (for Kevin to issue when ready): *"Create and publish the `forge-v1.0.1` annotated tag at commit `2448026` on `main`, referencing this production-verification section (§15) as the release evidence. Do not move or alter `forge-v1.0.0`."*
