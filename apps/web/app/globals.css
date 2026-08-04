@@ -3,49 +3,113 @@
 @tailwind utilities;
 
 @layer base {
+  /* Forge V1.1 design tokens — burnt copper/rust brand on warm off-white
+     (light) / near-black (dark) surfaces. Values ported from the approved
+     Base44 Today visual reference (docs/ux/base44-today-sync-and-portability-audit.md)
+     into Forge's existing shadcn CSS-variable convention, so every
+     existing `bg-background`/`text-foreground`/etc. consumer across the
+     app picks up the new palette automatically — this is a shared design
+     token change, not a Today-local override. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --radius: 0.5rem;
+    --background: 36 33% 96.5%;
+    --foreground: 20 14% 12%;
+    --card: 40 44% 99%;
+    --card-foreground: 20 14% 12%;
+    --popover: 40 44% 99%;
+    --popover-foreground: 20 14% 12%;
+    --primary: 16 65% 41%;
+    --primary-foreground: 40 50% 97%;
+    --secondary: 30 12% 92%;
+    --secondary-foreground: 20 14% 18%;
+    --muted: 30 16% 92%;
+    --muted-foreground: 25 9% 42%;
+    --accent: 16 65% 41%;
+    --accent-foreground: 40 50% 97%;
+    --destructive: 0 62% 42%;
+    --destructive-foreground: 40 50% 97%;
+    --warning: 32 72% 38%;
+    --warning-foreground: 20 14% 12%;
+    --success: 152 48% 36%;
+    --success-foreground: 40 50% 97%;
+    --border: 30 10% 86%;
+    --input: 30 10% 86%;
+    --ring: 16 65% 41%;
+    --radius: 0.75rem;
+
+    /* Navigation shell — near-black, distinct from page surfaces */
+    --nav-background: 20 32% 8%;
+    --nav-foreground: 30 10% 68%;
+    --nav-active: 16 65% 50%;
+    --nav-active-foreground: 40 30% 96%;
+    --nav-border: 20 18% 16%;
+
+    /* Status-surface pairs (bg/fg) — status is never color-only, every
+       pill also carries a text label (see StatusPill). */
+    --st-urgent-bg: 0 60% 95%;
+    --st-urgent-fg: 0 58% 34%;
+    --st-warning-bg: 34 70% 94%;
+    --st-warning-fg: 32 65% 30%;
+    --st-scheduled-bg: 212 55% 94%;
+    --st-scheduled-fg: 212 50% 32%;
+    --st-progress-bg: 265 45% 94%;
+    --st-progress-fg: 265 40% 38%;
+    --st-waiting-bg: 30 8% 92%;
+    --st-waiting-fg: 30 8% 36%;
+    --st-success-bg: 152 45% 93%;
+    --st-success-fg: 152 45% 28%;
+    --st-error-bg: 0 45% 95%;
+    --st-error-fg: 0 52% 33%;
+    --st-neutral-bg: 30 8% 92%;
+    --st-neutral-fg: 30 8% 36%;
   }
 
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --background: 20 24% 6%;
+    --foreground: 40 22% 92%;
+    --card: 20 16% 14%;
+    --card-foreground: 40 22% 92%;
+    --popover: 20 16% 14%;
+    --popover-foreground: 40 22% 92%;
+    --primary: 16 58% 55%;
+    --primary-foreground: 20 30% 8%;
+    --secondary: 20 15% 18%;
+    --secondary-foreground: 40 22% 92%;
+    --muted: 20 14% 19%;
+    --muted-foreground: 30 8% 68%;
+    --accent: 16 58% 55%;
+    --accent-foreground: 20 30% 8%;
+    --destructive: 0 55% 58%;
+    --destructive-foreground: 40 60% 98%;
+    --warning: 32 68% 56%;
+    --warning-foreground: 20 30% 8%;
+    --success: 152 45% 50%;
+    --success-foreground: 20 30% 8%;
+    --border: 20 14% 25%;
+    --input: 20 14% 26%;
+    --ring: 16 58% 55%;
+
+    --nav-background: 20 30% 4.5%;
+    --nav-foreground: 30 10% 68%;
+    --nav-active: 16 58% 55%;
+    --nav-active-foreground: 40 30% 96%;
+    --nav-border: 20 18% 14%;
+
+    --st-urgent-bg: 0 42% 16%;
+    --st-urgent-fg: 0 52% 70%;
+    --st-warning-bg: 34 52% 16%;
+    --st-warning-fg: 34 62% 70%;
+    --st-scheduled-bg: 212 38% 18%;
+    --st-scheduled-fg: 212 48% 70%;
+    --st-progress-bg: 265 32% 20%;
+    --st-progress-fg: 265 42% 74%;
+    --st-waiting-bg: 30 8% 19%;
+    --st-waiting-fg: 30 8% 66%;
+    --st-success-bg: 152 38% 16%;
+    --st-success-fg: 152 42% 68%;
+    --st-error-bg: 0 36% 16%;
+    --st-error-fg: 0 48% 68%;
+    --st-neutral-bg: 30 8% 19%;
+    --st-neutral-fg: 30 8% 66%;
   }
 
   * {

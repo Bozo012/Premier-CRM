@@ -4,14 +4,21 @@
 // (spike/base44-today-compat), where it was proven on /today, generalized
 // with a `red` tone for error/destructive/denied states per the V1.1 plan.
 // Color is never the sole signal — every pill carries a text label.
+//
+// Tone->token mapping adopts the status-surface palette from the approved
+// Base44 Today visual reference (forge-today.css) via Forge's own CSS
+// variables (app/globals.css) rather than literal Tailwind colors — this
+// makes every existing StatusPill consumer app-wide dark-mode-correct for
+// free, without a per-tone rewrite (tone names are unchanged, so no call
+// site elsewhere in the app needs to change).
 import { cn } from '@/lib/utils';
 
 const TONES = {
-  amber: 'border-amber-200 bg-amber-50 text-amber-800',
-  emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  blue: 'border-blue-200 bg-blue-50 text-blue-800',
-  red: 'border-red-200 bg-red-50 text-red-800',
-  neutral: 'border-border bg-muted text-muted-foreground',
+  amber: 'border-transparent bg-[hsl(var(--st-warning-bg))] text-[hsl(var(--st-warning-fg))]',
+  emerald: 'border-transparent bg-[hsl(var(--st-success-bg))] text-[hsl(var(--st-success-fg))]',
+  blue: 'border-transparent bg-[hsl(var(--st-scheduled-bg))] text-[hsl(var(--st-scheduled-fg))]',
+  red: 'border-transparent bg-[hsl(var(--st-error-bg))] text-[hsl(var(--st-error-fg))]',
+  neutral: 'border-transparent bg-[hsl(var(--st-neutral-bg))] text-[hsl(var(--st-neutral-fg))]',
 } as const;
 
 export type StatusTone = keyof typeof TONES;

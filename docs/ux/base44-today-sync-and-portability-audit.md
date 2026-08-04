@@ -1,6 +1,6 @@
 # Base44 Today Sync & Portability Audit
 
-Status: **audit and planning only.** No code was integrated into Premier-CRM. No push was made to `Forge-Base44-UX`. No Base44 output was modified. Estimates and Site Inspection remain untouched. This document is the deliverable required by the Base44 Today sync-verification/integration-planning task.
+Status: **audit complete; controlled Today visual integration implemented on a feature branch, PR opened, not merged.** No push was made to `Forge-Base44-UX`. No Base44 output was modified. Estimates and Site Inspection remain untouched. See §13 for the integration record.
 
 ---
 
@@ -216,3 +216,93 @@ Proceed to integration **only after** Kevin makes the one open product decision 
 Complete Base44 output exists in GitHub and was cloned locally with zero drift (Phase 1) — satisfied. Sync state is understood, and Base44's own claim was independently verified against real repository evidence rather than trusted at face value — satisfied. Repository permissions show no violation at the repo-evidence level; one manual confirmation step remains for Kevin (Phase 2) — **listed fix**. No secrets/backend contamination found in the portable Today file set (Phase 4) — satisfied. Portable files are identified, and Base44-specific files are correctly excluded (Phase 4) — satisfied. A theme-integration path is defined, but it depends on one explicit product decision from Kevin before implementation can start cleanly (Phase 6) — **listed fix**. Forge component mapping is fully defined (Phase 5) — satisfied. An exact integration branch/scope is proposed, deliberately excluding the shared-nav and appearance-toggle items pending Kevin's decisions (Phase 7) — satisfied as a plan, not yet authorized to implement. Tests are fully defined (Phase 8) — satisfied.
 
 **Listed fixes required before implementation begins**: (1) Kevin's Phase 6 decision on whether Forge V1.1 introduces a real light/dark/system appearance toggle this cycle, or whether the burnt-orange palette simply replaces the current default look with no toggle; (2) Kevin's one-time visual confirmation of the Base44 GitHub App's installation-repository-access screen (Phase 2).
+
+Both listed fixes resolved by Kevin (see §13) — integration implemented on `feature/forge-v1.1-today-base44-visual-integration`, PR opened, **not merged**.
+
+---
+
+## 13. Integration record (post-audit, this session)
+
+### Kevin's decisions
+
+1. **Appearance**: Forge V1.1 introduces a real, Forge-owned Light/Dark/System setting, defaulting to System, persisted client-side only (no database/backend). Base44's `useForgeAppearance.ts` was **not** ported.
+2. **GitHub App scope**: manually confirmed by Kevin — `Forge-Base44-UX` only; `Premier-CRM` and `premier-property-maintenance` confirmed to have no access. No further confirmation requested during implementation, per Kevin's explicit instruction.
+3. **Navigation**: Base44's `DesktopNavigation.tsx`/`MobileNavigation.tsx` were **not** ported as components (would fork/duplicate Forge's existing shared UX-A nav, and `MobileNavigation.tsx` hardcoded its own item list — see §4). Instead, Forge's existing, already-shared `AppDesktopNav`/`AppBottomNav` components were re-themed to match Base44's visual treatment, with their pre-existing, unchanged route list/active-state/badge logic serving as the "Forge-supplied navigation items" Base44's presentation now renders.
+
+### Integration branch
+
+`feature/forge-v1.1-today-base44-visual-integration`, created from `main` @ `cc795b5` (PR #109's merge commit).
+
+### Base44 source commit
+
+`Bozo012/Forge-Base44-UX` @ `adee72ef881be3023ef78332c28540b2326b3a89` — unchanged from the audit; verified via `gh api repos/Bozo012/Forge-Base44-UX/commits/main` immediately before implementation began (Phase 0 checkpoint), no new commits appeared.
+
+### Files ported / adapted / rejected
+
+| Base44 source | Disposition | Forge file |
+|---|---|---|
+| `src/styles/forge-today.css` | **Adapted** — token values merged into Forge's existing shadcn CSS-variable convention (not a parallel stylesheet) | `apps/web/app/globals.css`, `apps/web/tailwind.config.ts` |
+| `ThemeControl.tsx` | **Adapted** — same interaction pattern, bound to Forge's own `useTheme()` | `apps/web/components/theme/theme-control.tsx` |
+| `useForgeAppearance.ts` | **Rejected** — replaced by a Forge-owned, app-wide mechanism (see below) | `apps/web/components/theme/theme-provider.tsx` |
+| `StatusBadge.tsx` | **Merged into existing shared primitive** — token mapping only, tone API unchanged | `apps/web/components/ui/status-pill.tsx` |
+| `TodayHeader.tsx` | **Adapted (partial)** — `ThemeControl` mounted; org-switcher/sign-out kept as already-real Forge bindings, not re-implemented | `apps/web/app/(app)/today/_components/today-header.tsx` |
+| `AttentionSection.tsx` | **Adapted (visual only)** — eyebrow label, item count, primary-color accent border, icon-bearing buttons; row-based responsive structure (with its previously-fixed phone-overflow behavior) deliberately kept instead of switching to Base44's 2-column card grid | `apps/web/app/(app)/today/_components/action-queue.tsx` |
+| `WorkSection.tsx` | **Adapted (visual only)** — eyebrow label, time-first row layout | `apps/web/app/(app)/today/_components/today-schedule.tsx` |
+| `OperationalSnapshot.tsx` | **Adapted (visual only)** — eyebrow label, rounded-2xl cards, icon | `apps/web/app/(app)/today/_components/snapshot-grid.tsx` |
+| `QuickActions.tsx` | **Adapted (visual only)** — icon-badge row treatment | `apps/web/app/(app)/today/_components/quick-actions.tsx` |
+| `DesktopNavigation.tsx` | **Rejected as a component** — theming-only, applied to the existing shared nav instead | `apps/web/components/navigation/app-desktop-nav.tsx` |
+| `MobileNavigation.tsx` | **Rejected as a component** (hardcoded item list) — theming-only, applied to the existing shared nav instead | `apps/web/components/navigation/app-bottom-nav.tsx` |
+| `ForgeMark.tsx` | **Not ported this pass** — `AppDesktopNav`'s existing inline brand mark was re-themed instead (flame icon + "Forge" wordmark) rather than extracting a new shared component; can be factored out later if reused elsewhere | — |
+| `BrowseLinks.tsx` | **Rejected** — would reintroduce the browse-grid duplication Kevin already removed from Today | — |
+| `MobileStaffSheet.tsx` | **Not ported this pass** — kept the diff focused; Forge's header already fits `ThemeControl` inline at every breakpoint without needing a dropdown-sheet indirection. Can be revisited if header crowding becomes a real problem on narrow phones. | — |
+| `TodayDashboard.tsx`, `contracts/today.ts` | **Reference only** — Forge's own `page.tsx` composition and real `TodayViewModel`/Layer 1/2 types remain authoritative; not imported | — |
+| `TodayState.tsx` | **Not touched this pass** — Forge's existing `EmptyState`/`ErrorState` already picked up the new token palette automatically via the shared CSS-variable change; no separate port needed | — |
+| `TodayRoute.tsx`, `todayScenarios.ts`, `forgeToday.ts` | **Excluded**, per Kevin's original instruction — not read into any Forge file | — |
+
+### Appearance-setting implementation
+
+- **Mechanism**: `apps/web/components/theme/theme-provider.tsx` — a single React context (`ThemeProvider`/`useTheme`), mounted once in `app/layout.tsx`, wrapping the entire app (not Today-local).
+- **Persistence**: `window.localStorage`, key `forge-appearance` — client-side only, no database/backend/Supabase involvement, one single key app-wide (replaces, not duplicates, Base44's Today-local `forge-presentation-appearance` key, which is not ported).
+- **Default**: `system`.
+- **Anti-flash**: a small inline script (`THEME_ANTI_FLASH_SCRIPT`, exported from `theme-provider.tsx` and inlined into `app/layout.tsx`'s `<head>`) reads the same storage key and applies the `dark` class to `<html>` before first paint — `<html suppressHydrationWarning>` avoids a false-positive hydration warning for the one attribute the script may set ahead of React.
+- **System-preference tracking**: `window.matchMedia('(prefers-color-scheme: dark)')` with a `change` listener — updates live without a reload when `appearance === 'system'`.
+- **Control**: `apps/web/components/theme/theme-control.tsx`, mounted in `today-header.tsx`'s `PageHeader` actions slot. Three-way toggle, `aria-pressed` per option, `aria-label="{Light|Dark|System} appearance"`, focus-visible ring, label text hidden below `sm` (icon-only on phones, matching Base44's reference).
+- **Cascading effect**: because Forge's shared token source (`globals.css`) was updated rather than forked, the appearance setting affects every route that already used `bg-background`/`text-foreground`/etc. (i.e., the whole app), not just Today — expected and intended per Kevin's Phase 6 instruction to extend shared tokens rather than fork a second namespace.
+
+### Navigation adaptation
+
+No hardcoded route list was ported from Base44. `AppDesktopNav`/`AppBottomNav` keep their pre-existing, Forge-owned `href`/`label`/`isActive` data (unchanged) and gained an `Icon` field (Forge's own choice, `lucide-react`, already a project dependency) plus the new `nav-*` token-based visual treatment (near-black shell, burnt-orange active state, active state indicated by both a left accent bar and bold text — not color alone). Role/capability filtering, organization context, and route authorization were not touched. Desktop and mobile navs remain mutually exclusive by breakpoint (`hidden md:flex` / `md:hidden`, unchanged). Mobile safe-area padding preserved (`env(safe-area-inset-bottom)`).
+
+### Theme-token integration
+
+Base44's `forge-today.css` custom properties were merged directly into `apps/web/app/globals.css`'s existing `:root`/`.dark` blocks (same variable-naming convention Forge already used — `--background`, `--foreground`, `--card`, `--primary`, etc.) rather than introduced as a parallel stylesheet or a second Tailwind namespace. New tokens added: `--warning`/`--warning-foreground`, `--success`/`--success-foreground`, `--nav-*` (5 tokens), and 8 status-surface pairs (`--st-*-bg`/`--st-*-fg`). `tailwind.config.ts` extended with `warning`, `success`, and `nav` color families mapping to the new variables. `StatusPill`'s tone→class mapping was updated to reference the new status-surface tokens instead of literal Tailwind colors (`amber-50` etc.) — this makes every existing `StatusPill` consumer dark-mode-correct automatically, without a per-tone rewrite; tone names (`amber`/`emerald`/`blue`/`red`/`neutral`) are unchanged so no call site elsewhere in the app needed to change.
+
+### Tests
+
+**Unit**: `pnpm test` — 205/205 (pre-existing suite, none of it exercises Layer 3 markup, so unaffected by this visual-only change).
+
+**Typecheck / build**: `pnpm --filter web typecheck` clean; `pnpm --filter web build` clean (dev server stopped first, per instruction) — all 35 routes generate successfully including `/today`.
+
+**E2E** (against `premier-crm-e2e`, dev server started with explicit env vars exported from `.env.test`, not `apps/web/.env.local` — which was found, and left untouched, still pointing at `premier-crm-prod`'s project ref; verified via `/api/e2e-health` that the running server was actually on `premier-crm-e2e` before running anything):
+
+- `today-redesign-bot.spec.ts` — 20/20 (one selector fixed: `snapshot-grid.tsx`'s value element changed from `<p class="text-4xl">` to `<span class="text-3xl">` as part of the visual adaptation; the test's structural CSS-class selector was replaced with a scoped text-content assertion, per the explicit instruction to update selectors, not weaken assertions, when presentation markup changes).
+- `today-action-queue-bot.spec.ts` — 7/7, unmodified, unaffected.
+- `multi-org-switching-bot.spec.ts` — 7/7, unaffected.
+- `operator-workflow-bot.spec.ts` — 1/1, unaffected.
+- **New**: `today-appearance-bot.spec.ts` — 6/6, purpose-built for this integration: defaults to System; Light/Dark force regardless of OS preference; System responds live to an OS-preference change (`page.emulateMedia`); preference survives a reload; keyboard focus + accessible names on the appearance control.
+- Component-level (jsdom/testing-library) unit tests were **not** added for `ThemeProvider`/`ThemeControl` — this repo has no existing React-component-testing infrastructure (`packages/*`/`apps/web` unit tests are all pure-logic `.test.ts`, no `@testing-library/react` dependency), and introducing one solely for this would be a disproportionate new pattern for one component, plus a new dependency not strictly required (Phase 10 constraint). The 6 new E2E tests exercise the real DOM/class-toggling behavior directly, which is arguably the more meaningful check for this specific mechanism.
+
+**Responsive** (via `today-redesign-bot.spec.ts`'s existing viewport suite, all passing post-integration): phone (390×844), tablet portrait (768×1024), tablet landscape (1024×768) — no horizontal overflow. Desktop (1440×900) nav render/navigation — passing.
+
+**Accessibility**: action-queue keyboard-focus test passing; appearance control keyboard/`aria-pressed`/`aria-label` coverage new this pass; `StatusPill` continues to pair every status with a text label, never color alone (unchanged); every interactive element remains a native `<button>`/`<a>`/`<select>`.
+
+### Remaining risks / follow-ups (not blocking this PR)
+
+- `ForgeMark.tsx` and `MobileStaffSheet.tsx` were not extracted as standalone components this pass (see table above) — low risk, purely a scope decision to keep the diff focused; can be revisited.
+- The new `warning`/`success`/`nav` Tailwind color families and status-surface tokens are currently only consumed by Today/shared-nav/`StatusPill` — safe to leave unused elsewhere, but worth keeping in mind during the Estimates/Site Inspection passes so the same tokens get reused rather than a third parallel system invented.
+- No pixel-level visual-regression tooling exists in this repo (per the original instruction, none was added) — the visual comparison against Base44's approved reference was manual (screenshots + `today-visual-reference.md`), not automated.
+- `apps/web/.env.local` still points at `premier-crm-prod`'s project ref — this predates this session and was not touched, but is a standing hazard for anyone running `pnpm dev` without following the explicit-env-var pattern documented in `tests/e2e/README.md` and used throughout this integration; worth a dedicated fix outside this PR's scope.
+
+### Rollback procedure
+
+Identical in shape to the original Today redesign's rollback plan: `git revert` the integration PR's merge commit once merged — this branch touches only presentation-layer files (`app/globals.css`, `tailwind.config.ts`, `app/layout.tsx`, the new `components/theme/` files, `components/ui/status-pill.tsx`, `components/navigation/*`, Today's `_components/*.tsx`, and one E2E selector fix) plus one new E2E spec file. Zero Supabase schema/RLS/RPC/migration changes exist anywhere in this branch. Layer 1 (`packages/db/queries/today-actions.ts`) and Layer 2 (`apps/web/app/(app)/today/_lib/view-model.ts`) are completely untouched.

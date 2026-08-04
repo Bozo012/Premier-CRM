@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
+import { ThemeControl } from '@/components/theme/theme-control';
 
 import { signOutAction } from '../actions';
 import { OrgSwitcher } from './org-switcher';
@@ -9,8 +10,12 @@ import type { AvailableOrgMembership } from '@premier/db';
 // resolved via getActiveOrgContext()/auth.getUser() — never re-resolves
 // org/user context itself. OrgSwitcher (unmodified) still owns the actual
 // org-switch mutation through switchActiveOrgAction(). Built on the shared
-// PageHeader primitive (Forge V1.1 UX foundation) — the first real consumer
-// of that component outside its own isolated definition.
+// PageHeader primitive (Forge V1.1 UX foundation).
+//
+// ThemeControl (adapted from the approved Base44 Today visual reference)
+// is bound to Forge's own useTheme() — never Base44's local
+// useForgeAppearance() hook, which is not ported (see
+// docs/ux/base44-today-sync-and-portability-audit.md).
 export function TodayHeader({
   firstName,
   formattedDate,
@@ -42,11 +47,14 @@ export function TodayHeader({
         title={`${greeting}, ${firstName}`}
         description={formattedDate}
         actions={
-          <form action={signOutAction}>
-            <Button type="submit" variant="ghost" size="sm">
-              Sign out
-            </Button>
-          </form>
+          <>
+            <ThemeControl />
+            <form action={signOutAction}>
+              <Button type="submit" variant="ghost" size="sm">
+                Sign out
+              </Button>
+            </form>
+          </>
         }
       />
 
