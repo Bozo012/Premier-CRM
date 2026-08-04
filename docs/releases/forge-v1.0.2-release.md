@@ -12,6 +12,9 @@
 - **Production deployment**: Vercel, project `premier-crm-web`, `dpl_5dRrqLCUGvrYnZkL7nXM7UTkDvCq`, `READY`, aliased to `app.ppmnky.com`
 - **Migrations**: `20260804000000_harden_customers_and_properties.sql`, `20260804000001_harden_customer_properties_and_accounts.sql`, `20260804000002_fix_customer_properties_accounts_policy_recursion.sql` — applied to `premier-crm-prod` via `npx supabase db push --linked`, `2026-08-04T01:13:56Z`–`2026-08-04T01:14:40Z`
 - **Release date**: 2026-08-04
+- **Production verification**: **PASSED**
+- **Release verdict**: **READY WITH NON-BLOCKING FOLLOW-UPS**
+- **Production migration history**: fully synchronized before and after this patch (no drift, unlike E2E — see §7)
 
 ## 2. Patch purpose
 
@@ -47,7 +50,19 @@ All four tables' pre-existing customer-portal SELECT policies (`customer_select_
 
 Full detail: `docs/security/customers-properties-authorization-audit.md` §16–§17.
 
-## 6. Known unresolved items (unchanged by this patch)
+## 6. CP finding closure status
+
+| Finding | Status |
+|---|---|
+| CP-1 (customers/properties direct-write bypass) | **Closed** |
+| CP-2 (customer_properties asymmetric cross-org check) | **Closed** |
+| CP-3 (customer_accounts asymmetric cross-org check / portal exposure) | **Closed** |
+| CP-4 (no capability model for customer/property creation) | Non-blocking — Kevin decision, not part of this patch |
+| CP-5 (denormalized fields directly writable) | **Closed** (bundled into CP-A) |
+| CP-6 (`is_archived` unused) | Informational only — no change required |
+| CP-7 (broader FK cross-org consistency) | Non-blocking — defense-in-depth backlog, unchanged from original audit |
+
+## 7. Known unresolved items (unchanged by this patch)
 
 - CP-4: no capability model exists for customer/property creation/editing even at the trusted server-action layer — Kevin decision, not addressed here.
 - CP-7: broader FK cross-org consistency (`estimates`/`jobs`/`quote_line_items`/etc. referencing `customers`/`properties`) — defense-in-depth backlog, unchanged from the original audit.
@@ -55,6 +70,6 @@ Full detail: `docs/security/customers-properties-authorization-audit.md` §16–
 - E2E's pre-existing 27-migration bookkeeping-timestamp drift (found during this session's recovery, unrelated to CP-A/CP-B) — intentionally left untouched; does not affect production, which has zero such drift.
 - F2/F4/F6/F7 from the original Forge V1 readiness audit — not addressed.
 
-## 7. Explicit statement
+## 8. Explicit statement
 
 **`forge-v1.0.0` remains unchanged at `9181d56`, and `forge-v1.0.1` remains unchanged at `d5e9824`.** This release record documents a security patch on top of the V1.0.1 baseline; it does not modify, move, or supersede either tag. The `forge-v1.0.2` tag has not been created as of this record — creating it requires separate explicit approval.
