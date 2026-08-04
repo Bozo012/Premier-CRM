@@ -1,6 +1,8 @@
 # Forge V1.1 — Today Redesign
 
-Status: **implemented on `feature/forge-v1.1-today-redesign`, not merged.** First real route implementation of the Forge V1.1 UX modernization program (`docs/ux/forge-v1.1-ux-modernization-plan.md`), Batch UX-B, PR2 of 4 ("Today redesign"). Builds on the merged Batch UX-A shared foundation (PR #104).
+Status: **merged and verified.** PR #105 squash-merged to `main` at commit `d9c9ff1`. First real route implementation of the Forge V1.1 UX modernization program (`docs/ux/forge-v1.1-ux-modernization-plan.md`), Batch UX-B, PR2 of 4 ("Today redesign"). Builds on the merged Batch UX-A shared foundation (PR #104, `05fbead`). This is now the authoritative Forge V1.1 presentation reference for `/today` — the Base44 compatibility spike remains historical/reference-only.
+
+Post-merge validation on `main`: `pnpm test` 205/205, typecheck/build clean, 27/27 E2E on a clean consolidated re-run (`today-redesign-bot`, `today-action-queue-bot`, `operator-workflow-bot`, `multi-org-switching-bot`), phone overflow (390×844) explicitly re-confirmed fixed via a real Playwright viewport assertion. A pre-merge review caught one gap — the components were missing their documented `BASE44-REPLACEABLE` markers — fixed before merge (commit `906ec37`).
 
 ## Goals
 

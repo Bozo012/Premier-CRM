@@ -204,6 +204,8 @@ No lifecycle/state-machine changes. No new database tables/columns/RPCs for a UI
 
 The Base44 compatibility spike (`spike/base44-today-compat`, see `docs/ux/base44-compatibility-spike-report.md`) proved the 3-layer pattern below works on `/today` and this handoff's scope now extends to every route (see `docs/ux/forge-v1.1-ux-modernization-plan.md` for the full plan). These constraints generalize §1/§2 above into a written, reusable contract:
 
+**The spike itself was never merged and stays historical/reference-only.** The real, merged, authoritative implementation of this pattern is `/today` on `main` (PR #105, commit `d9c9ff1`) — `apps/web/app/(app)/today/_components/*.tsx` (Layer 3, every file marked `BASE44-REPLACEABLE`), `apps/web/app/(app)/today/_lib/view-model.ts` (Layer 2), and `packages/db/queries/today-actions.ts` (Layer 1). Any actual Base44-generated output should target Today's Layer 3 files as the first concrete example of where generated markup slots in — not the spike's components, which predate the corrected Layer 2 boundary (see the spike report's own note on this).
+
 **Every generated route must integrate through**: existing page/query layer (Layer 1 — unchanged) → a pure adapter/view-model (Layer 2 — no I/O, no authorization decisions) → replaceable presentation components (Layer 3, marked at the exact substitution seam) → existing server actions/RPCs passed as controlled callbacks or forms, never a new endpoint.
 
 **Base44 output may provide**: JSX/TSX presentation markup, layout, visual hierarchy, responsive design, animation, presentation components, icons, non-authoritative client presentation state.
