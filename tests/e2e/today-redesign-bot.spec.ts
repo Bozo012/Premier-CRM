@@ -240,7 +240,11 @@ test.describe('today redesign bot', () => {
     await expect(page.getByText('Operational snapshot')).toBeVisible();
     const invoiceCard = page.getByRole('link').filter({ hasText: 'Invoices needing action' });
     await expect(invoiceCard).toBeVisible();
-    await expect(invoiceCard.locator('p.text-4xl')).toHaveText('1');
+    // Selector intentionally not tied to a specific tag/Tailwind class (the
+    // Base44 visual integration changed the value element from <p
+    // class="text-4xl"> to <span class="text-3xl">) — match the visible
+    // count text directly within the scoped card instead.
+    await expect(invoiceCard.getByText('1', { exact: true })).toBeVisible();
     // No revenue/currency figures anywhere in the snapshot section (Kevin
     // decision: actionable counts only, never accounting totals).
     const snapshotSection = page.locator('section', { has: page.getByText('Operational snapshot') });

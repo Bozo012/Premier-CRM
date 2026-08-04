@@ -5,6 +5,7 @@ import './globals.css';
 import { PRODUCT_NAME } from '@premier/shared';
 
 import { Toaster } from '@/components/ui/sonner';
+import { ThemeProvider, THEME_ANTI_FLASH_SCRIPT } from '@/components/theme/theme-provider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -35,10 +36,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Anti-flash: applies the `dark` class before first paint, reading
+            the same storage key ThemeProvider uses — see theme-provider.tsx. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_ANTI_FLASH_SCRIPT }} />
+      </head>
       <body className={inter.className}>
-        {children}
-        <Toaster />
+        <ThemeProvider>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -1,6 +1,5 @@
 import Link from 'next/link';
-
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ArrowUpRight } from 'lucide-react';
 
 import type { SnapshotItem } from '../_lib/view-model';
 
@@ -12,22 +11,29 @@ import type { SnapshotItem } from '../_lib/view-model';
 export function SnapshotGrid({ items }: { items: SnapshotItem[] }) {
   // BASE44-REPLACEABLE: markup/classNames below are representative only —
   // real Base44 output would replace this JSX 1:1, same props in/out.
+  // Layout adapted from Base44's OperationalSnapshot.tsx (approved Today
+  // visual reference), flexes to the item count already supplied by Layer
+  // 2 rather than assuming a fixed number of cards.
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Operational snapshot</h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[.16em] text-muted-foreground">Actionable workload</p>
+        <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground">Operational snapshot</h2>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {items.map((item) => (
-          <Card key={item.label} className="border-t-4 border-t-primary/40 transition-colors hover:bg-muted/30">
-            <Link href={item.href} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-              <CardHeader className="pb-1">
-                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{item.label}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <p className="text-4xl font-bold leading-none tracking-tight">{item.value}</p>
-                <p className="text-sm text-muted-foreground">{item.helper}</p>
-              </CardContent>
-            </Link>
-          </Card>
+          <Link
+            key={item.label}
+            href={item.href}
+            className="min-h-32 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="flex items-start justify-between">
+              <span className="text-3xl font-bold tracking-tight text-card-foreground">{item.value}</span>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            </span>
+            <span className="mt-2 block text-sm font-bold text-card-foreground">{item.label}</span>
+            <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.helper}</span>
+          </Link>
         ))}
       </div>
     </section>

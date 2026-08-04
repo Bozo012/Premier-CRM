@@ -15,6 +15,9 @@ export function TodaySchedule({ entries }: { entries: ScheduleEntry[] }) {
   // Empty state (entries.length === 0) must be preserved.
   return (
     <section>
+      <div className="mb-3">
+        <p className="text-xs font-bold uppercase tracking-[.16em] text-muted-foreground">Schedule</p>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Today&apos;s work</CardTitle>
@@ -25,13 +28,15 @@ export function TodaySchedule({ entries }: { entries: ScheduleEntry[] }) {
               {entries.map((entry) => (
                 <li key={`${entry.kind}-${entry.id}`}>
                   <Link href={entry.href} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="min-w-0 space-y-0.5">
-                      <span className="block truncate text-sm font-medium text-foreground">{entry.title}</span>
-                      {entry.subtitle ? <span className="block truncate text-xs text-muted-foreground">{entry.subtitle}</span> : null}
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{entry.timeLabel}</span>
+                      <span className="min-w-0 space-y-0.5">
+                        <span className="block truncate text-sm font-medium text-foreground">{entry.title}</span>
+                        {entry.subtitle ? <span className="block truncate text-xs text-muted-foreground">{entry.subtitle}</span> : null}
+                      </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2">
                       <StatusPill tone={entry.kind === 'site_visit' ? 'blue' : 'neutral'}>{entry.kind === 'site_visit' ? 'Site visit' : 'Job'}</StatusPill>
-                      <span className="text-xs text-muted-foreground">{entry.timeLabel}</span>
                     </span>
                   </Link>
                 </li>

@@ -91,3 +91,19 @@ This PR is additive/presentation-and-read-only:
 - `git revert` the PR's merge commit — no Supabase schema, RLS, RPC, or migration changes exist anywhere in this branch to unwind.
 - The two new Layer 1 read functions (`getTodaySiteVisits`, `getTodayInvoicesNeedingActionCount`) and the corrected `getTodayQuoteActivity` are pure `SELECT` queries — reverting the code removes them cleanly with no data-layer cleanup required.
 - `tests/e2e/utils/selectors.ts` and `operator-workflow-bot.spec.ts` changes revert together with the rest of the PR; no other spec file is touched.
+
+## Base44 Today visual integration (branch, not yet merged)
+
+Status: **implemented on `feature/forge-v1.1-today-base44-visual-integration` — PR #110 opened, not merged.** Full record: `docs/ux/base44-today-sync-and-portability-audit.md` §13.
+
+The architecture above (Layer 1 domain code / Layer 2 pure view-model / Layer 3 replaceable presentation) is unchanged and remains authoritative — this integration replaces/adapts Layer 3 markup only, exactly at the `BASE44-REPLACEABLE` seams this redesign originally marked. Layer 1 (`packages/db/queries/today-actions.ts`) and Layer 2 (`apps/web/app/(app)/today/_lib/view-model.ts`) were not touched.
+
+**What changed**: `today-header.tsx`, `action-queue.tsx`, `today-schedule.tsx`, `snapshot-grid.tsx`, and `quick-actions.tsx` adopted the visual treatment from the approved Base44 Today reference (`Bozo012/Forge-Base44-UX` @ `adee72e`) — burnt-copper/rust accent, near-black nav shell, rounded-2xl cards, icon-bearing controls — via Forge's own shared CSS-variable token system (`app/globals.css`, extended, not forked), not a copy of Base44's markup verbatim. `admin-links.tsx` was left as-is (picks up the new tokens automatically via `Card`). `DesktopNavigation`/`MobileNavigation`/`BrowseLinks` from Base44 were explicitly **not** ported as components (see the audit doc §5 and §13 for why); Forge's pre-existing shared `AppDesktopNav`/`AppBottomNav` were re-themed instead, keeping their own route/active-state/capability logic completely unchanged.
+
+**Light/Dark/System behavior**: new, Forge-owned, app-wide (not Today-local) — `apps/web/components/theme/theme-provider.tsx` + `theme-control.tsx`. Defaults to System, persisted in `localStorage` under a single key (`forge-appearance`), applied via a `dark` class on `<html>` with an anti-flash inline script in `app/layout.tsx`'s `<head>`. Mounted in `today-header.tsx`; cascades to every route via the shared token change, not scoped to Today. Full detail: audit doc §13.
+
+**Responsive behavior**: unchanged from the original redesign's verified behavior — phone (390×844), tablet portrait (768×1024), tablet landscape (1024×768), desktop (1440×900) all re-verified passing after the visual integration (`today-redesign-bot.spec.ts`'s existing viewport suite). The previously-fixed phone-overflow bug's row-stacking structure in `action-queue.tsx` was deliberately preserved rather than switched to Base44's 2-column card grid, specifically to avoid re-risking that fix.
+
+**Portability seam**: every Layer 3 file in `_components/` remains marked `BASE44-REPLACEABLE` — this integration is itself an instance of that seam being exercised for real, not a one-time event; a future Base44 iteration can replace these files again following the same audit → port → bind → test → PR workflow (`docs/ux/base44-today-sync-and-portability-audit.md` §5).
+
+**Rollback plan**: same shape as the original redesign — `git revert` the integration PR's merge commit once merged; presentation-only diff (plus one shared-token/nav-theming change and one new E2E spec file), zero Supabase/schema/RLS/RPC changes, Layer 1/2 untouched.
