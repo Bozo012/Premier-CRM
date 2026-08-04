@@ -199,3 +199,19 @@ Employees without `canApproveEstimatePricing` now submit an estimate for review 
 ## 17. Prohibited architectural changes (repeated for emphasis)
 
 No lifecycle/state-machine changes. No new database tables/columns/RPCs for a UI-only pass (a genuinely new UI-driven data need must be raised for a separate, reviewed migration — not silently added). No relaxation of capability checks. No new customer-facing data exposure. No changes to numbering sequences, Storage security, or organization isolation. No Resend/email configuration as part of a UI pass. No tagging of any V1/baseline release as part of a UI-only phase — release tagging is a separate, explicitly authorized step.
+
+## 18. Application-wide integration constraints (Forge V1.1, added after the compatibility spike)
+
+The Base44 compatibility spike (`spike/base44-today-compat`, see `docs/ux/base44-compatibility-spike-report.md`) proved the 3-layer pattern below works on `/today` and this handoff's scope now extends to every route (see `docs/ux/forge-v1.1-ux-modernization-plan.md` for the full plan). These constraints generalize §1/§2 above into a written, reusable contract:
+
+**Every generated route must integrate through**: existing page/query layer (Layer 1 — unchanged) → a pure adapter/view-model (Layer 2 — no I/O, no authorization decisions) → replaceable presentation components (Layer 3, marked at the exact substitution seam) → existing server actions/RPCs passed as controlled callbacks or forms, never a new endpoint.
+
+**Base44 output may provide**: JSX/TSX presentation markup, layout, visual hierarchy, responsive design, animation, presentation components, icons, non-authoritative client presentation state.
+
+**Base44 output may not own**: database access, Supabase clients, authentication, org-switching logic, capabilities, lifecycle transitions, server actions, RPC calls, accounting calculations, RLS assumptions, customer-safe projection rules, trusted-write logic, persistent status logic.
+
+**Layer 2 view models may**: normalize already-authorized data for display, group records, calculate presentation-only labels, select icons/display variants, create sections from already-fetched data.
+
+**Layer 2 view models may not**: make authorization decisions, determine whether an action is legally/contractually allowed, invent workflow states, perform database calls or mutations, duplicate pricing/accounting calculations, replace server validation. (The spike's own `view-model.ts` violated this once — see the spike report §0 — corrected before that code is reused as more than reference.)
+
+**Required of all generated output**: TypeScript with no `any`, semantic HTML, preserved keyboard access, phone+tablet support (no fixed desktop-only widths), reuse of shared Forge primitives rather than one-off reimplementations, explicit loading/empty/error states, no direct Supabase imports, no hidden authorization assumptions, preserved existing route destinations, preserved testable accessible names.
