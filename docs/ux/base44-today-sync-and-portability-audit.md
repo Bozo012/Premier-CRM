@@ -1,6 +1,6 @@
 # Base44 Today Sync & Portability Audit
 
-Status: **audit complete; controlled Today visual integration implemented — PR #110 opened, not merged.** No push was made to `Forge-Base44-UX`. No Base44 output was modified. Estimates and Site Inspection remain untouched. See §13 for the integration record.
+Status: **audit complete; controlled Today visual integration implemented and merged.** PR #110 merged to `main` at commit `daa917b` (`--merge`). No push was made to `Forge-Base44-UX`. No Base44 output was modified. Estimates and Site Inspection remain untouched. See §13 for the integration record.
 
 ---
 
@@ -303,6 +303,10 @@ Base44's `forge-today.css` custom properties were merged directly into `apps/web
 - No pixel-level visual-regression tooling exists in this repo (per the original instruction, none was added) — the visual comparison against Base44's approved reference was manual (screenshots + `today-visual-reference.md`), not automated.
 - `apps/web/.env.local` still points at `premier-crm-prod`'s project ref — this predates this session and was not touched, but is a standing hazard for anyone running `pnpm dev` without following the explicit-env-var pattern documented in `tests/e2e/README.md` and used throughout this integration; worth a dedicated fix outside this PR's scope.
 
+### Post-merge validation
+
+PR #110 merged (`--merge`, fast-forward) to `main` at commit `daa917b`. Vercel's normal GitHub-integration behavior automatically deployed this commit to production (`dpl_FEQGMN1vaPgpwnVUUD1RxEnUqbwg`, READY) — no manual deploy was performed. Re-run from merged `main`: `pnpm test` 205/205, `pnpm --filter web typecheck` clean, `pnpm --filter web build` clean (dev server stopped first). E2E against `premier-crm-e2e` (dev server started with explicit env vars, `/api/e2e-health` confirmed pointed at `slbnizoskumwhleeiccv` before testing): `today-redesign-bot` 20/20, `today-action-queue-bot` 7/7, `today-appearance-bot` 6/6, `multi-org-switching-bot` 7/7, `operator-workflow-bot` 1/1 (one transient worker-contention timeout on the first 5-worker parallel run — a `page.goto('/invoices')` timeout in a route this PR never touches — confirmed non-reproducing via an isolated single-worker re-run, matching the same class of flake already documented for PR #105's merge).
+
 ### Rollback procedure
 
-Identical in shape to the original Today redesign's rollback plan: `git revert` the integration PR's merge commit once merged — this branch touches only presentation-layer files (`app/globals.css`, `tailwind.config.ts`, `app/layout.tsx`, the new `components/theme/` files, `components/ui/status-pill.tsx`, `components/navigation/*`, Today's `_components/*.tsx`, and one E2E selector fix) plus one new E2E spec file. Zero Supabase schema/RLS/RPC/migration changes exist anywhere in this branch. Layer 1 (`packages/db/queries/today-actions.ts`) and Layer 2 (`apps/web/app/(app)/today/_lib/view-model.ts`) are completely untouched.
+Identical in shape to the original Today redesign's rollback plan: `git revert` the integration PR's merge commit (`daa917b`) — this branch touches only presentation-layer files (`app/globals.css`, `tailwind.config.ts`, `app/layout.tsx`, the new `components/theme/` files, `components/ui/status-pill.tsx`, `components/navigation/*`, Today's `_components/*.tsx`, and one E2E selector fix) plus one new E2E spec file. Zero Supabase schema/RLS/RPC/migration changes exist anywhere in this branch. Layer 1 (`packages/db/queries/today-actions.ts`) and Layer 2 (`apps/web/app/(app)/today/_lib/view-model.ts`) are completely untouched.
