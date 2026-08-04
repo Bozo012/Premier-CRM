@@ -10,6 +10,8 @@ import type { SnapshotItem } from '../_lib/view-model';
 // computed in page.tsx (Layer 1 fetch) and _lib/view-model.ts (Layer 2
 // shaping) — this component performs no data access of its own.
 export function SnapshotGrid({ items }: { items: SnapshotItem[] }) {
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out.
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Operational snapshot</h2>

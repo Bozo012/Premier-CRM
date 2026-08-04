@@ -17,6 +17,9 @@ export interface QuickActionItem {
 export function QuickActions({ actions }: { actions: QuickActionItem[] }) {
   if (actions.length === 0) return null;
 
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out. The
+  // capability-filtered `actions` list itself must never be re-derived here.
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Quick actions</h2>

@@ -31,6 +31,7 @@ export function ActionQueue({
   actionItems: TodayActionItem[];
   quoteActivity: QuoteActivityItem[];
 }) {
+  // BASE44-REPLACEABLE: empty-state markup below is representative only.
   if (actionItems.length === 0 && quoteActivity.length === 0) {
     return (
       <section className="space-y-3">
@@ -40,6 +41,9 @@ export function ActionQueue({
     );
   }
 
+  // BASE44-REPLACEABLE: markup/classNames below (through ActionItemRow) are
+  // representative only — real Base44 output would replace this JSX 1:1,
+  // same props in/out.
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Needs your attention</h2>
@@ -69,6 +73,7 @@ export function ActionQueue({
   );
 }
 
+// BASE44-REPLACEABLE: every branch below returns representative-only JSX.
 function ActionItemRow({ item }: { item: TodayActionItem }) {
   if (item.kind === 'pricing_review_requested') {
     return (

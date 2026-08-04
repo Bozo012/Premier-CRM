@@ -10,6 +10,9 @@ import type { ScheduleEntry } from '../_lib/view-model';
 // of today's jobs and today's site visits (Layer 2's buildTodaySchedule) —
 // this component performs no data access or ordering decisions itself.
 export function TodaySchedule({ entries }: { entries: ScheduleEntry[] }) {
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out.
+  // Empty state (entries.length === 0) must be preserved.
   return (
     <section>
       <Card>

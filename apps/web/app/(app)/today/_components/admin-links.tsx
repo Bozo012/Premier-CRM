@@ -14,6 +14,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 export function AdminLinks({ canManageTeam }: { canManageTeam: boolean }) {
   if (!canManageTeam) return null;
 
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out. The
+  // canManageTeam conditional above must be preserved verbatim — never
+  // re-implemented or approximated by a redesign.
   return (
     <section>
       <Card>

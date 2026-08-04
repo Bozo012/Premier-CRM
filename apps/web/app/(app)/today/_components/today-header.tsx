@@ -32,6 +32,10 @@ export function TodayHeader({
   hasMultipleOrgs: boolean;
   availableOrgs: AvailableOrgMembership[] | null | undefined;
 }) {
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out. The
+  // <OrgSwitcher> and <form action={signOutAction}> mutation paths must be
+  // preserved verbatim by any replacement — never re-implemented.
   return (
     <div className="space-y-3">
       <PageHeader
