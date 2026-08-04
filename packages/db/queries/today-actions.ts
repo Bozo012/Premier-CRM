@@ -41,6 +41,14 @@ export interface SendQuoteTask {
 
 export type TodayActionItem = PricingReviewTask | CreateQuoteTask | SendQuoteTask;
 
+export interface QuoteActivityItem {
+  id: string;
+  quoteId: string;
+  label: string;
+  message: string | null;
+  isAccepted: boolean;
+}
+
 function resolveDisplayName(row: { first_name: string | null; last_name: string | null; company_name: string | null } | null): string | null {
   if (!row) return null;
   if (row.company_name?.trim()) return row.company_name.trim();
@@ -177,6 +185,147 @@ async function getSendQuoteTasks(client: DbClient, orgId: string): Promise<Resul
   });
 
   return ok(tasks);
+}
+
+/**
+ * Recent quote-response activity relevant to Today — moved here from the
+ * page/view-model layer (Forge V1.1 UX modernization, corrected ownership
+ * of a workflow-relevance rule originally misplaced in the Base44
+ * compatibility spike's Layer 2 adapter, see
+ * docs/ux/forge-v1.1-today-redesign.md). This is a workflow-relevance
+ * decision — which activity_log rows still matter — not presentation
+ * formatting, so it belongs here alongside getTodayActionItems(), never in
+ * a page-level view model.
+ *
+ * "Still actionable": an accepted quote that hasn't been converted to a
+ * job yet (no auto-created job — see respondToQuoteAction /
+ * sendQuoteRespondedNotification); a declined quote has nothing further to
+ * convert but stays visible as recent activity worth being aware of.
+ *
+ * Unlike the three capability-gated buckets above, this feed is not
+ * capability-gated — preserves the pre-existing behavior (previously
+ * inline in Today's page.tsx), where any signed-in org member could see
+ * recent quote activity regardless of role.
+ */
+export async function getTodayQuoteActivity(
+  client: DbClient,
+  args: { orgId: string; since: Date }
+): Promise<Result<QuoteActivityItem[]>> {
+  const { orgId, since } = args;
+
+  const { data: activity, error: activityError } = await client
+    .from('activity_log')
+    .select('id, entity_id, event_type, message, created_at')
+    .eq('org_id', orgId)
+    .in('event_type', ['quote_accepted', 'quote_declined'])
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (activityError) return err(ErrorCode.DB_ERROR, activityError.message);
+
+  const rows = activity ?? [];
+  const quoteIds = [...new Set(rows.map((entry) => entry.entity_id))];
+  const { data: quotes, error: quotesError } = quoteIds.length
+    ? await client.from('quotes').select('id, title, quote_number, job_id').in('id', quoteIds)
+    : { data: [] as { id: string; title: string | null; quote_number: string | null; job_id: string | null }[], error: null };
+
+  if (quotesError) return err(ErrorCode.DB_ERROR, quotesError.message);
+
+  const quoteById = new Map((quotes ?? []).map((q) => [q.id, q]));
+
+  const items: QuoteActivityItem[] = rows
+    .filter((entry) => {
+      const quote = quoteById.get(entry.entity_id);
+      if (!quote) return false;
+      if (entry.event_type === 'quote_accepted') return !quote.job_id;
+      return true;
+    })
+    .map((entry) => {
+      const quote = quoteById.get(entry.entity_id);
+      const isAccepted = entry.event_type === 'quote_accepted';
+      return {
+        id: entry.id,
+        quoteId: entry.entity_id,
+        label: quote?.title?.trim() || quote?.quote_number || 'Quote',
+        message: entry.message ?? (isAccepted ? 'Ready to create a job when you are.' : null),
+        isAccepted,
+      };
+    });
+
+  return ok(items);
+}
+
+export interface TodaySiteVisit {
+  appointmentId: string;
+  siteVisitId: string;
+  scheduledStart: string;
+  contactName: string | null;
+  propertyAddress: string | null;
+}
+
+/**
+ * Site visits with a scheduled appointment window overlapping today
+ * (Forge V1.1 Today redesign — new Layer 1 read, matching the existing
+ * "today's scheduled jobs" query pattern already on the page; no new
+ * table/column/RPC, a plain org-scoped SELECT). Status is restricted to
+ * 'scheduled' — cancelled/completed appointments never appear here.
+ */
+export async function getTodaySiteVisits(
+  client: DbClient,
+  args: { orgId: string; startOfDay: Date; endOfDay: Date }
+): Promise<Result<TodaySiteVisit[]>> {
+  const { orgId, startOfDay, endOfDay } = args;
+
+  const { data, error } = await client
+    .from('site_visit_appointments')
+    .select(
+      `
+      id, scheduled_start, site_visit_id,
+      site_visits ( service_requests ( contact_name, property_address_line_1, property_city ) )
+    `
+    )
+    .eq('org_id', orgId)
+    .eq('status', 'scheduled')
+    .gte('scheduled_start', startOfDay.toISOString())
+    .lt('scheduled_start', endOfDay.toISOString())
+    .order('scheduled_start', { ascending: true });
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  const visits: TodaySiteVisit[] = (data ?? []).map((row) => {
+    const siteVisit = Array.isArray(row.site_visits) ? row.site_visits[0] : row.site_visits;
+    const request = siteVisit ? (Array.isArray(siteVisit.service_requests) ? siteVisit.service_requests[0] : siteVisit.service_requests) : null;
+    const address = request ? [request.property_address_line_1, request.property_city].filter(Boolean).join(', ') : null;
+    return {
+      appointmentId: row.id,
+      siteVisitId: row.site_visit_id,
+      scheduledStart: row.scheduled_start,
+      contactName: request?.contact_name ?? null,
+      propertyAddress: address || null,
+    };
+  });
+
+  return ok(visits);
+}
+
+/**
+ * Count of invoices still requiring payment action (Forge V1.1 Today
+ * redesign — Kevin decision: Today's snapshot may show operational counts
+ * for "invoices or payments requiring action," never accounting totals/
+ * revenue figures). "Requiring action" = sent, viewed, partially_paid, or
+ * overdue — explicitly excludes draft (not yet sent), paid (done), void,
+ * and refunded (both terminal, nothing to act on).
+ */
+export async function getTodayInvoicesNeedingActionCount(client: DbClient, orgId: string): Promise<Result<number>> {
+  const { count, error } = await client
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok(count ?? 0);
 }
 
 /**
