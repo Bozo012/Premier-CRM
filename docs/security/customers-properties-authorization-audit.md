@@ -385,3 +385,93 @@ While preparing to run the Playwright suite, `apps/web/.env.local` was found poi
 6. Re-run `pnpm test`, `pnpm typecheck`, `pnpm build`, and the new adversarial suite's applicable non-mutating checks against production read paths only, matching the Forge V1.0.1 production-verification precedent.
 
 **Not done in this session, per authorized scope**: no production migration, no merge of the implementation PR, no `forge-v1.0.2` tag, no Base44 work, `customer_location_prefs`/F2/F4/F6/F7 untouched.
+
+---
+
+## 17. Production verification (2026-08-04)
+
+Implementation PR #101 was reviewed, merged, deployed, and its three migrations applied to `premier-crm-prod` in this session. This section records that rollout.
+
+### Merge and deployment
+
+- **PR #101**: squash-merged to `main` at commit `fba6b7e` (2026-08-04T01:12:13Z). Diff re-verified before merge: exactly the six expected files (three migrations, one new E2E spec, the §16 addendum, `SESSION_STATE.md`) — no application code, no config, no scratch/generated files, no `.env` files. `forge-v1.0.0`/`forge-v1.0.1` unchanged; no overlapping PR or migration on `main`; Base44 not started.
+- **Helper-function pre-merge review**: `customer_org_id(uuid)`/`property_org_id(uuid)` — `STABLE SECURITY DEFINER`, `search_path` explicitly set to `public` (matching `user_is_in_org()`'s pattern), owned by `postgres`, `EXECUTE` granted to `PUBLIC` by Postgres's own default (same default as `user_is_in_org()`, not a broadening introduced by this migration — necessary for `authenticated` to evaluate the RLS policies that call them). Verified empirically: nonexistent/NULL customer or property IDs resolve to `NULL` org, and `user_is_in_org(NULL)` returns `false` — fail-closed, never fail-open.
+- **Vercel deployment**: `dpl_5dRrqLCUGvrYnZkL7nXM7UTkDvCq`, target `production`, `READY` at `2026-08-04T01:13:15Z` (buildingAt → ready), aliased to `app.ppmnky.com`, serving `fba6b7e` exactly (confirmed via deployment metadata `githubCommitSha`). `app.ppmnky.com` responsive (307, expected auth redirect) before any migration was applied.
+
+### Migrations applied to `premier-crm-prod`
+
+Unlike E2E, `premier-crm-prod` had **zero migration drift** going into this rollout — every local file's version matched its recorded remote version exactly. This meant the normal workflow (`npx supabase db push --linked`) was safe to use directly, unlike the additive-raw-SQL method required for E2E.
+
+1. Linked CLI explicitly to `apnbpcauqrjvkoleisde` (`premier-crm-prod`) — confirmed via `project-ref` file read back before any command.
+2. `npx supabase db push --linked --dry-run` → confirmed exactly the three intended migrations pending (`20260804000000`, `20260804000001`, `20260804000002`), nothing else.
+3. `npx supabase db push --linked` (2026-08-04T01:13:56Z–01:14:40Z) → all three applied in one run: "Applying migration 20260804000000...", "...20260804000001...", "...20260804000002...", `{"upToDate":false,"dryRun":false,...}`. (Docker-dependent post-push catalog-caching step failed locally — no Docker Desktop running — unrelated to the actual migration application, which completed via direct Postgres connection before that step ran.)
+4. Verified directly: `supabase_migrations.schema_migrations` row count went from 73 → 76 (exactly +3), all three new rows present with correct version/name, newest version `20260804000002`.
+
+### Pre-migration production baseline (recorded before step 3)
+
+- Grants: `authenticated` had full `SELECT,INSERT,UPDATE,DELETE` on all four tables (matching the documented pre-hardening state exactly).
+- Policies: `org_isolation_customers`/`org_isolation_properties`/`customer_properties_isolation`/`internal_org_customer_accounts` all present, `FOR ALL`, asymmetric — identical text to what was already confirmed in §2/§7 before implementation began.
+- RLS enabled (not forced) on all four tables — unchanged by this patch.
+- Cross-org mismatch check (mandatory stop condition): **zero** mismatches in `customer_properties` (customer org ≠ property org) and **zero** in `customer_accounts` (account org ≠ linked customer's actual org).
+- Counts: PPM (`a0000000-...`) — 0 customers/properties/customer_properties/customer_accounts (blank, as expected). Demo (`a0c9b59d-...`) — 2 customers, 3 properties, 3 customer_properties, 1 customer_accounts (healthy).
+- `customer_org_id`/`property_org_id` confirmed **absent** before migration (pristine pre-migration state).
+
+### Post-migration schema verification
+
+- Grants: `authenticated` now `SELECT`-only on all four tables; `service_role` unchanged (full access retained).
+- Policies: old `FOR ALL` policies gone; `customers_select_org_members`, `properties_select_org_members`, `customer_properties_select_org_members`, `customer_accounts_select_org_members` present with the corrected both-sides logic; `customer_select_own_customer`/`customer_select_own_properties`/`customer_select_own_customer_properties`/`customer_select_own_account` (portal policies) preserved verbatim.
+- Helper functions: `customer_org_id`/`property_org_id` present on production with identical definition/config to what was verified pre-merge.
+- **Recursion fix confirmed live in production**: a `SET LOCAL role authenticated` + forged `request.jwt.claims` probe (rolled back) queried all four tables — zero `42P17` errors, confirming migration `...000002`'s fix works in production, not just E2E.
+- Unrelated protections re-confirmed unchanged: `jobs`/`quotes`/`service_requests`/`estimates`/`site_visits` still `authenticated` SELECT-only (Batch A / V1.0.1, untouched by this patch); `customer_archetype_defaults`/`customer_location_prefs` still carry their pre-existing broad grants, confirming they were correctly left out of scope.
+
+### Production authorization probes (all executed directly against `premier-crm-prod`, inside rolled-back `SET LOCAL role` transactions, using real production accounts — Demo owner/employee, PPM admin as the cross-org actor, and the real portal `customer_accounts` auth user)
+
+All of the following were denied with `42501 permission denied`:
+
+- `customers`: INSERT (employee), UPDATE contact info (employee), UPDATE `org_id` (employee), DELETE (employee), cross-org UPDATE (PPM admin against Demo's customer).
+- `properties`: INSERT (employee), UPDATE `gate_code`/`access_notes` (employee), UPDATE `org_id` (employee), DELETE (employee), cross-org UPDATE (PPM admin against Demo's property).
+- `customer_properties`: INSERT, UPDATE, DELETE (employee, same-org — direct writes fully closed regardless of target).
+- `customer_accounts`: **CP-3 probe** — PPM admin (member of PPM, not Demo) attempted INSERT with `org_id = PPM`, `customer_id = ` Demo's real customer — denied. UPDATE by the real portal auth user against their own row — denied (portal accounts are SELECT-only). DELETE (cross-org actor) — denied.
+
+Reads (all correct, unambiguously confirmed via `count(*)`, not just row-shape inspection):
+- Same-org SELECT (Demo employee reading Demo's customer): succeeds, returns the row.
+- Cross-org SELECT (PPM admin reading Demo's customer/property): `count = 0` — RLS-filtered, not an error.
+- Portal SELECT (the real portal auth user reading their own `customer_accounts` row): succeeds, returns exactly their own `customer_id`/`org_id`.
+- Portal SELECT of any other customer (`id != their own`): `count = 0` — confirms the CP-3 fix closes the cross-org exposure path without breaking the user's own legitimate access.
+
+**Zero side effects**: re-queried PPM (still 0/0/0/0) and Demo (still 2/3/3/1, byte-identical to the pre-migration baseline) counts after all probes; the specific probed customer's `first_name` (`Dana`), the probed property's `address_line_1`/`gate_code`/`org_id`, and the probed `customer_accounts` row's `status` (`active`) were all re-read directly and confirmed untouched.
+
+### Legitimate workflow verification
+
+Labeled explicitly by evidence type, per instruction:
+
+- **Production executed (service-role, rolled back)**: simulated exactly what `createCustomer()`/`createPropertyForCustomer()`/`ensureCustomerAccount()` do — INSERT `customers`, INSERT `properties`, UPSERT `customer_properties`, INSERT `customer_accounts` (all as `service_role`, all inside a rolled-back transaction, all against Demo) — all four succeeded with no error (the `customer_accounts` case correctly no-op'd on its pre-existing unique constraint, not a permission failure). Confirms CP-A/CP-B did not break the underlying trusted write paths at the constraint/grant level.
+- **Production read-only inspection**: all of §7's post-migration grant/policy queries, plus the counts/row-content checks above.
+- **E2E on identical migrations**: the full `authorization-customers-properties-bot.spec.ts` (30/30) plus `customer-crud-bot`/`customer-command-center-bot`/`customer-intake-bot`/`operator-workflow-bot` (47/47, 7 pre-existing TODO-skips unrelated) — run against E2E after the *exact same three migrations* were applied there, then re-run again post-merge with a freshly-restarted, explicitly-E2E-pointed dev server (`/api/e2e-health` confirmed `slbnizoskumwhleeiccv` before the run). Zero unexplained failures.
+- **Code-path inspected only, not re-executed live against production this session**: public intake (`createServiceRequest`, hardcoded to PPM — deliberately **not** exercised live in production this session, since it would write a real row into PPM, which this task's scope prohibits; unaffected by this patch, since it's already service-role and its target tables' grants are untouched by CP-A/CP-B for the `service_requests` table itself); downstream request→estimate→site-visit→quote→job→invoice workflow (unaffected — none of its grants/policies were touched by this patch; already independently verified in the Forge V1.0.1 and Batch A production-verification records).
+
+### Test/typecheck/build (re-run after merge, on `main` @ `fba6b7e`)
+
+`pnpm test` 187/187, `pnpm typecheck` clean, `pnpm build` clean (dev server stopped first). E2E re-run after a clean `.next` clear and a freshly-started, explicitly-E2E-pointed dev server: `authorization-customers-properties-bot.spec.ts` 30/30, plus 17/17 across the four adjacent regression suites (7 skipped, pre-existing TODOs unrelated to this patch) — 47/47 passing, zero flakes, zero unexplained failures.
+
+### CP finding closure status
+
+| Finding | Status |
+|---|---|
+| CP-1 (customers/properties direct-write bypass) | **Closed in production** |
+| CP-2 (customer_properties asymmetric cross-org check) | **Closed in production** |
+| CP-3 (customer_accounts asymmetric cross-org check / portal exposure) | **Closed in production** |
+| CP-4 (no capability model for customer/property creation) | Unresolved — Kevin decision, §15, not part of this patch's scope |
+| CP-5 (denormalized fields directly writable) | **Closed in production** (bundled into CP-A) |
+| CP-6 (`is_archived` unused) | Informational, no change required |
+| CP-7 (broader FK cross-org consistency, `estimates`/`jobs`/etc.) | Unresolved — defense-in-depth backlog, unchanged from original audit |
+
+### Unresolved findings / non-blocking follow-ups
+
+- CP-4, CP-6, CP-7 as above — none are regressions or newly discovered, all were already recorded as out-of-scope or Kevin-decision items in the original audit.
+- E2E's 27-migration bookkeeping drift remains **unresolved and untouched** — it predates this work, does not affect production (which has zero drift), and reconciling it was explicitly out of scope for this patch.
+- `customer_location_prefs` follow-up (flagged in §14, not required for this batch) remains open.
+
+### Production risk outcome
+
+No incidents, no unexpected schema state, no data loss, no side effects from any probe. PPM confirmed blank throughout. Demo confirmed healthy and numerically unchanged throughout. All three migrations applied cleanly in one controlled run, exactly as required. The recursion defect was caught and fixed in E2E before ever reaching production.
