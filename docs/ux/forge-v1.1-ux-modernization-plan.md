@@ -1,6 +1,6 @@
 # Forge V1.1 — UX Modernization Plan
 
-Status: **plan, complete. Implementation: Batch UX-A (shared foundation) scoped and partially implemented on `feature/forge-v1.1-ux-foundation`, from `main` @ `21db0ab` — not `spike/base44-today-compat`.** Nothing in this document authorizes a merge, a deployment, or a Forge V1.1 tag. The Base44 compatibility spike (`spike/base44-today-compat`, HEAD `7c2577a`) remains a separate, unmerged architectural reference — see §0.
+Status: **plan complete. Batch UX-A (shared foundation, PR #104) and Batch UX-B/PR2 (Today, PR #105) are both merged and verified on `main` @ `d9c9ff1`.** Nothing in this document authorizes a deployment or a Forge V1.1 tag. The Base44 compatibility spike (`spike/base44-today-compat`, HEAD `a05700e`) remains a separate, unmerged, historical/reference-only branch — see §0. The merged Today implementation, not the spike, is now the authoritative Forge V1.1 presentation reference. Estimates (PR3) and Site Inspection (PR4) remain not started — per Kevin's direction, the next task is Base44 workspace/GitHub-connection readiness, not further route redesign.
 
 ---
 
@@ -169,7 +169,7 @@ Findings are graded by evidence, not taste. Three sources of pre-existing, evide
 
 ### Batch UX-B — Daily work and field execution (highest priority, per Kevin)
 
-**PR2 (Today) — implemented on `feature/forge-v1.1-today-redesign`, not merged.** Full detail: `docs/ux/forge-v1.1-today-redesign.md`. Corrected the Base44 spike's one confirmed defect (relocated the `buildQuoteActivityRows()`/quote-activity workflow-relevance rule from Layer 2 into `packages/db/queries/today-actions.ts`, alongside `getTodayActionItems()`) before reusing any of its code. Applied Kevin's Today-specific decisions: actionable-only operational counts (no accounting totals), capability-filtered quick actions, removed navigation duplicated by the now-persistent UX-A desktop nav, merged jobs+site-visits into one schedule. 18 new unit tests, 20 new E2E tests, `pnpm test` 205/205, typecheck/build clean. **Not merged — awaiting review.**
+**PR2 (Today) — MERGED** (PR #105, squash-merged to `main` at `d9c9ff1`). Full detail: `docs/ux/forge-v1.1-today-redesign.md`. Corrected the Base44 spike's one confirmed defect (relocated the `buildQuoteActivityRows()`/quote-activity workflow-relevance rule from Layer 2 into `packages/db/queries/today-actions.ts`, alongside `getTodayActionItems()`) before merging any of its code. Applied Kevin's Today-specific decisions: actionable-only operational counts (no accounting totals), capability-filtered quick actions, removed navigation duplicated by the now-persistent UX-A desktop nav, merged jobs+site-visits into one schedule. 18 new unit tests, 20 new E2E tests. **Post-merge validation on `main`**: `pnpm test` 205/205, typecheck/build clean, 27/27 E2E on a clean re-run, phone overflow (390×844) explicitly re-verified fixed.
 
 **PR3 (Estimates) and PR4 (Site Inspection) — not started.**
 
