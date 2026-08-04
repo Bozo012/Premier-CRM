@@ -161,23 +161,23 @@ Findings are graded by evidence, not taste. Three sources of pre-existing, evide
 
 ## 5. Implementation batches
 
-### Batch UX-A — Shared foundation
-- **Routes touched**: none directly (infrastructure only); `(app)/layout.tsx` gains the shell wrapper.
-- **Components**: all of §4's proposed primitives.
-- **Dependencies**: none — can start immediately from `main`.
-- **Existing tests**: none affected (no route behavior changes).
-- **New tests**: desktop nav, mobile nav, safe-area, org context display, keyboard focus baseline, loading/empty/error/access-denied state rendering, no horizontal overflow — all against a small harness page or the shell itself, not yet wired into real routes.
-- **Mobile risk**: low — additive only.
-- **Backend-contract risk**: none — zero `packages/db`/`supabase` changes.
-- **Estimated PRs**: 1 (this plan's PR1).
-- **Acceptance criteria**: typecheck/build clean, new components render in isolation, zero changes outside `apps/web/components/`.
+### Batch UX-A — Shared foundation — **MERGED** (2026-08-04, PR #104, merge commit `05fbead`)
+- **Routes touched**: none directly (infrastructure only); `(app)/layout.tsx` gained the shell wrapper.
+- **Components shipped**: `status-pill`, `page-header`, `empty-state`, `error-state`, `access-denied-state`, `loading-skeleton`, `form-field`, plus `app-desktop-nav`/`app-shell` (the new persistent desktop/tablet nav — previously no desktop nav existed at any viewport).
+- **Verified on merged `main`**: `pnpm test` 187/187, typecheck/build clean, representative E2E smoke 11/11, live desktop nav walkthrough. One pre-existing bug found during this verification (not a UX-A regression): a phone-width overflow in Today's action-queue rows — fixed as part of the Today redesign (Batch UX-B PR2, see below).
+- **Acceptance criteria met**: typecheck/build clean, zero changes outside `apps/web/components/` + `(app)/layout.tsx` + docs.
 
 ### Batch UX-B — Daily work and field execution (highest priority, per Kevin)
-- **Routes**: `/today`, `/estimates`, `/estimates/[estimateId]`, `/estimates/new`, `/site-visits/[siteVisitId]`.
+
+**PR2 (Today) — implemented on `feature/forge-v1.1-today-redesign`, not merged.** Full detail: `docs/ux/forge-v1.1-today-redesign.md`. Corrected the Base44 spike's one confirmed defect (relocated the `buildQuoteActivityRows()`/quote-activity workflow-relevance rule from Layer 2 into `packages/db/queries/today-actions.ts`, alongside `getTodayActionItems()`) before reusing any of its code. Applied Kevin's Today-specific decisions: actionable-only operational counts (no accounting totals), capability-filtered quick actions, removed navigation duplicated by the now-persistent UX-A desktop nav, merged jobs+site-visits into one schedule. 18 new unit tests, 20 new E2E tests, `pnpm test` 205/205, typecheck/build clean. **Not merged — awaiting review.**
+
+**PR3 (Estimates) and PR4 (Site Inspection) — not started.**
+
+- **Routes**: `/today` (done), `/estimates`, `/estimates/[estimateId]`, `/estimates/new`, `/site-visits/[siteVisitId]` (not started).
 - **Shared components required**: everything from UX-A.
 - **Dependencies**: UX-A merged first.
-- **Existing tests to preserve**: `today-action-queue-bot` (7), `estimate-pricing-review-handoff-bot`, `estimate-pricing-approval-presentation-bot`, `employee-estimate-workflow-bot`, `estimates-lifecycle-bot`, `request-site-visit-workflow-bot`, `scheduling-bot`.
-- **New tests needed**: Today (reuse spike's 9 + adapt to shell), Estimates (creation/editing/pricing-review/quote-handoff on new shell), Site Inspection (autosave/photos/hazards/completion on new shell + functional dictate/photo per §9).
+- **Existing tests to preserve**: `today-action-queue-bot` (7, preserved unmodified), `estimate-pricing-review-handoff-bot`, `estimate-pricing-approval-presentation-bot`, `employee-estimate-workflow-bot`, `estimates-lifecycle-bot`, `request-site-visit-workflow-bot`, `scheduling-bot`.
+- **New tests**: Today shipped 18 unit + 20 E2E (see `docs/ux/forge-v1.1-today-redesign.md`). Estimates/Site Inspection still need: Estimates (creation/editing/pricing-review/quote-handoff on new shell), Site Inspection (autosave/photos/hazards/completion on new shell + functional dictate/photo per §9).
 - **Mobile risk**: highest — this batch includes the one-handed field-use requirement.
 - **Backend-contract risk**: low for Today/Estimates (pure presentation); **medium for site-inspection photo/dictate** if any gap requires new fields (flagged, not assumed — see §9).
 - **Estimated PRs**: 3 (Today, Estimates, Site Inspection — per Kevin's explicit "do not combine" instruction).
@@ -315,19 +315,25 @@ Every existing spec listed in §2's coverage columns is preserved unmodified unl
 
 ---
 
-## 10. Kevin decisions (genuine, unresolved — not implementation details)
+## 10. Kevin decisions
 
-1. Final hazard categories and required-completion behavior (unchanged open question from `hazards-section-proposal.md`).
-2. Whether field inspections require offline/interruption-recovery support in V1.1, or whether the existing per-field autosave (1.2s debounce) is sufficient resilience for now.
-3. Whether employee and owner estimate editing should look visually identical (same layout, different available actions) or intentionally different.
-4. Whether Today should show accounting totals (revenue, outstanding balance) or stay limited to actionable counts — the audit flagged the current 4 snapshot cards as arguably vanity-adjacent (§6.1).
-5. Whether the customer portal's visual design should match staff Forge branding or the tenant organization's own branding.
-6. Preferred density: compact, balanced, or spacious (the spike used a "comfortable" default; not confirmed as final).
-7. Whether tablet layouts should resemble mobile cards or desktop tables at the `md` breakpoint (this plan proposes cards-until-`md`, rows-after — needs confirmation as the standing rule, not just a spike-observed default).
-8. Whether the representative spike visuals (border accents, `StatusPill` colors, card treatments) are directionally approved as a starting aesthetic, or should be treated as purely structural proof with no visual carryover.
-9. Whether invoices/payments requiring action should be added to the Today action queue (currently not covered by `getTodayActionItems()` — a real scope question, not assumed, §6.1).
-10. Whether estimate note fields should support photo attachment as a reviewed follow-on feature (the specific gap found in §9.1), and if so, on what timeline relative to UX-B.
-11. Whether dictation should initially use browser-native speech recognition only, accepting its browser/device limitations, or whether Forge should later evaluate a hosted transcription provider (Kevin's own framing, restated here as the formal decision record).
+**Resolved this phase** (applied in the Today redesign, `docs/ux/forge-v1.1-today-redesign.md`):
+
+- Today shows actionable operational counts only, never accounting totals/vanity metrics → applied (New requests, Today's work, Invoices needing action).
+- Density: balanced (compact enough for operational use, not cramped, accessible touch targets) → applied throughout Today.
+- Tablet convention: hybrid — desktop-style persistent nav where space permits (Batch UX-A's desktop nav already activates at `md`/768px, covering tablet portrait and up), touch-friendly cards/forms, not desktop tables forced onto tablet → confirmed as the standing rule.
+- Spike visuals are directionally useful/approved as an architectural reference, not final visual approval → applied; Today reuses the spike's layout ideas, hierarchy, and adapter pattern, not treated as mandated pixel-level design.
+- Dictation: browser-native Web Speech API evaluation only, no hosted provider, not implemented in the Today PR (Today has no note-entry use case) → confirmed, deferred to UX-B's Estimates/Site-Inspection PRs where dictation is actually in scope.
+- Photos: existing site-visit photo pipeline untouched by Today work, preserved exactly; photo functionality remains primarily a Site Inspection (PR4) concern → confirmed, untouched.
+- Portal branding: tenant-first, Forge secondary/absent on customer-facing surfaces → noted, does not materially affect Today (no portal work in this PR); preserved as a constraint for future portal-touching batches.
+
+**Still genuinely unresolved** (not implementation details, need Kevin's input before the relevant batch):
+
+1. Final hazard categories and required-completion behavior (unchanged open question from `hazards-section-proposal.md`) — relevant to PR4 (Site Inspection).
+2. Whether field inspections require offline/interruption-recovery support in V1.1, or whether the existing per-field autosave (1.2s debounce) is sufficient resilience for now — relevant to PR4.
+3. Whether employee and owner estimate editing should look visually identical (same layout, different available actions) or intentionally different — relevant to PR3 (Estimates).
+4. Whether invoices/payments requiring action should be added to the Today action queue itself (distinct from the operational-count snapshot, which now does show an invoices count) — a possible future enhancement, not required for Today to ship.
+5. Whether estimate note fields should support photo attachment as a reviewed follow-on feature (the specific gap found in §9.1), and if so, on what timeline relative to PR3/PR4.
 
 ---
 

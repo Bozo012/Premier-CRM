@@ -11,12 +11,12 @@
  * list and why.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { hasAdminCredentials } from './utils/auth';
 import { loginAsAdmin } from './context/auth';
 import { createTestSession } from './context/session';
 import { gotoCustomers, gotoDashboard } from './context/navigation';
-import { customers as customersSelectors, today } from './utils/selectors';
+import { customers as customersSelectors } from './utils/selectors';
 
 test.describe('operator workflow bot', () => {
   test('a realistic workday: dashboard, find customer, review, create work, back to dashboard', async ({
@@ -31,7 +31,6 @@ test.describe('operator workflow bot', () => {
 
     // ---- Dashboard ----
     await session.metrics.measure('Open Dashboard', () => gotoDashboard(page));
-    const jobsCountBefore = await readJobsCount(page);
 
     // A customer needs to exist before the owner can "find" them — created
     // here via session.customer() (the real /customers/new flow under the
@@ -101,19 +100,20 @@ test.describe('operator workflow bot', () => {
     // ---- Return to dashboard ----
     await session.metrics.measure('Return to Dashboard', () => gotoDashboard(page));
 
-    // ---- Verify dashboard reflects changes ----
-    // The "Business snapshot" Jobs count is the one dashboard number this
-    // workflow can actually move (see tests/e2e/README.md "Dashboard" — the
-    // "Today's work" list only shows jobs scheduled for today, and our test
-    // job has no scheduled_start, so it won't appear there).
-    const jobsCountAfter = await readJobsCount(page);
-    expect(jobsCountAfter).toBeGreaterThan(jobsCountBefore);
+    // ---- Verify the created job is real and findable ----
+    // Forge V1.1 Today redesign (docs/ux/forge-v1.1-today-redesign.md)
+    // deliberately removed Today's total-count snapshot cards (Kevin
+    // decision: actionable operational counts only, never vanity totals —
+    // a freshly-created, unscheduled job no longer moves any number on
+    // Today, by design, since it isn't scheduled for today and Today no
+    // longer shows a running total). The job's existence is instead
+    // verified where it actually belongs: the jobs list itself.
+    await page.goto('/jobs');
+    await page.getByPlaceholder('Search by title, description, or job number...').fill(job.title);
+    await page.getByPlaceholder('Search by title, description, or job number...').press('Enter');
+    await page.waitForURL(new RegExp(`[?&]q=${encodeURIComponent(job.title)}`));
+    await expect(page.getByRole('link', { name: job.title })).toBeVisible();
 
     await session.finish();
   });
 });
-
-async function readJobsCount(page: Page): Promise<number> {
-  const text = await today.jobsCount(page).innerText();
-  return Number(text.replace(/[^0-9]/g, ''));
-}

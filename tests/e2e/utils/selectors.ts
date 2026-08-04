@@ -94,19 +94,21 @@ export const estimatesList = {
 /**
  * `/today` — the app's dashboard/home page (see tests/e2e/README.md "Dashboard").
  * The `<h1>` is a dynamic greeting ("Good morning, Kevin") so it can't anchor a
- * stable-load wait; "Business snapshot" is the first stable heading that only
- * renders once the page's client-side data fetch resolves.
+ * stable-load wait; "Operational snapshot" is the first stable heading that
+ * only renders once the page's server-side data fetch resolves (Forge V1.1
+ * Today redesign — renamed from "Business snapshot"; the section itself was
+ * also reworked from total-count vanity metrics to actionable-only counts,
+ * see docs/ux/forge-v1.1-today-redesign.md).
+ *
+ * There is no longer a single persistent "jobs total" count on Today at
+ * all (Kevin decision: operational/actionable counts only) — a prior
+ * `jobsCount` selector here read the old total-jobs snapshot card, which no
+ * longer exists. Tests that need to verify a job was created should check
+ * the /jobs list directly (see operator-workflow-bot.spec.ts) rather than
+ * Today, which was never meant to be a running-total surface.
  */
 export const today = {
-  loadedMarker: (page: Page) => page.getByRole('heading', { name: 'Business snapshot' }),
-  /**
-   * SnapshotCard's whole tile is one `<a>` (label + big number + helper text
-   * all inside), so `getByRole('link', { name })` would match against that
-   * combined text rather than just the count — a scoped CSS locator on the
-   * count paragraph within the known `href` is more precise here than trying
-   * to force a role-based match onto a card that isn't structured for it.
-   */
-  jobsCount: (page: Page) => page.locator('a[href="/jobs"] p.text-4xl'),
+  loadedMarker: (page: Page) => page.getByRole('heading', { name: 'Operational snapshot' }),
 };
 
 /**

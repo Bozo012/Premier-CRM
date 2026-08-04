@@ -307,7 +307,7 @@ actually converted. Extend `scenario.ts` by adding one boolean option and one
 ```ts
 import { gotoCustomer, gotoDashboard } from './context/navigation';
 
-await gotoDashboard(page);           // waits for "Business snapshot" heading
+await gotoDashboard(page);           // waits for "Operational snapshot" heading
 await gotoCustomer(page, customer);  // waits for the customer's marker heading
 ```
 
