@@ -13,6 +13,8 @@ export interface SnapshotItem {
 // fetched there (customer/property/job/request counts) — this component
 // performs no data access of its own.
 export function SnapshotGrid({ items }: { items: SnapshotItem[] }) {
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out.
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">

@@ -12,6 +12,9 @@ export interface ScheduleJob {
 // Presentation-only. Job list and formatted time labels are computed in
 // page.tsx from the existing today-window jobs query — no data access here.
 export function TodaySchedule({ jobs }: { jobs: ScheduleJob[] }) {
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out.
+  // Empty state (jobs.length === 0) must be preserved.
   return (
     <section>
       <Card>

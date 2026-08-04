@@ -2,21 +2,33 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+// ── LAYER 1: existing Forge domain/data/action code, reused unchanged ──────
 import { getActiveOrgContext, getTodayActionItems, type TodayActionItem } from '@premier/db';
 import type { OrgRole } from '@premier/shared';
+import { getServerSupabase } from '@/lib/supabase-server';
+import { OrgContextError } from '@/components/org-context-error';
+import { signOutAction } from './actions';
 
+// ── LAYER 2: adapter / view-model (spike-introduced, see ./_lib/view-model.ts) ──
+import {
+  buildQuoteActivityRows,
+  buildScheduleJobs,
+  buildSnapshotItems,
+  countUniqueProperties,
+  deriveFirstName,
+  deriveGreeting,
+  sortActionItems,
+} from './_lib/view-model';
+
+// ── LAYER 3: presentation-only components (spike-introduced) ───────────────
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { OrgContextError } from '@/components/org-context-error';
-import { getServerSupabase } from '@/lib/supabase-server';
-
-import { signOutAction } from './actions';
 import { TodayHeader } from './_components/today-header';
-import { ActionQueue, type QuoteActivityRow } from './_components/action-queue';
+import { ActionQueue } from './_components/action-queue';
 import { QuickActions, type QuickActionItem } from './_components/quick-actions';
-import { SnapshotGrid, type SnapshotItem } from './_components/snapshot-grid';
+import { SnapshotGrid } from './_components/snapshot-grid';
 import { BrowseDataGrid } from './_components/browse-data-grid';
-import { TodaySchedule, type ScheduleJob } from './_components/today-schedule';
+import { TodaySchedule } from './_components/today-schedule';
 
 export const metadata: Metadata = { title: 'Today' };
 
@@ -26,35 +38,13 @@ interface TodayJob {
   title: string;
 }
 
+// Static route list — no data dependency, unchanged from pre-spike.
 const quickActions: QuickActionItem[] = [
   { id: 'new-customer', label: 'New customer', href: '/customers/new' },
   { id: 'new-estimate', label: 'New estimate', href: '/estimates/new' },
   { id: 'new-invoice', label: 'New invoice', href: '/invoices' },
   { id: 'review-quotes', label: 'Review quotes', href: '/quotes' },
 ] as const;
-
-function normalizePropertyAddressKey(property: {
-  address_line_1: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
-}) {
-  return [property.address_line_1, property.city, property.state, property.zip]
-    .map((value) =>
-      String(value || '')
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-    )
-    .join('|');
-}
-
-function formatScheduledTime(value: string | null): string {
-  if (!value) return 'Anytime';
-  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(
-    new Date(value)
-  );
-}
 
 /**
  * Dashboard — server component (PR C0). Previously a client component that
@@ -74,13 +64,13 @@ function formatScheduledTime(value: string | null): string {
  * the real values or an honest "no active organization" state — never a
  * placeholder string next to a role that looks legitimate.
  *
- * Base44 compatibility spike (docs/ux/base44-compatibility-spike-plan.md):
- * all data-fetching below is byte-identical to the pre-spike version — the
- * Promise.all block, its query shapes, getActiveOrgContext()/
- * getTodayActionItems() calls, and every derived value are unchanged. Only
- * the JSX below the data section was restructured to delegate rendering to
- * presentation-only components under ./_components/, each of which receives
- * plain, already-computed props and performs no data access of its own.
+ * Base44 compatibility spike (docs/ux/base44-compatibility-spike-plan.md,
+ * docs/ux/base44-compatibility-spike-report.md): all data-fetching below is
+ * byte-identical to the pre-spike version — the Promise.all block, its query
+ * shapes, getActiveOrgContext()/getTodayActionItems() calls are unchanged.
+ * Derived-value computation was extracted into ./_lib/view-model.ts (Layer
+ * 2), and rendering was extracted into ./_components/ (Layer 3). This file
+ * is now purely: auth check -> org context -> fetch -> adapt -> render.
  */
 export default async function TodayPage() {
   const supabase = await getServerSupabase();
@@ -95,6 +85,10 @@ export default async function TodayPage() {
 
   const orgContextResult = await getActiveOrgContext(supabase, user.id);
 
+  // Error state: unchanged from pre-spike — OrgContextError already renders
+  // a sanitized, code-classified message (amber for the expected "no active
+  // org yet" case, red for real DB/conflict errors), never a raw stack
+  // trace or driver error string. Not modified by this spike.
   if (!orgContextResult.success) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center gap-4 p-6">
@@ -157,6 +151,7 @@ export default async function TodayPage() {
     getTodayActionItems(supabase, { orgId, role: role as OrgRole }),
   ]);
 
+  // Error state: unchanged from pre-spike.
   if (customersResult.error || propertiesResult.error || jobsResult.error) {
     const message =
       customersResult.error?.message ||
@@ -170,11 +165,6 @@ export default async function TodayPage() {
     );
   }
 
-  const newRequestCount = requestsResult.count ?? 0;
-  const uniquePropertyCount = new Set(
-    (propertiesResult.data || []).map((property) => normalizePropertyAddressKey(property))
-  ).size;
-
   const quoteActivity = quoteActivityResult.data ?? [];
   const quoteIds = [...new Set(quoteActivity.map((entry) => entry.entity_id))];
   const { data: activityQuotes } = quoteIds.length
@@ -182,64 +172,28 @@ export default async function TodayPage() {
     : { data: [] as { id: string; title: string | null; quote_number: string | null; job_id: string | null }[] };
   const quoteById = new Map((activityQuotes ?? []).map((q) => [q.id, q]));
 
-  // "Needs attention": an accepted quote that hasn't been converted to a job
-  // yet is still actionable; a decline has nothing further to convert, but
-  // stays visible as recent activity worth being aware of. Deliberately no
-  // auto-created job here — see respondToQuoteAction / sendQuoteRespondedNotification.
-  const pendingQuoteActivity: QuoteActivityRow[] = quoteActivity
-    .filter((entry) => {
-      const quote = quoteById.get(entry.entity_id);
-      if (!quote) return false;
-      if (entry.event_type === 'quote_accepted') return !quote.job_id;
-      return true;
-    })
-    .map((entry) => {
-      const quote = quoteById.get(entry.entity_id);
-      const isAccepted = entry.event_type === 'quote_accepted';
-      return {
-        id: entry.id,
-        quoteId: entry.entity_id,
-        label: quote?.title?.trim() || quote?.quote_number || 'Quote',
-        message: entry.message ?? (isAccepted ? 'Ready to create a job when you are.' : null),
-        isAccepted,
-      };
-    });
-
-  const actionItems: TodayActionItem[] = actionItemsResult.success ? actionItemsResult.data : [];
-  const sortedActionItems = [...actionItems].sort((a, b) => {
-    const aTime = a.kind === 'pricing_review_requested' ? a.submittedAt : a.kind === 'create_quote' ? a.approvedAt : a.createdAt;
-    const bTime = b.kind === 'pricing_review_requested' ? b.submittedAt : b.kind === 'create_quote' ? b.approvedAt : b.createdAt;
-    return new Date(aTime).getTime() - new Date(bTime).getTime();
-  });
-
-  const fullName = profileResult.data?.full_name ?? null;
-  const firstNameFromProfile = fullName ? fullName.split(' ')[0] : null;
-  const firstNameFromEmail = user.email ? user.email.split('@')[0] : null;
-  const firstName = firstNameFromProfile ?? firstNameFromEmail ?? 'there';
-  const userEmail = user.email || 'No email found';
-  const customerCount = customersResult.count || 0;
-  const jobCount = jobsResult.count || 0;
   const todayJobs = (todayJobsResult.data as TodayJob[] | null) ?? [];
-  const scheduleJobs: ScheduleJob[] = todayJobs.map((job) => ({
-    id: job.id,
-    title: job.title,
-    scheduledTimeLabel: formatScheduledTime(job.scheduled_start),
-  }));
+  const actionItems: TodayActionItem[] = actionItemsResult.success ? actionItemsResult.data : [];
+  const fullName = profileResult.data?.full_name ?? null;
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  // ── adapter calls (Layer 2) — every value below is derived, not fetched ──
+  const sortedActionItems = sortActionItems(actionItems);
+  const pendingQuoteActivity = buildQuoteActivityRows(quoteActivity, quoteById);
+  const scheduleJobs = buildScheduleJobs(todayJobs);
+  const snapshotItems = buildSnapshotItems({
+    customerCount: customersResult.count || 0,
+    uniquePropertyCount: countUniqueProperties(propertiesResult.data || []),
+    jobCount: jobsResult.count || 0,
+    newRequestCount: requestsResult.count ?? 0,
+  });
+  const firstName = deriveFirstName(fullName, user.email ?? null);
+  const greeting = deriveGreeting(new Date());
   const formattedDate = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
   });
-
-  const snapshotItems: SnapshotItem[] = [
-    { label: 'Customers', value: String(customerCount), helper: 'Review imported records', href: '/customers' },
-    { label: 'Properties', value: String(uniquePropertyCount), helper: 'Browse addresses and owners', href: '/properties' },
-    { label: 'Jobs', value: String(jobCount), helper: 'Jobs imported or created', href: '/jobs' },
-    { label: 'New requests', value: String(newRequestCount), helper: 'Unreviewed website inquiries', href: '/requests' },
-  ];
+  const userEmail = user.email || 'No email found';
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">

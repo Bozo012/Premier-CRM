@@ -11,6 +11,8 @@ export interface QuickActionItem {
 // Presentation-only — the action list itself stays defined in page.tsx
 // (static routes, no data dependency), this component only renders it.
 export function QuickActions({ actions }: { actions: QuickActionItem[] }) {
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out.
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Quick actions</h2>

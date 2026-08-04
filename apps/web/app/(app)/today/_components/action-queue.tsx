@@ -34,8 +34,12 @@ export function ActionQueue({
   actionItems: TodayActionItem[];
   quoteActivity: QuoteActivityRow[];
 }) {
+  // Empty state: identical to pre-spike — section renders nothing at all
+  // when there is nothing actionable, rather than an empty card shell.
   if (actionItems.length === 0 && quoteActivity.length === 0) return null;
 
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out.
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">

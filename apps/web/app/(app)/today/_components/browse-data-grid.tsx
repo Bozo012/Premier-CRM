@@ -21,6 +21,10 @@ const PANELS: BrowsePanel[] = [
 // is passed through unchanged from the role resolved in page.tsx — this
 // component never re-derives or approximates capability/role logic itself.
 export function BrowseDataGrid({ canManageTeam }: { canManageTeam: boolean }) {
+  // BASE44-REPLACEABLE: markup/classNames below are representative only —
+  // real Base44 output would replace this JSX 1:1, same props in/out. The
+  // canManageTeam conditional must be preserved verbatim — never
+  // re-implemented or approximated by a redesign.
   return (
     <>
       <section className="space-y-3">
