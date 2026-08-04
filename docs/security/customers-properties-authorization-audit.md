@@ -335,8 +335,53 @@ This audit and its proposed batches do **not** include:
 
 ---
 
-## Stopping point
+## Stopping point (original audit)
 
 Per instruction, this audit stops here. No migration was created, no grants or RLS policies were modified, no test files were added, no application code was changed, the marketing site was not touched, nothing was deployed, no production data was modified, Base44 was not started, F2/F4/F7 were not addressed, and `forge-v1.0.0`/`forge-v1.0.1` were not moved.
 
 Waiting for explicit approval before implementing `customers`/`properties`/`customer_properties`/`customer_accounts` authorization hardening.
+
+---
+
+## 16. Implementation addendum (Forge V1.0.2, Batches CP-A/CP-B)
+
+Approval was given; this section records what was actually implemented, on which environment, and how a pre-existing E2E migration-bookkeeping drift (unrelated to this audit) was handled safely without being "fixed" as part of this patch.
+
+### Migrations
+
+- `20260804000000_harden_customers_and_properties.sql` (**CP-A**) — revokes `authenticated` INSERT/UPDATE/DELETE on `customers`/`properties`; replaces `org_isolation_customers`/`org_isolation_properties` (`FOR ALL`) with `customers_select_org_members`/`properties_select_org_members` (`FOR SELECT`, org-membership only). Portal SELECT policies untouched.
+- `20260804000001_harden_customer_properties_and_accounts.sql` (**CP-B**) — revokes `authenticated` INSERT/UPDATE/DELETE on `customer_properties`/`customer_accounts`; replaces `customer_properties_isolation`/`internal_org_customer_accounts` with SELECT-only policies whose `USING` clause validates **both** sides of the relationship (customer's org and property's org for the junction table; account's org and the linked customer's actual org for `customer_accounts`).
+- `20260804000002_fix_customer_properties_accounts_policy_recursion.sql` — a same-session bug fix. The first CP-B policies queried `customers`/`properties` directly inside their `USING` clauses, which created a genuine RLS policy cycle (`customers` ↔ `customer_accounts` via the pre-existing `customer_select_own_customer` policy, and `customer_properties` ↔ `properties` via the pre-existing `customer_select_own_properties` policy), raising Postgres error `42P17 infinite recursion detected in policy`. Caught immediately by `authorization-customers-properties-bot.spec.ts` before this ever reached any shared or production environment. Fixed by adding two `STABLE SECURITY DEFINER` helper functions (`customer_org_id()`, `property_org_id()`), matching the codebase's existing `user_is_in_org()` pattern, so the cross-table org lookup bypasses RLS on the underlying table and never re-enters the caller's own policy evaluation.
+
+### Pre-existing E2E migration-bookkeeping drift (found during recovery, not caused by this work)
+
+Before any CP-A/CP-B work began, `premier-crm-e2e` (`slbnizoskumwhleeiccv`) was found to have 27 migrations (`20260802010000` through `20260803080000` by local filename) recorded in `supabase_migrations.schema_migrations` under **different version timestamps** than their local files (e.g. local `20260802020400_customer_safe_site_visit_summary.sql` was recorded remotely as version `20260802164632`, same migration name, different version number). This is bookkeeping-only: direct schema inspection confirmed the live E2E schema already contains the full effect of every one of those 27 migrations (`site_visits`, `inspection_templates`, `role_has_capability()`/`capability_matrix`, `_apply_triage_decision()` all present; `service_requests`'s `authenticated` INSERT grant already revoked). `premier-crm-prod` (`apnbpcauqrjvkoleisde`) has **no such drift** — every local migration file's version matches its recorded production version exactly.
+
+Because the CLI's `supabase migration list`/`db push` compares purely by version number (not name or content), a normal `supabase db push --linked` against E2E right now would attempt to re-run all 27 of those already-effectively-applied migrations under their local version numbers — unsafe (would error on already-existing objects or silently duplicate schema effects). This drift **predates** CP-A/CP-B, was not introduced or worsened by this work, and was **not reconciled, repaired, renamed, or otherwise touched** as part of this patch — reconciling it is out of scope here and should be a separate, deliberate follow-up if ever undertaken.
+
+**How CP-A/CP-B were applied safely instead**: each migration's exact SQL content was executed directly against E2E (bypassing `db push` entirely, so the diverged 27-migration range was never touched), verified via direct grant/policy/data inspection after each step, then recorded as a normal, purely additive new row in `supabase_migrations.schema_migrations` (version + name matching the local file exactly, `statements` array holding the executed SQL, `created_by` matching the pattern of every other row in the table). No existing row was read-modified, renamed, or deleted; migration-row count went from 73 → 74 (CP-A) → 75 (CP-B) → 76 (recursion fix), each step confirmed as exactly `+1`.
+
+### Pre-flight relationship-integrity check (before CP-B)
+
+Queried E2E directly for any pre-existing cross-org mismatch before applying CP-B's stricter policies: zero mismatches found across all 64 `customer_properties` rows and the 1 `customer_accounts` row present. CP-B's policy rewrite is a pure grant/policy-logic change — no data was rewritten, and none needed to be.
+
+### Tests
+
+`tests/e2e/authorization-customers-properties-bot.spec.ts` — 30 tests, all passing against `premier-crm-e2e`, covering: CP-1/CP-5 direct-write denial (customers/properties INSERT/UPDATE/DELETE, same-org and cross-org, across employee/subcontractor/viewer/owner/admin), CP-2 (`customer_properties` same-org and both directions of cross-org linking denied), CP-3 (`customer_accounts` cross-org account forgery denied, same-org direct-write also denied), no-side-effects verification, legitimate same-org SELECT retention, cross-org SELECT correctly RLS-filtered (not an error), and a live signed-in-portal-account regression proving the CP-3 fix doesn't leak cross-org customer/property data through the narrow `customer_select_own_*` policies.
+
+Regression run: `pnpm test` 187/187, `pnpm typecheck` clean across all packages, `pnpm build` clean. Adjacent E2E suites (`customer-crud-bot`, `customer-command-center-bot`, `customer-intake-bot`, `operator-workflow-bot`) — 2 failures observed when run together under 4 parallel workers (a rate-limit-timing test and an operator-workflow customer-search-picker timeout), both confirmed as parallel-worker races by clean isolated re-runs (`--workers=1`), not caused by this patch — matching the same class of pre-existing locator-timing flake already documented for `employee-estimate-workflow-bot.spec.ts` in the Forge V1.0.1 verification record.
+
+### Local dev-server safety note
+
+While preparing to run the Playwright suite, `apps/web/.env.local` was found pointed at **production** (`apnbpcauqrjvkoleisde`) rather than E2E — the exact near-miss scenario `/api/e2e-health` exists to catch (it correctly refused to answer, blocking the whole Playwright run via `global-setup.ts`). `apps/web/.env.local` was **not modified**; the dev server was instead started with `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY` overridden at the shell level (Next.js gives process-level env vars precedence over `.env.local`), confirmed via `/api/e2e-health` reporting `slbnizoskumwhleeiccv` before any test ran.
+
+### Production rollout plan (not executed — E2E only per this patch's authorized scope)
+
+1. Confirm `premier-crm-prod`'s migration history is still fully synchronized (no drift, unlike E2E) immediately before rollout.
+2. Dry-run `supabase db push --linked` against `premier-crm-prod` with only `20260804000000`, `20260804000001`, and `20260804000002` pending — production has none of the E2E bookkeeping drift, so a normal dry-run/push is expected to be safe and match exactly the two prior hardening batches' rollout shape.
+3. Apply via `supabase db push --linked`.
+4. Verify grants/policies directly (mirroring the verification queries used on E2E in this session).
+5. Re-run the same pre-flight cross-org relationship check against production's live `customer_properties`/`customer_accounts` data before/after, given production holds real (though currently limited: PPM blank, Demo controlled) data.
+6. Re-run `pnpm test`, `pnpm typecheck`, `pnpm build`, and the new adversarial suite's applicable non-mutating checks against production read paths only, matching the Forge V1.0.1 production-verification precedent.
+
+**Not done in this session, per authorized scope**: no production migration, no merge of the implementation PR, no `forge-v1.0.2` tag, no Base44 work, `customer_location_prefs`/F2/F4/F6/F7 untouched.
