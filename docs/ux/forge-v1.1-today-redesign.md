@@ -94,7 +94,7 @@ This PR is additive/presentation-and-read-only:
 
 ## Base44 Today visual integration (branch, not yet merged)
 
-Status: **implemented on `feature/forge-v1.1-today-base44-visual-integration`, PR opened, not merged.** Full record: `docs/ux/base44-today-sync-and-portability-audit.md` §13.
+Status: **implemented on `feature/forge-v1.1-today-base44-visual-integration` — PR #110 opened, not merged.** Full record: `docs/ux/base44-today-sync-and-portability-audit.md` §13.
 
 The architecture above (Layer 1 domain code / Layer 2 pure view-model / Layer 3 replaceable presentation) is unchanged and remains authoritative — this integration replaces/adapts Layer 3 markup only, exactly at the `BASE44-REPLACEABLE` seams this redesign originally marked. Layer 1 (`packages/db/queries/today-actions.ts`) and Layer 2 (`apps/web/app/(app)/today/_lib/view-model.ts`) were not touched.
 

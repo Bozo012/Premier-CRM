@@ -1,6 +1,6 @@
 # Base44 Today Sync & Portability Audit
 
-Status: **audit complete; controlled Today visual integration implemented on a feature branch, PR opened, not merged.** No push was made to `Forge-Base44-UX`. No Base44 output was modified. Estimates and Site Inspection remain untouched. See §13 for the integration record.
+Status: **audit complete; controlled Today visual integration implemented — PR #110 opened, not merged.** No push was made to `Forge-Base44-UX`. No Base44 output was modified. Estimates and Site Inspection remain untouched. See §13 for the integration record.
 
 ---
 
