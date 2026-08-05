@@ -77,6 +77,7 @@ This matters immediately: the current portal mockup's "3 Active Requests / 12 Co
 2. ~~Auth wiring~~ — Forge-owned handoff endpoints receive the marketing form
    POSTs:
    - `POST /portal/handoff/sign-in`
+   - `POST /portal/handoff/sign-up`
    - `POST /portal/handoff/request-access`
    Successful authentication redirects to `/portal/dashboard`; failures redirect
    back to the marketing doorway with safe status codes only.
