@@ -9,7 +9,7 @@ tokens, and improved the inspection photo upload UI (multi-file, per-file
 failure reporting) within the existing upload/finalize contract. No schema,
 RLS, or backend action signature changes.
 
-- **Base SHA**: Premier-CRM `origin/main@76bbad7c09ee0a7d51d703e42d9f878b233f53c4` (Batch 7 merge, PR #119)
+- **Base SHA**: Premier-CRM `origin/main@76bbad7c09ee0a7d51d703e42d9f878b233f53c4` (PR #121, "Expose active org switcher on mobile" — one small commit on top of Batch 7's merge, PR #120)
 - **Frozen Base44 reference SHA**: `Forge-Base44-UX@497d0693cccafd89315ec17c3be9885cfaae5c8`
 - **Branch**: `agent/forge-ux-batch-8-requests-site-visits-inspection`
 
