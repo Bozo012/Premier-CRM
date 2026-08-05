@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -8,6 +10,8 @@ import {
 import { splitCustomerName } from './customer-portal-account';
 
 describe('customer portal marketing handoff', () => {
+  const root = path.resolve(__dirname, '..', '..', '..');
+
   it('builds fixed marketing return URLs with status codes only', () => {
     vi.stubEnv('NEXT_PUBLIC_MARKETING_SITE_URL', 'https://www.ppmnky.com/');
 
@@ -30,6 +34,15 @@ describe('customer portal marketing handoff', () => {
     expect(isAllowedPortalHandoffOrigin('https://www.ppmnky.com')).toBe(true);
     expect(isAllowedPortalHandoffOrigin('https://evil.example')).toBe(false);
     expect(isAllowedPortalHandoffOrigin(null)).toBe(false);
+  });
+
+  it('keeps sign-up as a first-class Forge-owned handoff alias', () => {
+    const signUpRoute = readFileSync(
+      path.join(root, 'apps/web/app/portal/handoff/sign-up/route.ts'),
+      'utf-8'
+    );
+
+    expect(signUpRoute).toContain("export { POST } from '../request-access/route'");
   });
 
   it('splits customer names without requiring a last name', () => {

@@ -155,8 +155,11 @@ remains the public `/customer-portal` doorway, while Forge owns form POST
 handoff endpoints, Supabase Auth/session cookies, customer-account
 match-or-create linking, password recovery, and the authenticated
 `/portal/dashboard`. Forge `/portal` and `/portal/login` are redirect-only to
-avoid a second customer sign-in landing. No database migrations, merges, or
-deployments were performed in this checkpoint.
+avoid a second customer sign-in landing. Forge also exposes
+`/portal/handoff/sign-up` as a first-class alias for the existing
+request-access signup flow, so the marketing site can use customer-facing
+"Sign Up" labels without changing account-linking behavior. No database
+migrations, merges, or deployments were performed in this checkpoint.
 
 Also re-verified the existing public service-request intake: the marketing
 site `/request-service` form posts to Forge CRM `POST /api/v1/service-requests`
