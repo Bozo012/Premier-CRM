@@ -101,7 +101,7 @@ export function InspectionForm({
           type="button"
           onClick={handleComplete}
           disabled={isCompleting}
-          className="inline-flex w-full items-center justify-center rounded-md bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-700 disabled:opacity-50 sm:w-auto"
+          className="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50 sm:w-auto"
         >
           {isCompleting ? 'Completing…' : 'Complete inspection'}
         </button>
@@ -113,8 +113,8 @@ export function InspectionForm({
 function SaveIndicator({ state }: { state: SaveState }) {
   if (state === 'idle') return null;
   if (state === 'saving') return <span>Saving…</span>;
-  if (state === 'saved') return <span className="text-emerald-600">Saved</span>;
-  return <span className="text-red-600">Save failed</span>;
+  if (state === 'saved') return <span className="text-[hsl(var(--st-success-fg))]">Saved</span>;
+  return <span className="text-[hsl(var(--st-error-fg))]">Save failed</span>;
 }
 
 function FieldEditor({
