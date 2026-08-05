@@ -9,6 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getBrowserSupabase } from '@/lib/supabase';
 
+function getMarketingPortalUrl(): string {
+  const origin = (process.env.NEXT_PUBLIC_MARKETING_SITE_URL ?? 'https://www.ppmnky.com').replace(
+    /\/+$/,
+    ''
+  );
+  return `${origin}/customer-portal`;
+}
+
 function PortalForgotPasswordForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState(searchParams.get('email') || '');
@@ -29,7 +37,7 @@ function PortalForgotPasswordForm() {
     });
 
     if (error) {
-      setStatus(error.message);
+      setStatus('We could not send a reset link. Please check the email and try again.');
       setIsSubmitting(false);
       return;
     }
@@ -70,10 +78,10 @@ function PortalForgotPasswordForm() {
       </form>
 
       <Link
-        href="/portal/login"
+        href={getMarketingPortalUrl()}
         className="text-sm text-muted-foreground underline-offset-4 hover:underline"
       >
-        Back to sign in
+        Back to customer portal
       </Link>
 
       {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}

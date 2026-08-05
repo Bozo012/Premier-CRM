@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Timeline } from '@/components/timeline';
 import { buildChangeOrderHistoryFeed } from '@/lib/change-order-history';
+import { buildMarketingPortalUrl } from '@/lib/customer-portal-handoff';
 import {
   getPortalRequestStatusDescription,
   getPortalRequestStatusLabel,
@@ -149,7 +150,7 @@ export default async function PortalDashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect('/portal/login');
+  if (!user) redirect(buildMarketingPortalUrl());
 
   const portalClient = supabase as unknown as SupabaseClient;
 

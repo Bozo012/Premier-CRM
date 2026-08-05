@@ -83,20 +83,18 @@ describe('staff sign-in page', () => {
 });
 
 describe('customer portal stays tenant-branded, not product-branded', () => {
-  it('portal doorway keeps the Premier Property Maintenance business identity and an absolute, non-templated title', () => {
+  it('portal doorway redirects unauthenticated customers to the marketing-owned doorway', () => {
     const source = read('apps/web/app/portal/page.tsx');
-    expect(source).toContain('Premier Property Maintenance');
-    expect(source).toContain("title: { absolute: 'Premier Property Maintenance — Customer Portal' }");
-    // The one factual/technical aside describing the platform mechanism is
-    // allowed to say Forge (it's not a heading) — but never Foundry, and the
-    // business-identity heading itself must never become the product name.
-    expect(source).not.toContain('Foundry');
+    expect(source).toContain('buildMarketingPortalUrl');
+    expect(source).toContain("redirect('/portal/dashboard')");
+    expect(source).not.toContain('Sign in or create account');
   });
 
-  it('portal login breadcrumb identifies the business, not the product, by name', () => {
+  it('portal login route is redirect-only, not a competing Forge sign-in page', () => {
     const source = read('apps/web/app/portal/login/page.tsx');
-    expect(source).toContain('Premier Property Maintenance customer portal');
-    expect(source).not.toContain('Forge customer portal');
+    expect(source).toContain('buildMarketingPortalUrl');
+    expect(source).not.toContain('<form');
+    expect(source).not.toContain('Sign in to your customer account');
   });
 });
 

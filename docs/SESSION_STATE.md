@@ -147,3 +147,19 @@ Both Batch UX-A and Today (PR2), the Base44 readiness docs (PR #107/#108), the T
 
 ## Checkpoint Routine (unchanged)
 Update this file after each meaningful milestone and before/after any production action. Commit in small logical checkpoints. Never commit secrets. Never leave important decisions only in chat history.
+
+## 2026-08-05 — Customer portal marketing handoff checkpoint
+
+Implemented the real cross-repo customer portal boundary: the marketing site
+remains the public `/customer-portal` doorway, while Forge owns form POST
+handoff endpoints, Supabase Auth/session cookies, customer-account
+match-or-create linking, password recovery, and the authenticated
+`/portal/dashboard`. Forge `/portal` and `/portal/login` are redirect-only to
+avoid a second customer sign-in landing. No database migrations, merges, or
+deployments were performed in this checkpoint.
+
+Also re-verified the existing public service-request intake: the marketing
+site `/request-service` form posts to Forge CRM `POST /api/v1/service-requests`
+via `VITE_CRM_API_URL`; Forge validates the website payload, applies CORS,
+honeypot, and rate-limit protections, creates or deduplicates the CRM
+customer/property records, links them, and inserts the `service_requests` row.
