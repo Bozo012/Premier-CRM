@@ -1,21 +1,28 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { AlertTriangle, ChevronRight, Receipt, Search, SearchX } from 'lucide-react';
 
-import { getActiveOrgContext, listInvoices, type InvoiceListItem } from '@premier/db';
+import { getActiveOrgContext, listInvoices } from '@premier/db';
 import { InvoiceStatusSchema, type InvoiceStatus } from '@premier/shared';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presentation';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { NewInvoiceDialog } from './_components/new-invoice-dialog';
+import {
+  formatMoney,
+  invoiceOutstandingTotal,
+  invoicePaidTotal,
+  toForgeInvoiceSummary,
+  type ForgeInvoiceSummary,
+} from './_lib/forge-invoice-view-model';
 
 export const metadata: Metadata = { title: 'Invoices' };
 
 const STATUS_FILTERS: Array<{ label: string; value?: InvoiceStatus }> = [
-  { label: 'All invoices' },
+  { label: 'All', value: undefined },
   { label: 'Draft', value: 'draft' },
   { label: 'Sent', value: 'sent' },
   { label: 'Viewed', value: 'viewed' },
@@ -23,7 +30,7 @@ const STATUS_FILTERS: Array<{ label: string; value?: InvoiceStatus }> = [
   { label: 'Paid', value: 'paid' },
   { label: 'Void', value: 'void' },
   { label: 'Refunded', value: 'refunded' },
-] as const;
+];
 
 interface InvoicesPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -53,12 +60,11 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
       </PageShell>
     );
   }
-  const { orgId } = orgContextResult.data;
 
   const result = await listInvoices(supabase, {
     limit: 100,
     offset: 0,
-    orgId,
+    orgId: orgContextResult.data.orgId,
     search,
     status,
   });
@@ -71,217 +77,223 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
     );
   }
 
-  const { invoices, total } = result.data;
+  const invoices = result.data.invoices.map((invoice) => toForgeInvoiceSummary(invoice));
 
   return (
-    <PageShell search={search} status={status} newInvoiceSlot={<NewInvoiceDialog />}>
-      <p className="text-sm text-muted-foreground">{formatTotal(total, search, status)}</p>
+    <PageShell
+      outstandingLabel={formatMoney(invoiceOutstandingTotal(result.data.invoices))}
+      paidLabel={formatMoney(invoicePaidTotal(result.data.invoices))}
+      search={search}
+      status={status}
+      total={result.data.total}
+    >
+      <p className="text-sm font-medium text-muted-foreground">
+        {formatTotal(result.data.total, search, status)}
+      </p>
 
       {invoices.length === 0 ? (
         <EmptyState search={search} status={status} />
       ) : (
-        <ul className="divide-y rounded-md border bg-background">
-          {invoices.map((item) => (
-            <li key={item.invoice.id}>
-              <Link
-                href={`/invoices/${item.invoice.id}`}
-                className="block space-y-3 px-4 py-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-5"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-base font-medium text-foreground">
-                    {resolveInvoiceTitle(item)}
-                  </p>
-                  <StatusBadge status={item.invoice.status} />
-                  {item.isOverdue ? (
-                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
-                      Overdue
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                  <p>
-                    <span className="font-medium text-foreground">Total:</span>{' '}
-                    {formatMoney(item.invoice.total)}
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Amount due:</span>{' '}
-                    {formatMoney(item.invoice.amount_due)}
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Customer:</span>{' '}
-                    {item.customer?.displayName || 'Unknown customer'}
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Job:</span>{' '}
-                    {item.job.title || item.job.jobNumber || 'Unknown job'}
-                  </p>
-                </div>
-
-                {item.invoice.due_date ? (
-                  <p className="text-sm text-muted-foreground">
-                    Due {formatDate(item.invoice.due_date)}
-                  </p>
-                ) : null}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <>
+          <InvoicesTable invoices={invoices} />
+          <div className="grid gap-3 lg:hidden">
+            {invoices.map((invoice) => (
+              <InvoiceCard key={invoice.id} invoice={invoice} />
+            ))}
+          </div>
+        </>
       )}
     </PageShell>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Shell and sub-components
-// ---------------------------------------------------------------------------
-
 function PageShell({
   children,
-  newInvoiceSlot,
+  outstandingLabel = '$0.00',
+  paidLabel = '$0.00',
   search = '',
   status,
+  total = 0,
 }: {
   children: React.ReactNode;
-  newInvoiceSlot?: React.ReactNode;
+  outstandingLabel?: string;
+  paidLabel?: string;
   search?: string;
   status?: InvoiceStatus;
+  total?: number;
 }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
-      <header className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
+    <ForgePage className="max-w-6xl gap-5 md:gap-6">
+      <header className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Invoices</h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Invoices</h1>
             <p className="text-sm text-muted-foreground">
-              Browse and manage invoices across all jobs.
+              Track issued bills, payment statuses, and transaction history.
             </p>
           </div>
-          {newInvoiceSlot}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <NewInvoiceDialog />
+          </div>
         </div>
 
-        <form action="/invoices" className="flex flex-col gap-2 lg:flex-row">
-          <Input
+        <div className="grid grid-cols-2 gap-3">
+          <ForgeCard>
+            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Outstanding</div>
+            <div className="mt-1 text-2xl font-bold text-foreground">{outstandingLabel}</div>
+          </ForgeCard>
+          <ForgeCard>
+            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Paid</div>
+            <div className="mt-1 text-2xl font-bold text-emerald-600">{paidLabel}</div>
+          </ForgeCard>
+        </div>
+
+        <form action="/invoices" className="relative">
+          {status ? <input type="hidden" name="status" value={status} /> : null}
+          <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <input
+            aria-label="Search invoices"
+            className="min-h-12 w-full rounded-xl border border-input bg-card py-2.5 pl-10 pr-4 text-sm font-medium shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             defaultValue={search}
             name="q"
-            placeholder="Search by title or invoice number..."
+            placeholder="Search by invoice number, customer, or job…"
+            type="search"
           />
-          <select
-            defaultValue={status ?? ''}
-            name="status"
-            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring lg:max-w-48"
-          >
-            {STATUS_FILTERS.map((filter) => (
-              <option key={filter.label} value={filter.value ?? ''}>
-                {filter.label}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
         </form>
+
+        <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Filter invoices">
+          {STATUS_FILTERS.map((filter) => {
+            const active = status === filter.value || (!status && !filter.value);
+            return (
+              <Link
+                key={filter.label}
+                href={`/invoices${buildQuery({ q: search, status: filter.value })}`}
+                className={[
+                  'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'border bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
+                ].join(' ')}
+              >
+                {filter.label}
+                {active ? (
+                  <span className="rounded-full bg-primary-foreground/20 px-1.5 text-[10px]">{total}</span>
+                ) : null}
+              </Link>
+            );
+          })}
+        </nav>
       </header>
 
       {children}
-    </main>
+    </ForgePage>
   );
 }
 
-function EmptyState({ search, status }: { search?: string; status?: InvoiceStatus }) {
-  if (search || status) {
-    return (
-      <div className="space-y-3 rounded-md border bg-background px-4 py-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          No invoices match the current search and filter.
-        </p>
-        <Button asChild variant="outline">
-          <Link href="/invoices">Clear filters</Link>
-        </Button>
-      </div>
-    );
-  }
-
+function InvoicesTable({ invoices }: { invoices: ForgeInvoiceSummary[] }) {
   return (
-    <div className="rounded-md border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
-      No invoices yet. Use the{' '}
-      <strong className="font-medium text-foreground">Create invoice</strong> button above to
-      get started.
+    <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm lg:block">
+      <table className="w-full text-left text-sm">
+        <thead className="border-b bg-muted/50">
+          <tr className="text-muted-foreground">
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Invoice</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Customer</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Amount</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Status</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Due</th>
+            <th className="px-5 py-3"><span className="sr-only">Open</span></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {invoices.map((invoice) => (
+            <tr key={invoice.id} className="transition hover:bg-muted/30">
+              <td className="px-5 py-4">
+                <Link href={`/invoices/${invoice.id}`} className="group flex items-center gap-2 font-bold text-foreground">
+                  <Receipt className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <span className="group-hover:underline">{invoice.number}</span>
+                </Link>
+                <div className="mt-0.5 text-xs text-muted-foreground">{invoice.originLabel}</div>
+              </td>
+              <td className="px-5 py-4">
+                <div className="font-medium text-foreground">{invoice.customerName}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{invoice.propertyName}</div>
+              </td>
+              <td className="px-5 py-4">
+                <div className="font-bold text-foreground">{invoice.amountLabel}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">Due {invoice.amountDueLabel}</div>
+              </td>
+              <td className="px-5 py-4"><ForgeStatusPill tone={invoice.statusTone}>{invoice.statusLabel}</ForgeStatusPill></td>
+              <td className="px-5 py-4 text-xs text-muted-foreground">{invoice.dueLabel}</td>
+              <td className="px-5 py-4 text-right">
+                <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    draft: 'bg-slate-100 text-slate-600',
-    sent: 'bg-violet-50 text-violet-700',
-    viewed: 'bg-indigo-50 text-indigo-700',
-    partially_paid: 'bg-amber-50 text-amber-700',
-    paid: 'bg-green-50 text-green-700',
-    overdue: 'bg-red-50 text-red-700',
-    void: 'bg-slate-100 text-slate-500',
-    refunded: 'bg-orange-50 text-orange-700',
-  };
-
-  const color = colorMap[status] ?? 'bg-slate-100 text-slate-600';
-
+function InvoiceCard({ invoice }: { invoice: ForgeInvoiceSummary }) {
+  const overdue = invoice.statusLabel === 'Overdue';
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {formatEnumLabel(status)}
-    </span>
+    <Link
+      href={`/invoices/${invoice.id}`}
+      className="rounded-xl border bg-card p-4 text-left shadow-sm transition hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-bold text-foreground">{invoice.number}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {invoice.customerName} · {invoice.propertyName}
+          </div>
+        </div>
+        <ForgeStatusPill tone={invoice.statusTone}>{invoice.statusLabel}</ForgeStatusPill>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-lg font-bold text-foreground">{invoice.amountLabel}</span>
+        {overdue ? (
+          <span className="flex items-center gap-1 text-xs font-bold text-red-600">
+            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+            Overdue
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Due {invoice.dueLabel}</span>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function EmptyState({ search, status }: { search?: string; status?: InvoiceStatus }) {
+  return (
+    <ForgeCard className="grid min-h-[40vh] place-items-center px-4 text-center">
+      <div>
+        <SearchX className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
+        <h2 className="mt-3 text-lg font-bold">
+          {search || status ? 'No invoices found' : 'No invoices yet'}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {search || status ? 'Try adjusting your search or filters.' : 'Create an invoice from a completed job.'}
+        </p>
+      </div>
+    </ForgeCard>
   );
 }
 
 function ErrorPanel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       {children}
     </p>
   );
 }
 
-
-// ---------------------------------------------------------------------------
-// Formatters and param readers
-// ---------------------------------------------------------------------------
-
-function resolveInvoiceTitle(item: InvoiceListItem): string {
-  if (item.invoice.title?.trim()) return item.invoice.title.trim();
-  if (item.invoice.invoice_number?.trim()) return item.invoice.invoice_number.trim();
-  if (item.job.title.trim()) return `Invoice for ${item.job.title.trim()}`;
-  if (item.job.jobNumber) return `Invoice for job ${item.job.jobNumber}`;
-  return 'Untitled invoice';
-}
-
-function formatMoney(value: number | null): string {
-  if (value === null) return '—';
-  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(value);
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(value));
-}
-
-function formatEnumLabel(value: string): string {
-  return value
-    .split('_')
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join(' ');
-}
-
-function formatTotal(
-  total: number,
-  search: string | undefined,
-  status: InvoiceStatus | undefined
-): string {
-  if (search || status) {
-    return `${total} invoice${total === 1 ? '' : 's'} match the filter`;
-  }
-  return `${total} invoice${total === 1 ? '' : 's'} total`;
+function formatTotal(total: number, search: string | undefined, status: InvoiceStatus | undefined): string {
+  const noun = total === 1 ? 'invoice' : 'invoices';
+  if (search || status) return `${total} ${noun} match the filter`;
+  return `${total} ${noun} total`;
 }
 
 function readStringParam(value: string | string[] | undefined): string | undefined {
@@ -295,4 +307,12 @@ function readStatusParam(value: string | string[] | undefined): InvoiceStatus | 
   if (!raw) return undefined;
   const parsed = InvoiceStatusSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
+}
+
+function buildQuery(params: { q?: string; status?: InvoiceStatus }): string {
+  const searchParams = new URLSearchParams();
+  if (params.q) searchParams.set('q', params.q);
+  if (params.status) searchParams.set('status', params.status);
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
 }

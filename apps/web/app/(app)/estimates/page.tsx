@@ -1,19 +1,25 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Calculator, ChevronRight, Plus, Search, SearchX } from 'lucide-react';
 
-import { getActiveOrgContext, listEstimates, type EstimateListItem, type EstimateStatus } from '@premier/db';
+import { getActiveOrgContext, listEstimates, type EstimateStatus } from '@premier/db';
 
+import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presentation';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+import {
+  toForgeEstimateSummary,
+  type ForgeEstimateFilter,
+  type ForgeEstimateSummary,
+} from './_lib/forge-estimate-view-model';
 
 export const metadata: Metadata = { title: 'Estimates' };
 
 interface EstimatesPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
-
-type ViewFilter = 'active' | 'all';
 
 const ACTIVE_STATUSES: EstimateStatus[] = [
   'draft',
@@ -22,9 +28,15 @@ const ACTIVE_STATUSES: EstimateStatus[] = [
   'quoted',
 ];
 
+const VIEW_FILTERS: Array<{ label: string; value: ForgeEstimateFilter }> = [
+  { label: 'Active', value: 'active' },
+  { label: 'All', value: 'all' },
+];
+
 export default async function EstimatesPage({ searchParams }: EstimatesPageProps) {
   const params = await searchParams;
   const view = readViewParam(params.view);
+  const query = readStringParam(params.q);
 
   const supabase = await getServerSupabase();
   const {
@@ -40,15 +52,14 @@ export default async function EstimatesPage({ searchParams }: EstimatesPageProps
 
   if (!orgContextResult.success) {
     return (
-      <PageShell view={view}>
+      <PageShell query={query} view={view}>
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
       </PageShell>
     );
   }
-  const { orgId } = orgContextResult.data;
 
   const result = await listEstimates(supabase, {
-    orgId,
+    orgId: orgContextResult.data.orgId,
     statuses: view === 'active' ? ACTIVE_STATUSES : undefined,
     limit: 100,
     offset: 0,
@@ -56,256 +67,234 @@ export default async function EstimatesPage({ searchParams }: EstimatesPageProps
 
   if (!result.success) {
     return (
-      <PageShell view={view}>
+      <PageShell query={query} view={view}>
         <ErrorPanel>Failed to load estimates: {result.error}</ErrorPanel>
       </PageShell>
     );
   }
 
-  const { estimates, total } = result.data;
+  const summaries = filterEstimates(
+    result.data.estimates.map((estimate) => toForgeEstimateSummary(estimate)),
+    query
+  );
 
   return (
-    <PageShell view={view}>
-      <p className="text-sm text-muted-foreground">
-        {formatTotal(total, view)}
+    <PageShell query={query} total={result.data.total} view={view}>
+      <p className="text-sm font-medium text-muted-foreground">
+        {formatTotal(summaries.length, view, query)}
       </p>
 
-      {estimates.length === 0 ? (
-        <EmptyState view={view} />
+      {summaries.length === 0 ? (
+        <EmptyState query={query} view={view} />
       ) : (
-        <ul className="divide-y rounded-md border bg-background">
-          {estimates.map((item) => (
-            <EstimateRow key={item.id} item={item} />
-          ))}
-        </ul>
+        <>
+          <EstimatesTable estimates={summaries} />
+          <div className="grid gap-3 lg:hidden">
+            {summaries.map((estimate) => (
+              <EstimateCard key={estimate.id} estimate={estimate} />
+            ))}
+          </div>
+        </>
       )}
     </PageShell>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Row component
-// ---------------------------------------------------------------------------
-
-function EstimateRow({ item }: { item: EstimateListItem }) {
-  const address = item.property
-    ? `${item.property.addressLine1}, ${item.property.city}, ${item.property.state} ${item.property.zip}`
-    : null;
-
-  return (
-    <li>
-      <div className="space-y-2 px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-muted-foreground">
-                {item.estimateNumber}
-              </span>
-              <StatusBadge status={item.status} />
-            </div>
-            <Link
-              href={`/estimates/${item.id}`}
-              className="font-medium text-foreground underline-offset-2 hover:underline"
-            >
-              {item.title}
-            </Link>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap gap-1.5">
-            {item.serviceRequestId ? (
-              <Link
-                href={`/requests/${item.serviceRequestId}`}
-                className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
-              >
-                From request
-              </Link>
-            ) : null}
-            {item.convertedJobId ? (
-              <Link
-                href={`/jobs/${item.convertedJobId}`}
-                className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 hover:bg-green-100"
-              >
-                Job created
-              </Link>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-3">
-          {item.customer ? (
-            <p>
-              <span className="font-medium text-foreground">Customer:</span>{' '}
-              <Link
-                href={`/customers/${item.customer.id}`}
-                className="underline-offset-2 hover:underline"
-              >
-                {item.customer.displayName}
-              </Link>
-            </p>
-          ) : null}
-          {address ? (
-            <p className="sm:col-span-2">
-              <span className="font-medium text-foreground">Property:</span>{' '}
-              {address}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          <span>Created {formatDate(item.createdAt)}</span>
-          {item.siteVisitAt ? (
-            <span>Site visit {formatDate(item.siteVisitAt)}</span>
-          ) : null}
-          {item.expiresAt ? (
-            <span>Expires {formatDate(item.expiresAt)}</span>
-          ) : null}
-        </div>
-      </div>
-    </li>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Shell
-// ---------------------------------------------------------------------------
-
-const VIEW_FILTERS: Array<{ label: string; value: ViewFilter }> = [
-  { label: 'Active', value: 'active' },
-  { label: 'All', value: 'all' },
-];
-
 function PageShell({
   children,
+  query,
+  total = 0,
   view,
 }: {
   children: React.ReactNode;
-  view: ViewFilter;
+  query: string;
+  total?: number;
+  view: ForgeEstimateFilter;
 }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
-      <header className="space-y-3">
-        <div className="flex items-start justify-between gap-4">
+    <ForgePage className="max-w-6xl gap-5 md:gap-6">
+      <header className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Estimates
-            </h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Estimates</h1>
             <p className="text-sm text-muted-foreground">
-              Site visits, scoped work, and quoted proposals.
+              Track scope, pricing review, and quote readiness.
             </p>
           </div>
           <Link
             href="/estimates/new"
-            className="inline-flex shrink-0 items-center rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-slate-700"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
+            <Plus className="h-4 w-4" aria-hidden="true" />
             New estimate
           </Link>
         </div>
 
-        <nav className="flex gap-1">
+        <form action="/estimates" className="relative">
+          <input type="hidden" name="view" value={view} />
+          <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <input
+            aria-label="Search estimates"
+            className="min-h-12 w-full rounded-xl border border-input bg-card py-2.5 pl-10 pr-4 text-sm font-medium shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            defaultValue={query}
+            name="q"
+            placeholder="Search by estimate number, customer, property, or status…"
+            type="search"
+          />
+        </form>
+
+        <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Filter estimates">
           {VIEW_FILTERS.map((filter) => (
             <Link
               key={filter.value}
-              href={`/estimates?view=${filter.value}`}
+              href={`/estimates?view=${filter.value}${query ? `&q=${encodeURIComponent(query)}` : ''}`}
               className={[
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 view === filter.value
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
               ].join(' ')}
             >
               {filter.label}
+              <span className={view === filter.value ? 'rounded-full bg-primary-foreground/20 px-1.5 text-[10px]' : 'rounded-full bg-muted px-1.5 text-[10px]'}>
+                {total}
+              </span>
             </Link>
           ))}
         </nav>
       </header>
 
       {children}
-    </main>
+    </ForgePage>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function EmptyState({ view }: { view: ViewFilter }) {
-  if (view === 'all') {
-    return (
-      <div className="rounded-md border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
-        No estimates yet.
-      </div>
-    );
-  }
-
+function EstimatesTable({ estimates }: { estimates: ForgeEstimateSummary[] }) {
   return (
-    <div className="space-y-2 rounded-md border bg-background px-4 py-8 text-center">
-      <p className="text-sm font-medium text-foreground">No active estimates</p>
-      <p className="text-sm text-muted-foreground">
-        Convert a request to create an estimate, or{' '}
-        <Link href="/estimates/new" className="font-medium text-foreground underline-offset-2 hover:underline">
-          create one manually
-        </Link>
-        .
-      </p>
+    <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm lg:block">
+      <table className="w-full text-left text-sm">
+        <thead className="border-b bg-muted/50">
+          <tr className="text-muted-foreground">
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Estimate</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Customer</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Amount</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Status</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Updated</th>
+            <th className="px-5 py-3"><span className="sr-only">Open</span></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {estimates.map((estimate) => (
+            <tr key={estimate.id} className="transition hover:bg-muted/30">
+              <td className="px-5 py-4">
+                <Link href={`/estimates/${estimate.id}`} className="group flex items-center gap-2 font-bold text-foreground">
+                  <Calculator className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <span className="group-hover:underline">{estimate.number}</span>
+                </Link>
+                <div className="mt-0.5 text-xs text-muted-foreground">{estimate.title}</div>
+              </td>
+              <td className="px-5 py-4">
+                <div className="font-medium text-foreground">{estimate.customerName}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{estimate.propertyName}</div>
+              </td>
+              <td className="px-5 py-4 font-bold text-foreground">{estimate.amountLabel}</td>
+              <td className="px-5 py-4">
+                <div className="flex flex-col gap-1">
+                  <ForgeStatusPill tone={estimate.statusTone}>{estimate.statusLabel}</ForgeStatusPill>
+                  <span className="text-xs text-muted-foreground">{estimate.originLabel}</span>
+                </div>
+              </td>
+              <td className="px-5 py-4 text-xs text-muted-foreground">{estimate.updatedLabel}</td>
+              <td className="px-5 py-4 text-right">
+                <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: EstimateStatus }) {
-  const colorMap: Record<EstimateStatus, string> = {
-    draft: 'bg-slate-100 text-slate-600',
-    site_visit_scheduled: 'bg-blue-50 text-blue-700',
-    site_visit_complete: 'bg-indigo-50 text-indigo-700',
-    quoted: 'bg-purple-50 text-purple-700',
-    accepted: 'bg-green-50 text-green-700',
-    declined: 'bg-red-50 text-red-700',
-    expired: 'bg-slate-100 text-slate-500',
-    converted: 'bg-emerald-50 text-emerald-700',
-  };
-  const color = colorMap[status] ?? 'bg-slate-100 text-slate-600';
+function EstimateCard({ estimate }: { estimate: ForgeEstimateSummary }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {formatEnumLabel(status)}
-    </span>
+    <Link
+      href={`/estimates/${estimate.id}`}
+      className="rounded-xl border bg-card p-4 text-left shadow-sm transition hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-bold text-foreground">{estimate.number}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {estimate.customerName} · {estimate.propertyName}
+          </div>
+        </div>
+        <ForgeStatusPill tone={estimate.statusTone}>{estimate.statusLabel}</ForgeStatusPill>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-lg font-bold text-foreground">{estimate.amountLabel}</span>
+        <span className="text-xs font-bold text-primary">{estimate.nextActionLabel} →</span>
+      </div>
+    </Link>
+  );
+}
+
+function EmptyState({ query, view }: { query: string; view: ForgeEstimateFilter }) {
+  return (
+    <ForgeCard className="grid min-h-[40vh] place-items-center px-4 text-center">
+      <div>
+        <SearchX className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
+        <h2 className="mt-3 text-lg font-bold">
+          {query ? 'No estimates found' : view === 'active' ? 'No active estimates' : 'No estimates yet'}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {query ? 'Try adjusting your search or filters.' : 'Create one manually or convert a request into an estimate.'}
+        </p>
+      </div>
+    </ForgeCard>
   );
 }
 
 function ErrorPanel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       {children}
     </p>
   );
 }
 
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatEnumLabel(value: string): string {
-  return value
-    .split('_')
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join(' ');
+function filterEstimates(estimates: ForgeEstimateSummary[], query: string): ForgeEstimateSummary[] {
+  if (!query) return estimates;
+  const normalized = query.toLowerCase();
+  return estimates.filter((estimate) =>
+    [
+      estimate.number,
+      estimate.title,
+      estimate.customerName,
+      estimate.propertyName,
+      estimate.propertyAddress,
+      estimate.statusLabel,
+      estimate.originLabel,
+    ]
+      .filter(Boolean)
+      .some((value) => value?.toLowerCase().includes(normalized))
+  );
 }
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(value));
-}
-
-function formatTotal(count: number, view: ViewFilter): string {
+function formatTotal(count: number, view: ForgeEstimateFilter, query: string): string {
   const noun = count === 1 ? 'estimate' : 'estimates';
+  if (query) return `${count} ${noun} match the search`;
   if (view === 'active') return `${count} active ${noun}`;
   return `${count} ${noun} total`;
 }
 
-function readViewParam(value: string | string[] | undefined): ViewFilter {
+function readViewParam(value: string | string[] | undefined): ForgeEstimateFilter {
   const raw = Array.isArray(value) ? value[0] : value;
   if (raw === 'all') return 'all';
   return 'active';
+}
+
+function readStringParam(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw?.trim() ?? '';
 }
