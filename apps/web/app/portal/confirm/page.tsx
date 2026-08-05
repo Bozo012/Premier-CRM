@@ -8,6 +8,14 @@ import { Button } from '@/components/ui/button';
 import { establishSessionFromCallback } from '@/lib/auth-callback';
 import { getBrowserSupabase } from '@/lib/supabase';
 
+function getMarketingPortalUrl(): string {
+  const origin = (process.env.NEXT_PUBLIC_MARKETING_SITE_URL ?? 'https://www.ppmnky.com').replace(
+    /\/+$/,
+    ''
+  );
+  return `${origin}/customer-portal`;
+}
+
 /**
  * Landing page for the customer portal's "Confirm signup" email
  * (`createCustomerPortalAccount`'s `emailRedirectTo`). Uses the same
@@ -73,7 +81,7 @@ export default function PortalConfirmPage() {
         </p>
       </div>
       <Button asChild>
-        <Link href="/portal/login">Go to portal sign in</Link>
+        <Link href={getMarketingPortalUrl()}>Go to customer portal</Link>
       </Button>
     </main>
   );

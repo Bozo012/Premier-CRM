@@ -19,10 +19,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-import { createServiceClient, findCustomerByEmail } from '@premier/db';
-
-const PREMIER_ORG_ID =
-  process.env.PREMIER_ORG_ID ?? 'a0000000-0000-0000-0000-000000000001';
+import { ensureCustomerAccount } from '@/lib/customer-portal-account';
 
 const ALLOWED_ORIGINS_PROD = [
   'https://ppmnky.com',
@@ -96,16 +93,6 @@ function checkAndIncrementRateLimit(ip: string): boolean {
   return true;
 }
 
-function splitName(name: string): { firstName: string | null; lastName: string | null } {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return { firstName: null, lastName: null };
-  if (parts.length === 1) return { firstName: parts[0] ?? null, lastName: null };
-  return {
-    firstName: parts.slice(0, -1).join(' '),
-    lastName: parts[parts.length - 1] ?? null,
-  };
-}
-
 export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
   return new NextResponse(null, {
     status: 204,
@@ -172,66 +159,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       : '';
   const fullName = metadataFullName || bodyFullName;
 
-  const serviceClient = createServiceClient();
-
-  const existingResult = await findCustomerByEmail(serviceClient, { email, orgId: PREMIER_ORG_ID });
-  if (!existingResult.success) {
+  const accountResult = await ensureCustomerAccount({ authUserId, email, fullName });
+  if (!accountResult.success) {
     return NextResponse.json(
-      { success: false, code: existingResult.code, error: existingResult.error },
-      { status: 500, headers: corsHeaders }
-    );
-  }
-
-  let customerId = existingResult.data?.id ?? null;
-
-  if (!customerId) {
-    const { firstName, lastName } = splitName(fullName);
-    const { data: createdCustomer, error: createError } = await serviceClient
-      .from('customers')
-      .insert({
-        org_id: PREMIER_ORG_ID,
-        type: 'residential',
-        first_name: firstName,
-        last_name: lastName,
-        email,
-        preferred_channel: 'portal',
-        source: 'customer_portal',
-        tags: ['customer_portal'],
-      })
-      .select('id')
-      .single();
-
-    if (createError || !createdCustomer) {
-      return NextResponse.json(
-        { success: false, code: 'DB_ERROR', error: createError?.message ?? 'Failed to create customer.' },
-        { status: 500, headers: corsHeaders }
-      );
-    }
-    customerId = createdCustomer.id;
-  }
-
-  const { error: accountError } = await serviceClient.from('customer_accounts').upsert(
-    {
-      org_id: PREMIER_ORG_ID,
-      customer_id: customerId,
-      auth_user_id: authUserId,
-      email,
-      status: 'active',
-      invited_at: new Date().toISOString(),
-      accepted_at: new Date().toISOString(),
-    },
-    { onConflict: 'auth_user_id' }
-  );
-
-  if (accountError) {
-    return NextResponse.json(
-      { success: false, code: 'DB_ERROR', error: accountError.message },
+      { success: false, code: accountResult.code, error: 'Could not finish linking your portal account.' },
       { status: 500, headers: corsHeaders }
     );
   }
 
   return NextResponse.json(
-    { success: true, data: { customerId } },
+    { success: true, data: { customerId: accountResult.customerId } },
     { status: 200, headers: corsHeaders }
   );
 }
