@@ -359,6 +359,42 @@ export async function listSiteVisits(
   return ok({ visits, total: count ?? 0 });
 }
 
+/**
+ * Site visits don't carry customer_id/property_id directly (that lives on
+ * the parent service_requests row, joined in `listSiteVisits`), so rather
+ * than duplicating that join here, this filters the already-org-scoped list.
+ * Fine at current SMB scale (`limit` defaults to 200); revisit with a real
+ * `!inner` join filter if an org's site-visit volume ever makes that
+ * insufficient.
+ */
+export async function listSiteVisitsForCustomer(
+  client: DbClient,
+  args: { orgId: string; customerId: string; limit?: number }
+): Promise<Result<SiteVisitListItem[]>> {
+  const result = await listSiteVisits(client, { orgId: args.orgId, limit: args.limit ?? 200, status: 'all' });
+  if (!result.success) return result;
+  return ok(result.data.visits.filter((visit) => visit.customerId === args.customerId));
+}
+
+export async function listSiteVisitsForProperty(
+  client: DbClient,
+  args: { orgId: string; propertyId: string; limit?: number }
+): Promise<Result<SiteVisitListItem[]>> {
+  const result = await listSiteVisits(client, { orgId: args.orgId, limit: args.limit ?? 200, status: 'all' });
+  if (!result.success) return result;
+  return ok(result.data.visits.filter((visit) => visit.propertyId === args.propertyId));
+}
+
+/** Site visits (plus their scheduled appointments) currently assigned to one team member — for the Team Member detail page. */
+export async function listSiteVisitsAssignedToMember(
+  client: DbClient,
+  args: { orgId: string; userId: string; limit?: number }
+): Promise<Result<SiteVisitListItem[]>> {
+  const result = await listSiteVisits(client, { orgId: args.orgId, limit: args.limit ?? 200, status: 'all' });
+  if (!result.success) return result;
+  return ok(result.data.visits.filter((visit) => visit.assignedUserId === args.userId));
+}
+
 export async function getSiteVisitById(client: DbClient, siteVisitId: string, orgId: string): Promise<Result<SiteVisitDetail>> {
   const { data: visit, error } = await client
     .from('site_visits')

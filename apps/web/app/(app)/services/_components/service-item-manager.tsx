@@ -136,7 +136,7 @@ export function ServiceItemManager({
   );
 }
 
-function ServiceItemEditorCard({
+export function ServiceItemEditorCard({
   categories,
   itemSummary,
 }: {

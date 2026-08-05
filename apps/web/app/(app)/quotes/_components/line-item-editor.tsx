@@ -1,6 +1,7 @@
 'use client';
 // Client component: manages add/edit/remove form state for quote line items.
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState, useTransition } from 'react';
 
@@ -409,13 +410,16 @@ export function LineItemEditor({
                     <div className="min-w-0">
                       <p className="font-medium text-foreground">{item.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {[
-                          service?.name ?? (item.service_id ? null : 'Manual'),
-                          phaseName,
-                          item.unit,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
+                        {item.service_id ? (
+                          <Link href={`/services/${item.service_id}`} className="hover:underline">
+                            {service?.name ?? 'Catalog service'}
+                          </Link>
+                        ) : (
+                          'Manual'
+                        )}
+                        {[phaseName, item.unit].filter(Boolean).length > 0
+                          ? ` · ${[phaseName, item.unit].filter(Boolean).join(' · ')}`
+                          : null}
                       </p>
                     </div>
                     <p className="shrink-0 text-sm font-medium text-foreground">

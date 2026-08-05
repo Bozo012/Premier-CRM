@@ -31,7 +31,9 @@ export {
   getInvoiceByToken,
   getJobInvoiceTotals,
   listInvoices,
+  listInvoicesForCustomer,
   listInvoicesForJob,
+  listPaymentsForCustomer,
   listPaymentsForInvoice,
   recordPayment,
   removeInvoiceLineItem,
@@ -60,6 +62,8 @@ export {
   expenseMatchesFilter,
   getExpenseById,
   listExpenses,
+  listExpensesForCustomer,
+  listExpensesForProperty,
   rejectExpense,
   submitExpense,
   updateExpense,
@@ -91,6 +95,7 @@ export {
   type JobListPropertySummary,
 } from './jobs';
 export {
+  getServiceCatalogItemById,
   listCatalogItemsForPicker,
   listServiceCatalogItems,
   listServiceCategories,
@@ -98,8 +103,10 @@ export {
   saveServiceItem,
   type CatalogItemForPicker,
   type ServiceCatalogCategorySummary,
+  type ServiceCatalogItemDetail,
   type ServiceCatalogItemSummary,
   type ServiceCatalogPage,
+  type ServiceCatalogQuoteUsage,
   type ServiceCategory,
   type ServiceItem,
 } from './service-catalog';
@@ -122,7 +129,13 @@ export {
   type TeamAvailabilityRecord,
   type TeamAvailabilityStatus,
 } from './team-availability';
-export { getActiveOrgContext, type ActiveOrgContext, type AvailableOrgMembership, type OrgMemberRole } from './org-context';
+export {
+  canManageTeam,
+  getActiveOrgContext,
+  type ActiveOrgContext,
+  type AvailableOrgMembership,
+  type OrgMemberRole,
+} from './org-context';
 export {
   createCustomer,
   findCustomerByEmail,

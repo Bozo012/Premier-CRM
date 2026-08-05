@@ -395,6 +395,40 @@ export async function listExpenses(
   });
 }
 
+/** Expenses tied to a customer (via the direct `expenses.customer_id` FK) — for the Customer detail page. */
+export async function listExpensesForCustomer(
+  client: DbClient,
+  args: { orgId: string; customerId: string }
+): Promise<Result<ExpenseListItem[]>> {
+  const { data, error } = await client
+    .from('expenses')
+    .select('*')
+    .eq('org_id', args.orgId)
+    .eq('customer_id', args.customerId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return hydrateExpenseItems(client, args.orgId, data ?? []);
+}
+
+/** Expenses tied to a property (via the direct `expenses.property_id` FK) — for the Property detail page. */
+export async function listExpensesForProperty(
+  client: DbClient,
+  args: { orgId: string; propertyId: string }
+): Promise<Result<ExpenseListItem[]>> {
+  const { data, error } = await client
+    .from('expenses')
+    .select('*')
+    .eq('org_id', args.orgId)
+    .eq('property_id', args.propertyId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return hydrateExpenseItems(client, args.orgId, data ?? []);
+}
+
 export async function getExpenseById(
   client: DbClient,
   args: { expenseId: string; orgId: string }

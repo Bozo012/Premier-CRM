@@ -193,7 +193,11 @@ function ServiceCard({ itemSummary }: { itemSummary: ServiceCatalogItemSummary }
     <article className="rounded-xl border bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-bold text-card-foreground">{item.name}</h2>
+          <h2 className="text-base font-bold text-card-foreground">
+            <Link href={`/services/${item.id}`} className="hover:underline">
+              {item.name}
+            </Link>
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             {[itemSummary.category?.name, pricingMetricLabel(item.pricing_metric), item.unit_label ?? item.unit].filter(Boolean).join(' · ')}
           </p>

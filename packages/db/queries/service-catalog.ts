@@ -37,6 +37,19 @@ export interface ServiceCatalogPage {
   total: number;
 }
 
+export interface ServiceCatalogQuoteUsage {
+  quoteId: string;
+  quoteNumber: string | null;
+  status: Database['public']['Enums']['quote_status'];
+  title: string | null;
+}
+
+export interface ServiceCatalogItemDetail {
+  category: ServiceCatalogCategorySummary | null;
+  item: ServiceItem;
+  quoteUsages: ServiceCatalogQuoteUsage[];
+}
+
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
 }
@@ -166,6 +179,78 @@ export async function listServiceCatalogItems(
       item,
     })),
     total: count ?? 0,
+  });
+}
+
+export async function getServiceCatalogItemById(
+  client: DbClient,
+  args: { id: string; orgId: string }
+): Promise<Result<ServiceCatalogItemDetail>> {
+  const { data: item, error: itemError } = await client
+    .from('service_items')
+    .select('*')
+    .eq('id', args.id)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+
+  if (itemError) {
+    return err(ErrorCode.DB_ERROR, itemError.message);
+  }
+
+  if (!item) {
+    return err(ErrorCode.NOT_FOUND, `Service item ${args.id} not found`);
+  }
+
+  let category: ServiceCatalogCategorySummary | null = null;
+
+  if (item.category_id) {
+    const categoriesResult = await listServiceCategories(client, {
+      orgId: args.orgId,
+    });
+
+    if (!categoriesResult.success) {
+      return categoriesResult;
+    }
+
+    category =
+      categoriesResult.data.find((c) => c.id === item.category_id) ?? null;
+  }
+
+  const { data: lineItems, error: lineItemsError } = await client
+    .from('quote_line_items')
+    .select('quote_id')
+    .eq('service_id', args.id);
+
+  if (lineItemsError) {
+    return err(ErrorCode.DB_ERROR, lineItemsError.message);
+  }
+
+  const quoteIds = Array.from(
+    new Set((lineItems ?? []).map((li) => li.quote_id))
+  );
+
+  const { data: quotes, error: quotesError } =
+    quoteIds.length > 0
+      ? await client
+          .from('quotes')
+          .select('id, quote_number, status, title')
+          .eq('org_id', args.orgId)
+          .in('id', quoteIds)
+      : { data: [], error: null };
+
+  if (quotesError) {
+    return err(ErrorCode.DB_ERROR, quotesError.message);
+  }
+
+  return ok({
+    category,
+    item,
+    quoteUsages: (quotes ?? []).map((q) => ({
+      quoteId: q.id,
+      quoteNumber: q.quote_number,
+      status: q.status,
+      title: q.title,
+    })),
   });
 }
 

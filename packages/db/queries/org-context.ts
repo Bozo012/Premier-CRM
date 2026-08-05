@@ -5,6 +5,16 @@ import type { Database } from '../types';
 
 export type OrgMemberRole = Database['public']['Enums']['user_role'];
 
+/**
+ * The one shared definition of "can manage the team" (invites, roles,
+ * revocation). Previously copy-pasted as `role === 'owner' || role === 'admin'`
+ * at each call site (team/actions.ts, team/page.tsx) — centralized here so a
+ * future role addition (e.g. a manager tier) only needs one edit.
+ */
+export function canManageTeam(role: OrgMemberRole): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
 export interface AvailableOrgMembership {
   orgId: string;
   orgName: string;

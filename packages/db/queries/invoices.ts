@@ -348,6 +348,59 @@ export async function listInvoices(
   return ok({ invoices: items, total: count ?? 0 });
 }
 
+/**
+ * Invoices don't carry customer_id directly (only job_id — `invoices.job_id
+ * NOT NULL REFERENCES jobs`), so this resolves the customer's job ids first,
+ * then the invoices on those jobs. Used by the Customer detail page.
+ */
+export async function listInvoicesForCustomer(
+  client: DbClient,
+  args: { orgId: string; customerId: string }
+): Promise<Result<Invoice[]>> {
+  const { data: jobs, error: jobsError } = await client
+    .from('jobs')
+    .select('id')
+    .eq('org_id', args.orgId)
+    .eq('customer_id', args.customerId);
+
+  if (jobsError) return err(ErrorCode.DB_ERROR, jobsError.message);
+
+  const jobIds = (jobs ?? []).map((job) => job.id);
+  if (jobIds.length === 0) return ok([]);
+
+  const { data: invoices, error } = await client
+    .from('invoices')
+    .select('*')
+    .eq('org_id', args.orgId)
+    .in('job_id', jobIds)
+    .order('created_at', { ascending: false });
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok(invoices ?? []);
+}
+
+/** Payments across every invoice belonging to a customer's jobs — for the Customer detail page's payment history. */
+export async function listPaymentsForCustomer(
+  client: DbClient,
+  args: { orgId: string; customerId: string }
+): Promise<Result<Payment[]>> {
+  const invoicesResult = await listInvoicesForCustomer(client, args);
+  if (!invoicesResult.success) return invoicesResult;
+
+  const invoiceIds = invoicesResult.data.map((invoice) => invoice.id);
+  if (invoiceIds.length === 0) return ok([]);
+
+  const { data, error } = await client
+    .from('payments')
+    .select('*')
+    .eq('org_id', args.orgId)
+    .in('invoice_id', invoiceIds)
+    .order('paid_at', { ascending: false });
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok(data ?? []);
+}
+
 // ---------------------------------------------------------------------------
 // Invoice detail (bundles invoice + line items + payments + job/customer/
 // property/quote summaries in one call, per Phase 1-B)
