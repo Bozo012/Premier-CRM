@@ -30,7 +30,12 @@ export type ActivityLogEventType =
   | 'deposit_requested'
   | 'deposit_waived'
   | 'final_invoice_generated'
-  | 'payment_recorded';
+  | 'payment_recorded'
+  | 'expense_created'
+  | 'expense_submitted'
+  | 'expense_approved'
+  | 'expense_rejected'
+  | 'expense_voided';
 
 /** Single shared insert path — every write site should call this, not `.insert()` directly. */
 export async function logActivity(

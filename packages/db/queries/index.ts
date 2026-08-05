@@ -54,6 +54,28 @@ export {
   type Payment,
 } from './invoices';
 export {
+  approveExpense,
+  createExpense,
+  deriveApprovedExpenseStatus,
+  expenseMatchesFilter,
+  getExpenseById,
+  listExpenses,
+  rejectExpense,
+  submitExpense,
+  updateExpense,
+  voidExpense,
+  type Expense,
+  type ExpenseDetail,
+  type ExpenseFilterCount,
+  type ExpenseListCustomerSummary,
+  type ExpenseListInvoiceSummary,
+  type ExpenseListItem,
+  type ExpenseListJobSummary,
+  type ExpenseListPage,
+  type ExpenseListPropertySummary,
+  type ExpenseSummaryCard,
+} from './expenses';
+export {
   getJobById,
   listJobs,
   type Job,
