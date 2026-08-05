@@ -15,8 +15,6 @@ import {
 import { getRequestIntakePath, getRequestIntakePathLabel } from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
 
-import { CreateEstimateButton } from '../_components/create-estimate-button';
-import { CreateJobButton } from '../_components/create-job-button';
 import { MarkReviewedButton } from '../_components/mark-reviewed-button';
 import { TriagePanel } from '../_components/triage-panel';
 import { toForgeRequestDetailModel } from '../_lib/forge-request-view-model';
@@ -45,7 +43,6 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   }
 
   const { orgId, role } = orgContextResult.data;
-  const canCreateDirectWorkOrder = hasCapability(role as OrgRole, 'canCreateDirectWorkOrder');
   const canTriageRequests = hasCapability(role as OrgRole, 'canTriageRequests');
 
   const result = await getRequestById(supabase, { taskId, orgId });
@@ -141,22 +138,16 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
         />
       </ForgeCard>
 
-      <ActionsCard
-        request={request}
-        canCreateDirectWorkOrder={canCreateDirectWorkOrder}
-        canTriageRequests={canTriageRequests}
-      />
+      <ActionsCard request={request} canTriageRequests={canTriageRequests} />
     </ForgePage>
   );
 }
 
 function ActionsCard({
   request,
-  canCreateDirectWorkOrder,
   canTriageRequests,
 }: {
   request: RequestDetail;
-  canCreateDirectWorkOrder: boolean;
   canTriageRequests: boolean;
 }) {
   const isReviewed = request.status !== 'new';
@@ -198,12 +189,7 @@ function ActionsCard({
           >
             Open work order →
           </Link>
-        ) : (
-          <>
-            {canStartFlow ? <CreateEstimateButton requestId={request.id} /> : null}
-            {canStartFlow && canCreateDirectWorkOrder ? <CreateJobButton requestId={request.id} /> : null}
-          </>
-        )}
+        ) : null}
 
         {!isReviewed && canTriageRequests ? <MarkReviewedButton taskId={request.id} /> : null}
       </div>
@@ -239,7 +225,7 @@ function ErrorPage({ children }: { children: React.ReactNode }) {
   return (
     <ForgePage className="max-w-2xl gap-5">
       <ForgeBackLink href="/requests">Requests</ForgeBackLink>
-      <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <p className="rounded-xl border border-transparent bg-[hsl(var(--st-error-bg))] px-3 py-2 text-sm text-[hsl(var(--st-error-fg))]">
         {children}
       </p>
     </ForgePage>

@@ -54,7 +54,7 @@ export function TriagePanel({
         {triageReason ? <p className="mt-1 text-muted-foreground">Reason: {triageReason}</p> : null}
         {triagedAt ? <p className="mt-1 text-xs text-muted-foreground">Recorded {formatDateTime(triagedAt)}</p> : null}
         {triageCorrectedFrom ? (
-          <p className="mt-1 text-xs text-amber-700">
+          <p className="mt-1 text-xs text-[hsl(var(--st-warning-fg))]">
             Corrected from {DECISION_LABELS[triageCorrectedFrom as Decision] ?? triageCorrectedFrom}
             {triageCorrectionReason ? ` — ${triageCorrectionReason}` : ''}
           </p>
@@ -193,8 +193,13 @@ function CorrectionForm({ requestId, currentDecision }: { requestId: string; cur
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">Correct triage decision</p>
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 rounded-md border border-transparent bg-[hsl(var(--st-warning-bg))] p-4"
+    >
+      <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--st-warning-fg))]">
+        Correct triage decision
+      </p>
 
       <div className="space-y-1">
         <label htmlFor="newDecision" className="text-sm font-medium text-foreground">
@@ -240,7 +245,7 @@ function CorrectionForm({ requestId, currentDecision }: { requestId: string; cur
         <button
           type="submit"
           disabled={isPending || !newDecision}
-          className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-slate-700 disabled:opacity-50"
+          className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
         >
           {isPending ? 'Correcting…' : 'Confirm correction'}
         </button>
