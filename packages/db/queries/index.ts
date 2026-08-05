@@ -113,6 +113,15 @@ export {
   translateAcceptInviteError,
   type OrgInvite,
 } from './org-invites';
+export {
+  formatTeamAvailabilityLabel,
+  isTeamAvailabilityStatus,
+  resolveDisplayedTeamAvailability,
+  TEAM_AVAILABILITY_STATUSES,
+  upsertTeamMemberAvailability,
+  type TeamAvailabilityRecord,
+  type TeamAvailabilityStatus,
+} from './team-availability';
 export { getActiveOrgContext, type ActiveOrgContext, type AvailableOrgMembership, type OrgMemberRole } from './org-context';
 export {
   createCustomer,

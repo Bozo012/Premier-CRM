@@ -2925,6 +2925,56 @@ export type Database = {
           },
         ]
       }
+      team_member_availability: {
+        Row: {
+          availability_status: Database["public"]["Enums"]["team_availability_status"]
+          created_at: string
+          id: string
+          last_seen_at: string | null
+          note: string | null
+          org_id: string
+          skills: string[]
+          status_expires_at: string | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          availability_status?: Database["public"]["Enums"]["team_availability_status"]
+          created_at?: string
+          id?: string
+          last_seen_at?: string | null
+          note?: string | null
+          org_id: string
+          skills?: string[]
+          status_expires_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          availability_status?: Database["public"]["Enums"]["team_availability_status"]
+          created_at?: string
+          id?: string
+          last_seen_at?: string | null
+          note?: string | null
+          org_id?: string
+          skills?: string[]
+          status_expires_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_member_availability_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_pricing_policy: {
         Row: {
           charge_tax_on_labor: boolean | null
@@ -6962,6 +7012,11 @@ export type Database = {
         | "in_progress"
         | "completed"
         | "cancelled"
+      team_availability_status:
+        | "available"
+        | "on_job"
+        | "off_shift"
+        | "on_leave"
       task_priority: "low" | "normal" | "high" | "urgent"
       task_status: "open" | "in_progress" | "done" | "cancelled" | "snoozed"
       trip_purpose:
