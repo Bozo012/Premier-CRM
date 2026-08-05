@@ -1663,6 +1663,163 @@ export type Database = {
           },
         ]
       }
+      expenses: {
+        Row: {
+          amount: number
+          approval_comment: string | null
+          approved_at: string | null
+          approved_by: string | null
+          billing_treatment: Database["public"]["Enums"]["expense_billing_treatment"]
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at: string
+          created_by: string | null
+          customer_charge_amount: number | null
+          customer_id: string
+          customer_visible_description: string | null
+          description: string
+          expense_number: string
+          id: string
+          internal_notes: string
+          invoice_id: string | null
+          job_id: string
+          markup_pct: number | null
+          org_id: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          property_id: string
+          purchase_date: string
+          receipt_vault_item_id: string | null
+          receipt_visibility: Database["public"]["Enums"]["expense_receipt_visibility"]
+          rejected_at: string | null
+          rejected_by: string | null
+          status: Database["public"]["Enums"]["expense_status"]
+          submitted_at: string | null
+          submitted_by: string | null
+          tax: number
+          total_cost: number | null
+          updated_at: string
+          vendor: string
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          amount: number
+          approval_comment?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          billing_treatment?: Database["public"]["Enums"]["expense_billing_treatment"]
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          created_by?: string | null
+          customer_charge_amount?: number | null
+          customer_id: string
+          customer_visible_description?: string | null
+          description: string
+          expense_number?: string
+          id?: string
+          internal_notes?: string
+          invoice_id?: string | null
+          job_id: string
+          markup_pct?: number | null
+          org_id: string
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          property_id: string
+          purchase_date?: string
+          receipt_vault_item_id?: string | null
+          receipt_visibility?: Database["public"]["Enums"]["expense_receipt_visibility"]
+          rejected_at?: string | null
+          rejected_by?: string | null
+          status?: Database["public"]["Enums"]["expense_status"]
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tax?: number
+          total_cost?: never
+          updated_at?: string
+          vendor?: string
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          amount?: number
+          approval_comment?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          billing_treatment?: Database["public"]["Enums"]["expense_billing_treatment"]
+          category?: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          created_by?: string | null
+          customer_charge_amount?: number | null
+          customer_id?: string
+          customer_visible_description?: string | null
+          description?: string
+          expense_number?: string
+          id?: string
+          internal_notes?: string
+          invoice_id?: string | null
+          job_id?: string
+          markup_pct?: number | null
+          org_id?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          property_id?: string
+          purchase_date?: string
+          receipt_vault_item_id?: string | null
+          receipt_visibility?: Database["public"]["Enums"]["expense_receipt_visibility"]
+          rejected_at?: string | null
+          rejected_by?: string | null
+          status?: Database["public"]["Enums"]["expense_status"]
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tax?: number
+          total_cost?: never
+          updated_at?: string
+          vendor?: string
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_receipt_vault_item_id_fkey"
+            columns: ["receipt_vault_item_id"]
+            isOneToOne: false
+            referencedRelation: "vault_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_line_items: {
         Row: {
           created_at: string
@@ -1674,6 +1831,9 @@ export type Database = {
           quote_line_id: string | null
           sort_order: number | null
           source_change_order_revision_id: string | null
+          source_expense_cost_snapshot: number | null
+          source_expense_customer_charge_snapshot: number | null
+          source_expense_id: string | null
           source_note: string | null
           source_quote_line_id: string | null
           source_type: string | null
@@ -1691,6 +1851,9 @@ export type Database = {
           quote_line_id?: string | null
           sort_order?: number | null
           source_change_order_revision_id?: string | null
+          source_expense_cost_snapshot?: number | null
+          source_expense_customer_charge_snapshot?: number | null
+          source_expense_id?: string | null
           source_note?: string | null
           source_quote_line_id?: string | null
           source_type?: string | null
@@ -1708,6 +1871,9 @@ export type Database = {
           quote_line_id?: string | null
           sort_order?: number | null
           source_change_order_revision_id?: string | null
+          source_expense_cost_snapshot?: number | null
+          source_expense_customer_charge_snapshot?: number | null
+          source_expense_id?: string | null
           source_note?: string | null
           source_quote_line_id?: string | null
           source_type?: string | null
@@ -1735,6 +1901,13 @@ export type Database = {
             columns: ["source_change_order_revision_id"]
             isOneToOne: false
             referencedRelation: "change_order_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_line_items_source_expense_id_fkey"
+            columns: ["source_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id"]
           },
           {
@@ -6678,6 +6851,37 @@ export type Database = {
         | "unknown"
       customer_type: "residential" | "commercial" | "property_manager"
       deposit_requirement_status: "none" | "required" | "waived"
+      expense_billing_treatment:
+        | "internal_cost_only"
+        | "included_fixed_price"
+        | "included_accepted_quote"
+        | "reimbursable_at_cost"
+        | "billable_with_markup"
+        | "customer_approved_pass_through"
+        | "pending_review"
+        | "non_billable"
+      expense_category:
+        | "materials"
+        | "labor"
+        | "equipment"
+        | "subcontractor"
+        | "travel"
+        | "permit"
+        | "other"
+      expense_receipt_visibility: "internal" | "customer_visible"
+      expense_status:
+        | "draft"
+        | "submitted"
+        | "needs_receipt"
+        | "needs_review"
+        | "approved"
+        | "rejected"
+        | "internal_only"
+        | "ready_to_invoice"
+        | "partially_invoiced"
+        | "invoiced"
+        | "reimbursed"
+        | "voided"
       estimate_status:
         | "draft"
         | "site_visit_scheduled"
