@@ -18,7 +18,7 @@ integrates accepted work and records decisions in `base44-decision-log.md`.
 
 ## Verified checkpoint (this session)
 
-- Premier-CRM `origin/main`: `76bbad7c09ee0a7d51d703e42d9f878b233f53c4` (Batch 7 merge, PR #119). Local `main` fast-forwarded clean, no divergence.
+- Premier-CRM `origin/main`: `76bbad7c09ee0a7d51d703e42d9f878b233f53c4` (PR #121, "Expose active org switcher on mobile" — one small commit on top of Batch 7's merge, PR #120). Local `main` fast-forwarded clean, no divergence.
 - Migration state: 78 repository migration files, 78 applied on `premier-crm-prod` (`apnbpcauqrjvkoleisde`), zero pending. (Plan doc's "77" was an approximate figure from an earlier count; verified precise count is 78/78 — no material difference, still zero pending, no restart needed.)
 - `supabase/migrations/20260805172955_backfill_request_job_links.sql` confirmed **does not exist**. Deferred — see `base44-deferred-data-integrity.md`.
 - `Forge-Base44-UX` `origin/main`: `497d0693cccafd89315ec17c3be9885cfaae5c8`, frozen as the active visual reference for this program. 44 commits of auto-generated (`File changes`) route/fixture scaffolding since the last-known SHA (`adee72e`) — no platform/auth infrastructure changes, all additive routes/fixtures/styles.
