@@ -21,22 +21,19 @@ export function QuickActions({ actions }: { actions: QuickActionItem[] }) {
   // capability-filtered `actions` list itself must never be re-derived
   // here. Visual treatment adopted from Base44's QuickActions.tsx.
   return (
-    <section className="space-y-3">
-      <h2 className="text-sm font-bold uppercase tracking-[.14em] text-muted-foreground">Quick actions</h2>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {actions.map((action) => (
-          <Link
-            key={action.id}
-            href={action.href}
-            className="flex min-h-14 items-center gap-3 rounded-xl border bg-card px-3 text-left transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-primary">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <span className="text-sm font-bold text-card-foreground sm:text-base">{action.label}</span>
-          </Link>
-        ))}
-      </div>
-    </section>
+    <nav className="order-2 flex flex-wrap items-center gap-2 sm:order-1" aria-label="Quick actions">
+      {actions.map((action) => (
+        <Link
+          key={action.id}
+          href={action.href}
+          className="flex min-h-12 items-center gap-2 rounded-lg border bg-card px-3 text-left transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+          <span className="text-sm font-bold text-card-foreground">{action.label}</span>
+        </Link>
+      ))}
+    </nav>
   );
 }

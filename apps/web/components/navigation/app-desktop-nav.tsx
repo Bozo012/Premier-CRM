@@ -14,7 +14,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Briefcase,
+  CalendarDays,
   ClipboardList,
+  History,
+  Images,
   Flame,
   MapPin,
   Receipt,
@@ -23,10 +26,12 @@ import {
   Sun,
   Users,
   Users2,
+  WalletCards,
   Wrench,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { forgeNavigationLinks } from './navigation-links';
 
 // Route list, active-state logic, and icon assignment stay entirely
 // Forge-owned (unchanged from before the Base44 visual integration) —
@@ -36,19 +41,30 @@ import { cn } from '@/lib/utils';
 // DesktopNavigation.tsx was NOT ported as a component (it renders a
 // second, Today-scoped nav shell); this is a theming-only change to the
 // existing, already-shared nav.
-const navItems = [
-  { href: '/today', label: 'Today', Icon: Sun, isActive: (p: string) => p === '/today' },
-  { href: '/requests', label: 'Requests', Icon: ClipboardList, isActive: (p: string) => p.startsWith('/requests') },
-  { href: '/customers', label: 'Customers', Icon: Users, isActive: (p: string) => p.startsWith('/customers') },
-  { href: '/properties', label: 'Properties', Icon: MapPin, isActive: (p: string) => p.startsWith('/properties') },
-  { href: '/site-visits', label: 'Site visits', Icon: Wrench, isActive: (p: string) => p.startsWith('/site-visits') },
-  { href: '/estimates', label: 'Estimates', Icon: ScrollText, isActive: (p: string) => p.startsWith('/estimates') },
-  { href: '/quotes', label: 'Quotes', Icon: ScrollText, isActive: (p: string) => p.startsWith('/quotes') },
-  { href: '/jobs', label: 'Jobs', Icon: Briefcase, isActive: (p: string) => p.startsWith('/jobs') },
-  { href: '/invoices', label: 'Invoices', Icon: Receipt, isActive: (p: string) => p.startsWith('/invoices') },
-  { href: '/services', label: 'Service catalog', Icon: Settings, isActive: (p: string) => p.startsWith('/services') },
-  { href: '/team', label: 'Team', Icon: Users2, isActive: (p: string) => p.startsWith('/team') },
-] as const;
+const iconsByHref = {
+  '/activity-logs': History,
+  '/calendar': CalendarDays,
+  '/customers': Users,
+  '/estimates': ScrollText,
+  '/expenses': WalletCards,
+  '/invoices': Receipt,
+  '/jobs': Briefcase,
+  '/properties': MapPin,
+  '/quotes': ScrollText,
+  '/requests': ClipboardList,
+  '/services': Settings,
+  '/settings': Settings,
+  '/site-photos': Images,
+  '/site-visits': Wrench,
+  '/team': Users2,
+  '/today': Sun,
+} as const;
+
+const desktopNavItems = forgeNavigationLinks.map((item) => ({
+  ...item,
+  Icon: iconsByHref[item.href],
+  isActive: (pathname: string) => (item.href === '/today' ? pathname === '/today' : pathname.startsWith(item.href)),
+}));
 
 export function AppDesktopNav() {
   const pathname = usePathname();
@@ -56,7 +72,7 @@ export function AppDesktopNav() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-y-0 left-0 hidden w-56 shrink-0 flex-col border-r border-nav-border bg-nav px-3 py-6 md:flex"
+      className="fixed inset-y-0 left-0 z-40 hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-nav-border bg-nav px-3 py-6 md:flex"
     >
       <div className="flex items-center gap-2.5 px-2 pb-6">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
@@ -65,7 +81,7 @@ export function AppDesktopNav() {
         <span className="text-lg font-bold tracking-tight text-nav-active-foreground">Forge</span>
       </div>
       <ul className="space-y-0.5">
-        {navItems.map(({ href, label, Icon, isActive }) => {
+        {desktopNavItems.map(({ href, label, Icon, isActive }) => {
           const active = isActive(pathname);
           return (
             <li key={href}>
