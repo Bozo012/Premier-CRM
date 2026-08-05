@@ -7,12 +7,16 @@ import { toast } from 'sonner';
 
 import type { AvailableOrgMembership } from '@premier/db';
 
+import { cn } from '@/lib/utils';
+
 import { switchActiveOrgAction } from '../actions';
 
 export function OrgSwitcher({
+  className,
   currentOrgId,
   availableOrgs,
 }: {
+  className?: string;
   currentOrgId: string;
   availableOrgs: AvailableOrgMembership[];
 }) {
@@ -39,7 +43,10 @@ export function OrgSwitcher({
       value={currentOrgId}
       disabled={isPending}
       onChange={(e) => handleChange(e.target.value)}
-      className="max-w-full truncate rounded-full border bg-muted/40 px-3 py-1 text-xs text-muted-foreground disabled:opacity-50"
+      className={cn(
+        'max-w-full truncate rounded-full border bg-muted/40 px-3 py-1 text-xs text-muted-foreground disabled:opacity-50',
+        className
+      )}
       aria-label="Switch active organization"
     >
       {availableOrgs.map((org) => (
