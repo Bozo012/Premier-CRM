@@ -172,7 +172,10 @@ export async function scheduleSiteVisitAction(_prevState: Result<string> | null,
     end: new Date(end).toISOString(),
     assignedUserId: readOptionalString(formData, 'assignedUserId'),
   });
-  if (result.success) revalidatePath(`/site-visits/${siteVisitId}`);
+  if (result.success) {
+    revalidatePath(`/site-visits/${siteVisitId}`);
+    revalidatePath(`/site-visits/${siteVisitId}/inspection`);
+  }
   return result;
 }
 
@@ -193,7 +196,10 @@ export async function rescheduleSiteVisitAction(_prevState: Result<string> | nul
     assignedUserId: readOptionalString(formData, 'assignedUserId'),
     reason: readOptionalString(formData, 'reason'),
   });
-  if (result.success) revalidatePath(`/site-visits/${siteVisitId}`);
+  if (result.success) {
+    revalidatePath(`/site-visits/${siteVisitId}`);
+    revalidatePath(`/site-visits/${siteVisitId}/inspection`);
+  }
   return result;
 }
 
@@ -222,7 +228,10 @@ export async function cancelSiteVisitAction(_prevState: Result<null> | null, for
   if (!siteVisitId || !reason) return err(ErrorCode.VALIDATION_ERROR, 'Missing site visit or reason.');
 
   const result = await cancelSiteVisit(supabase, { siteVisitId, reason });
-  if (result.success) revalidatePath(`/site-visits/${siteVisitId}`);
+  if (result.success) {
+    revalidatePath(`/site-visits/${siteVisitId}`);
+    revalidatePath(`/site-visits/${siteVisitId}/inspection`);
+  }
   return result;
 }
 
@@ -235,7 +244,10 @@ export async function startSiteVisitAction(_prevState: Result<null> | null, form
   if (!siteVisitId) return err(ErrorCode.VALIDATION_ERROR, 'Missing site visit.');
 
   const result = await startSiteVisit(supabase, siteVisitId);
-  if (result.success) revalidatePath(`/site-visits/${siteVisitId}`);
+  if (result.success) {
+    revalidatePath(`/site-visits/${siteVisitId}`);
+    revalidatePath(`/site-visits/${siteVisitId}/inspection`);
+  }
   return result;
 }
 
@@ -248,7 +260,10 @@ export async function undoSiteVisitStartAction(_prevState: Result<null> | null, 
   if (!siteVisitId) return err(ErrorCode.VALIDATION_ERROR, 'Missing site visit.');
 
   const result = await undoSiteVisitStart(supabase, siteVisitId);
-  if (result.success) revalidatePath(`/site-visits/${siteVisitId}`);
+  if (result.success) {
+    revalidatePath(`/site-visits/${siteVisitId}`);
+    revalidatePath(`/site-visits/${siteVisitId}/inspection`);
+  }
   return result;
 }
 
@@ -261,7 +276,10 @@ export async function completeSiteVisitAction(_prevState: Result<null> | null, f
   if (!siteVisitId) return err(ErrorCode.VALIDATION_ERROR, 'Missing site visit.');
 
   const result = await completeSiteVisit(supabase, siteVisitId);
-  if (result.success) revalidatePath(`/site-visits/${siteVisitId}`);
+  if (result.success) {
+    revalidatePath(`/site-visits/${siteVisitId}`);
+    revalidatePath(`/site-visits/${siteVisitId}/inspection`);
+  }
   return result;
 }
 
@@ -322,7 +340,10 @@ export async function saveSiteVisitInspectionAction(
 
   const serviceClient = createServiceClient();
   const result = await saveSiteVisitInspectionTrusted(serviceClient, { siteVisitId, responsesPatch });
-  if (result.success) revalidatePath(`/site-visits/${siteVisitId}`);
+  if (result.success) {
+    revalidatePath(`/site-visits/${siteVisitId}`);
+    revalidatePath(`/site-visits/${siteVisitId}/inspection`);
+  }
   return result;
 }
 

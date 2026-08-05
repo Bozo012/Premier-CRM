@@ -42,6 +42,323 @@ export interface SiteVisitDetail {
   activeAppointment: { id: string; scheduledStart: string; scheduledEnd: string; assignedUserId: string | null } | null;
 }
 
+export interface SiteVisitListItem {
+  id: string;
+  status: string;
+  serviceRequestId: string;
+  serviceRequestTitle: string;
+  serviceRequestDescription: string | null;
+  customerId: string | null;
+  customerDisplayName: string;
+  propertyId: string | null;
+  propertyAddress: string | null;
+  assignedUserId: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  inspectionResponseCount: number;
+  inspectionFieldCount: number;
+  generatedEstimateId: string | null;
+  activeAppointment: { id: string; scheduledStart: string; scheduledEnd: string; assignedUserId: string | null } | null;
+}
+
+export interface SiteVisitListPage {
+  visits: SiteVisitListItem[];
+  total: number;
+}
+
+interface SiteVisitListQueryRow {
+  id: string;
+  status: string;
+  service_request_id: string;
+  assigned_user_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  inspection_responses: unknown;
+  service_requests:
+    | {
+        id: string;
+        service_title: string;
+        service_description: string | null;
+        customer_id: string | null;
+        property_id: string | null;
+        property_address_line_1: string | null;
+        property_address_line_2: string | null;
+        property_city: string | null;
+        property_state: string | null;
+        property_zip: string | null;
+        customers:
+          | {
+              first_name: string | null;
+              last_name: string | null;
+              display_name: string | null;
+              company_name: string | null;
+            }
+          | Array<{
+              first_name: string | null;
+              last_name: string | null;
+              display_name: string | null;
+              company_name: string | null;
+            }>
+          | null;
+        properties:
+          | {
+              address_line_1: string;
+              address_line_2: string | null;
+              city: string;
+              state: string;
+              zip: string;
+            }
+          | Array<{
+              address_line_1: string;
+              address_line_2: string | null;
+              city: string;
+              state: string;
+              zip: string;
+            }>
+          | null;
+      }
+    | Array<{
+        id: string;
+        service_title: string;
+        service_description: string | null;
+        customer_id: string | null;
+        property_id: string | null;
+        property_address_line_1: string | null;
+        property_address_line_2: string | null;
+        property_city: string | null;
+        property_state: string | null;
+        property_zip: string | null;
+        customers:
+          | {
+              first_name: string | null;
+              last_name: string | null;
+              display_name: string | null;
+              company_name: string | null;
+            }
+          | Array<{
+              first_name: string | null;
+              last_name: string | null;
+              display_name: string | null;
+              company_name: string | null;
+            }>
+          | null;
+        properties:
+          | {
+              address_line_1: string;
+              address_line_2: string | null;
+              city: string;
+              state: string;
+              zip: string;
+            }
+          | Array<{
+              address_line_1: string;
+              address_line_2: string | null;
+              city: string;
+              state: string;
+              zip: string;
+            }>
+          | null;
+      }>
+    | null;
+  inspection_template_versions:
+    | { field_definitions: unknown }
+    | Array<{ field_definitions: unknown }>
+    | null;
+}
+
+interface AppointmentRow {
+  id: string;
+  site_visit_id: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  assigned_user_id: string | null;
+}
+
+interface EstimateSourceRow {
+  id: string;
+  source_site_visit_id: string | null;
+}
+
+function firstOrNull<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function countInspectionResponses(value: unknown): number {
+  if (!isRecord(value)) return 0;
+  return Object.values(value).filter((entry) => {
+    if (entry === undefined || entry === null) return false;
+    if (typeof entry === 'string') return entry.trim().length > 0;
+    if (Array.isArray(entry)) return entry.length > 0;
+    return true;
+  }).length;
+}
+
+function countFieldDefinitions(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function customerDisplayName(
+  customer: {
+    first_name: string | null;
+    last_name: string | null;
+    display_name: string | null;
+    company_name: string | null;
+  } | null
+): string {
+  if (!customer) return 'Unknown customer';
+  if (customer.company_name?.trim()) return customer.company_name.trim();
+  if (customer.display_name?.trim()) return customer.display_name.trim();
+  const name = [customer.first_name, customer.last_name].filter(Boolean).join(' ').trim();
+  return name || 'Unknown customer';
+}
+
+function formatAddress(parts: Array<string | null | undefined>): string | null {
+  const address = parts.filter((part): part is string => Boolean(part?.trim())).join(', ');
+  return address || null;
+}
+
+export async function listSiteVisits(
+  client: DbClient,
+  args: {
+    orgId: string;
+    limit?: number;
+    offset?: number;
+    status?: SiteVisit['status'] | 'all';
+  }
+): Promise<Result<SiteVisitListPage>> {
+  const { orgId, limit = 100, offset = 0, status } = args;
+
+  let query = client
+    .from('site_visits')
+    .select(
+      `
+      id,
+      status,
+      service_request_id,
+      assigned_user_id,
+      started_at,
+      completed_at,
+      cancelled_at,
+      inspection_responses,
+      service_requests (
+        id,
+        service_title,
+        service_description,
+        customer_id,
+        property_id,
+        property_address_line_1,
+        property_address_line_2,
+        property_city,
+        property_state,
+        property_zip,
+        customers ( first_name, last_name, display_name, company_name ),
+        properties ( address_line_1, address_line_2, city, state, zip )
+      ),
+      inspection_template_versions ( field_definitions )
+    `,
+      { count: 'exact' }
+    )
+    .eq('org_id', orgId);
+
+  if (status && status !== 'all') {
+    query = query.eq('status', status);
+  }
+
+  const { data, error, count } = await query
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  const rows = (data ?? []) as unknown as SiteVisitListQueryRow[];
+  const visitIds = rows.map((row) => row.id);
+
+  const { data: appointments, error: appointmentError } = visitIds.length
+    ? await client
+        .from('site_visit_appointments')
+        .select('id, site_visit_id, scheduled_start, scheduled_end, assigned_user_id')
+        .in('site_visit_id', visitIds)
+        .eq('status', 'scheduled')
+    : { data: [] as AppointmentRow[], error: null };
+
+  if (appointmentError) return err(ErrorCode.DB_ERROR, appointmentError.message);
+
+  const { data: estimates, error: estimateError } = visitIds.length
+    ? await client
+        .from('estimates')
+        .select('id, source_site_visit_id')
+        .eq('org_id', orgId)
+        .in('source_site_visit_id', visitIds)
+    : { data: [] as EstimateSourceRow[], error: null };
+
+  if (estimateError) return err(ErrorCode.DB_ERROR, estimateError.message);
+
+  const appointmentByVisitId = new Map(
+    ((appointments ?? []) as AppointmentRow[]).map((appointment) => [appointment.site_visit_id, appointment])
+  );
+  const estimateByVisitId = new Map(
+    ((estimates ?? []) as EstimateSourceRow[])
+      .filter((estimate) => estimate.source_site_visit_id)
+      .map((estimate) => [estimate.source_site_visit_id as string, estimate.id])
+  );
+
+  const visits = rows.map((row): SiteVisitListItem => {
+    const request = firstOrNull(row.service_requests);
+    const customer = firstOrNull(request?.customers);
+    const property = firstOrNull(request?.properties);
+    const templateVersion = firstOrNull(row.inspection_template_versions);
+    const appointment = appointmentByVisitId.get(row.id) ?? null;
+    const propertyAddress =
+      property
+        ? formatAddress([
+            property.address_line_1,
+            property.address_line_2,
+            `${property.city}, ${property.state} ${property.zip}`,
+          ])
+        : formatAddress([
+            request?.property_address_line_1,
+            request?.property_address_line_2,
+            request?.property_city ? `${request.property_city}, ${request.property_state ?? ''} ${request.property_zip ?? ''}` : null,
+          ]);
+
+    return {
+      id: row.id,
+      status: row.status,
+      serviceRequestId: request?.id ?? row.service_request_id,
+      serviceRequestTitle: request?.service_title ?? 'Site visit',
+      serviceRequestDescription: request?.service_description ?? null,
+      customerId: request?.customer_id ?? null,
+      customerDisplayName: customerDisplayName(customer),
+      propertyId: request?.property_id ?? null,
+      propertyAddress,
+      assignedUserId: row.assigned_user_id,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      cancelledAt: row.cancelled_at,
+      inspectionResponseCount: countInspectionResponses(row.inspection_responses),
+      inspectionFieldCount: countFieldDefinitions(templateVersion?.field_definitions),
+      generatedEstimateId: estimateByVisitId.get(row.id) ?? null,
+      activeAppointment: appointment
+        ? {
+            id: appointment.id,
+            scheduledStart: appointment.scheduled_start,
+            scheduledEnd: appointment.scheduled_end,
+            assignedUserId: appointment.assigned_user_id,
+          }
+        : null,
+    };
+  });
+
+  return ok({ visits, total: count ?? 0 });
+}
+
 export async function getSiteVisitById(client: DbClient, siteVisitId: string, orgId: string): Promise<Result<SiteVisitDetail>> {
   const { data: visit, error } = await client
     .from('site_visits')

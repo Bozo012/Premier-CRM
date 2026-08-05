@@ -16,13 +16,20 @@ interface InspectionFormProps {
   fieldDefinitions: InspectionFieldDefinition[];
   initialResponses: Record<string, unknown>;
   readOnly: boolean;
+  returnToVisitOnComplete?: boolean;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 const AUTOSAVE_DELAY_MS = 1200;
 
-export function InspectionForm({ siteVisitId, fieldDefinitions, initialResponses, readOnly }: InspectionFormProps) {
+export function InspectionForm({
+  siteVisitId,
+  fieldDefinitions,
+  initialResponses,
+  readOnly,
+  returnToVisitOnComplete = false,
+}: InspectionFormProps) {
   const router = useRouter();
   const [responses, setResponses] = useState<Record<string, unknown>>(initialResponses);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -61,7 +68,8 @@ export function InspectionForm({ siteVisitId, fieldDefinitions, initialResponses
     setIsCompleting(false);
     if (result.success) {
       toast.success('Inspection completed.');
-      router.refresh();
+      if (returnToVisitOnComplete) router.push(`/site-visits/${siteVisitId}`);
+      else router.refresh();
     } else {
       toast.error(result.error ?? 'Cannot complete: some required fields are missing.');
     }

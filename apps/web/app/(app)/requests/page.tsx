@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Clock, Inbox, Search } from 'lucide-react';
 
-import { getActiveOrgContext, listRequests, type RequestListItem } from '@premier/db';
+import { getActiveOrgContext, listRequests } from '@premier/db';
 
+import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presentation';
 import { OrgContextError } from '@/components/org-context-error';
 import { getRequestIntakePath, getRequestIntakePathLabel } from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+import { toForgeRequestSummary, type ForgeRequestFilter } from './_lib/forge-request-view-model';
 
 export const metadata: Metadata = { title: 'Requests' };
 
@@ -14,7 +18,6 @@ interface RequestsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-type ShowFilter = 'open' | 'done' | 'all';
 const REVIEWED_STATUSES = new Set([
   'reviewing',
   'estimate_created',
@@ -24,9 +27,16 @@ const REVIEWED_STATUSES = new Set([
   'cancelled',
 ]);
 
+const SHOW_FILTERS: Array<{ label: string; value: ForgeRequestFilter }> = [
+  { label: 'Open', value: 'open' },
+  { label: 'Reviewed', value: 'done' },
+  { label: 'All', value: 'all' },
+];
+
 export default async function RequestsPage({ searchParams }: RequestsPageProps) {
   const params = await searchParams;
   const show = readShowParam(params.show);
+  const query = readStringParam(params.q);
 
   const supabase = await getServerSupabase();
   const {
@@ -42,15 +52,14 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   if (!orgContextResult.success) {
     return (
-      <PageShell show={show}>
+      <PageShell show={show} query={query}>
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
       </PageShell>
     );
   }
-  const { orgId } = orgContextResult.data;
 
   const result = await listRequests(supabase, {
-    orgId,
+    orgId: orgContextResult.data.orgId,
     limit: 100,
     offset: 0,
     showDone: show === 'done' || show === 'all',
@@ -58,166 +67,123 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   if (!result.success) {
     return (
-      <PageShell show={show}>
+      <PageShell show={show} query={query}>
         <ErrorPanel>Failed to load requests: {result.error}</ErrorPanel>
       </PageShell>
     );
   }
 
-  const { requests, total } = result.data;
-
-  // For the 'open' tab, requests were already filtered server-side (status='new').
-  // For 'all', include everything. For 'done', showDone=true but we only
-  // display the reviewed / converted workflow states.
-  const displayed =
+  const baseRequests =
     show === 'done'
-      ? requests.filter((r) => REVIEWED_STATUSES.has(r.status))
-      : requests;
+      ? result.data.requests.filter((request) => REVIEWED_STATUSES.has(request.status))
+      : result.data.requests;
+
+  const displayed = filterRequests(baseRequests.map((request) => toForgeRequestSummary(request)), query);
 
   return (
-    <PageShell show={show}>
-      <p className="text-sm text-muted-foreground">
-        {formatTotal(show === 'done' ? displayed.length : total, show)}
+    <PageShell show={show} query={query}>
+      <p className="text-sm font-medium text-muted-foreground">
+        {formatTotal(displayed.length, show)}
       </p>
 
       {displayed.length === 0 ? (
-        <EmptyState show={show} />
+        <EmptyState query={query} show={show} />
       ) : (
-        <ul className="divide-y rounded-md border bg-background">
-          {displayed.map((item) => (
-            <RequestRow key={item.id} item={item} />
-          ))}
-        </ul>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {displayed.map((request) => {
+            const intakePathLabel = getRequestIntakePathLabel(
+              getRequestIntakePath({
+                estimateId: request.relatedHref?.startsWith('/estimates/') ? request.relatedHref.split('/').at(-1) ?? null : null,
+                jobId: request.relatedHref?.startsWith('/jobs/') ? request.relatedHref.split('/').at(-1) ?? null : null,
+              })
+            );
+
+            return (
+              <Link
+                key={request.id}
+                href={`/requests/${request.id}`}
+                className="group rounded-xl border bg-card p-4 text-left text-card-foreground shadow-sm transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-muted-foreground">{request.number}</span>
+                  <ForgeStatusPill tone={request.statusTone}>{request.statusLabel}</ForgeStatusPill>
+                </div>
+                <p className="mt-2 text-sm font-bold leading-snug">{request.description}</p>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {request.customerName}
+                  {request.serviceLine ? ` · ${request.serviceLine}` : ''}
+                </p>
+                {request.contactLine ? (
+                  <p className="mt-1 text-xs text-muted-foreground">{request.contactLine}</p>
+                ) : null}
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" aria-hidden="true" />
+                      {request.ageLabel}
+                    </span>
+                    {request.priorityLabel ? (
+                      <ForgeStatusPill tone={request.priorityTone}>{request.priorityLabel}</ForgeStatusPill>
+                    ) : null}
+                    {intakePathLabel ? <span>{intakePathLabel}</span> : null}
+                  </div>
+                  {request.nextActionLabel ? (
+                    <span className="shrink-0 text-xs font-bold text-primary group-hover:underline">
+                      {request.nextActionLabel} →
+                    </span>
+                  ) : null}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       )}
     </PageShell>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Row component
-// ---------------------------------------------------------------------------
-
-function RequestRow({ item }: { item: RequestListItem }) {
-  const intakePathLabel = getRequestIntakePathLabel(
-    getRequestIntakePath({ estimateId: item.estimateId, jobId: item.jobId })
-  );
-
-  return (
-    <li>
-      <div className="space-y-2 px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0 space-y-1">
-            <Link
-              href={`/requests/${item.id}`}
-              className="font-medium text-foreground underline-offset-2 hover:underline"
-            >
-              {item.title}
-            </Link>
-            {item.serviceLine ? (
-              <p className="text-sm text-muted-foreground">{item.serviceLine}</p>
-            ) : null}
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-1.5">
-            <StatusBadge status={item.status} />
-            {item.priority !== 'normal' ? (
-              <PriorityBadge priority={item.priority} />
-            ) : null}
-            {item.estimateId ? (
-              <Link
-                href={`/estimates/${item.estimateId}`}
-                className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
-              >
-                Estimate created
-              </Link>
-            ) : item.jobId ? (
-              <Link
-                href={`/jobs/${item.jobId}`}
-                className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 hover:bg-green-100"
-              >
-                Job created
-              </Link>
-            ) : null}
-            {intakePathLabel ? (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                {intakePathLabel}
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-3">
-          {item.customer ? (
-            <p>
-              <span className="font-medium text-foreground">Customer:</span>{' '}
-              <Link
-                href={`/customers/${item.customer.id}`}
-                className="underline-offset-2 hover:underline"
-              >
-                {item.customer.displayName}
-              </Link>
-            </p>
-          ) : null}
-          {item.customer?.phonePrimary ? (
-            <p>
-              <span className="font-medium text-foreground">Phone:</span>{' '}
-              {item.customer.phonePrimary}
-            </p>
-          ) : null}
-          {item.customer?.email ? (
-            <p>
-              <span className="font-medium text-foreground">Email:</span>{' '}
-              {item.customer.email}
-            </p>
-          ) : null}
-        </div>
-
-        <p className="text-xs text-muted-foreground">
-          Received {formatDateTime(item.createdAt)}
-        </p>
-      </div>
-    </li>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Shell
-// ---------------------------------------------------------------------------
-
-const SHOW_FILTERS: Array<{ label: string; value: ShowFilter }> = [
-  { label: 'Open', value: 'open' },
-  { label: 'Reviewed', value: 'done' },
-  { label: 'All', value: 'all' },
-];
-
 function PageShell({
   children,
   show,
+  query,
 }: {
   children: React.ReactNode;
-  show: ShowFilter;
+  show: ForgeRequestFilter;
+  query: string;
 }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
-      <header className="space-y-3">
+    <ForgePage className="gap-5 md:gap-6">
+      <header className="space-y-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Requests
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Requests</h1>
           <p className="text-sm text-muted-foreground">
-            Inbound inquiries from the website and other sources.
+            Triage inbound work and hand it off to estimates, site visits, or approved work orders.
           </p>
         </div>
 
-        <nav className="flex gap-1">
+        <form action="/requests" className="relative">
+          <input type="hidden" name="show" value={show} />
+          <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <input
+            type="search"
+            name="q"
+            defaultValue={query}
+            placeholder="Search by number, customer, service, or concern…"
+            aria-label="Search requests"
+            className="min-h-12 w-full rounded-xl border border-input bg-card py-2.5 pl-10 pr-4 text-sm font-medium shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </form>
+
+        <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Request filters">
           {SHOW_FILTERS.map((filter) => (
             <Link
               key={filter.value}
-              href={`/requests?show=${filter.value}`}
+              href={`/requests?show=${filter.value}${query ? `&q=${encodeURIComponent(query)}` : ''}`}
               className={[
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'inline-flex min-h-9 shrink-0 items-center rounded-lg px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 show === filter.value
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
               ].join(' ')}
             >
               {filter.label}
@@ -227,108 +193,61 @@ function PageShell({
       </header>
 
       {children}
-    </main>
+    </ForgePage>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function EmptyState({ show }: { show: ShowFilter }) {
-  if (show === 'done') {
-    return (
-      <div className="rounded-md border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
-        No reviewed requests yet.
+function EmptyState({ query, show }: { query: string; show: ForgeRequestFilter }) {
+  return (
+    <ForgeCard className="grid min-h-[30vh] place-items-center px-4 text-center">
+      <div>
+        <Inbox className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
+        <h2 className="mt-3 text-lg font-bold">
+          {query ? 'No requests found' : show === 'done' ? 'No reviewed requests yet' : 'No open requests'}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {query ? 'Try another search or filter.' : 'New service requests appear here when they arrive.'}
+        </p>
       </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2 rounded-md border bg-background px-4 py-8 text-center">
-      <p className="text-sm font-medium text-foreground">No open requests</p>
-      <p className="text-sm text-muted-foreground">
-        New inquiries from your website form appear here automatically.
-      </p>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    new: 'bg-amber-50 text-amber-700',
-    reviewing: 'bg-blue-50 text-blue-700',
-    estimate_created: 'bg-indigo-50 text-indigo-700',
-    approved: 'bg-green-50 text-green-700',
-    scheduled: 'bg-indigo-50 text-indigo-700',
-    in_progress: 'bg-blue-50 text-blue-700',
-    completed: 'bg-slate-100 text-slate-600',
-    cancelled: 'bg-slate-100 text-slate-500',
-    spam: 'bg-red-50 text-red-600',
-  };
-  const color = colorMap[status] ?? 'bg-slate-100 text-slate-600';
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {formatEnumLabel(status)}
-    </span>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: string }) {
-  const colorMap: Record<string, string> = {
-    high: 'bg-orange-50 text-orange-700',
-    urgent: 'bg-red-50 text-red-700',
-    low: 'bg-slate-100 text-slate-500',
-  };
-  const color = colorMap[priority] ?? 'bg-slate-100 text-slate-600';
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {formatEnumLabel(priority)}
-    </span>
+    </ForgeCard>
   );
 }
 
 function ErrorPanel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       {children}
     </p>
   );
 }
 
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatEnumLabel(value: string): string {
-  return value
-    .split('_')
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join(' ');
+function filterRequests<T extends { number: string; title: string; customerName: string; description: string; serviceLine: string | null }>(
+  requests: T[],
+  query: string
+): T[] {
+  if (!query) return requests;
+  const normalized = query.toLowerCase();
+  return requests.filter((request) =>
+    [request.number, request.title, request.customerName, request.description, request.serviceLine]
+      .filter(Boolean)
+      .some((value) => value?.toLowerCase().includes(normalized))
+  );
 }
 
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
-function formatTotal(count: number, show: ShowFilter): string {
+function formatTotal(count: number, show: ForgeRequestFilter): string {
   const noun = count === 1 ? 'request' : 'requests';
   if (show === 'open') return `${count} open ${noun}`;
   if (show === 'done') return `${count} reviewed ${noun}`;
   return `${count} ${noun} total`;
 }
 
-function readShowParam(
-  value: string | string[] | undefined
-): ShowFilter {
+function readShowParam(value: string | string[] | undefined): ForgeRequestFilter {
   const raw = Array.isArray(value) ? value[0] : value;
   if (raw === 'done' || raw === 'all') return raw;
   return 'open';
+}
+
+function readStringParam(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw?.trim() ?? '';
 }
