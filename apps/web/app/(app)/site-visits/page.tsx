@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Calendar, Inbox, MapPin, Search } from 'lucide-react';
+import { Calendar, Inbox, MapPin, Plus, Search } from 'lucide-react';
 
 import { getActiveOrgContext, listSiteVisits } from '@premier/db';
 
@@ -46,7 +46,7 @@ export default async function SiteVisitsPage({ searchParams }: SiteVisitsPagePro
 
   if (!orgContextResult.success) {
     return (
-      <PageShell status={status} query={query}>
+      <PageShell status={status} query={query} visits={[]}>
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
       </PageShell>
     );
@@ -61,7 +61,7 @@ export default async function SiteVisitsPage({ searchParams }: SiteVisitsPagePro
 
   if (!result.success) {
     return (
-      <PageShell status={status} query={query}>
+      <PageShell status={status} query={query} visits={[]}>
         <ErrorPanel>Failed to load site visits: {result.error}</ErrorPanel>
       </PageShell>
     );
@@ -70,7 +70,7 @@ export default async function SiteVisitsPage({ searchParams }: SiteVisitsPagePro
   const visits = filterVisits(result.data.visits.map((visit) => toForgeSiteVisitSummary(visit)), query);
 
   return (
-    <PageShell status={status} query={query}>
+    <PageShell status={status} query={query} visits={result.data.visits.map((visit) => toForgeSiteVisitSummary(visit))}>
       <p className="text-sm font-medium text-muted-foreground">
         {visits.length} {visits.length === 1 ? 'site visit' : 'site visits'}
       </p>
@@ -129,19 +129,31 @@ function PageShell({
   children,
   status,
   query,
+  visits,
 }: {
   children: React.ReactNode;
   status: StatusFilter;
   query: string;
+  visits: ForgeSiteVisitSummary[];
 }) {
   return (
     <ForgePage className="gap-5 md:gap-6">
       <header className="space-y-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Site Visits</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage scheduled inspections and continue field workflows from real site-visit records.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Site Visits</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage scheduled inspections and continue field workflows from real site-visit records.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled
+            title="Site visits are created from request triage in the current CRM flow."
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground opacity-60"
+          >
+            <Plus className="h-4 w-4" /> New visit
+          </button>
         </div>
 
         <form action="/site-visits" className="relative">
@@ -170,6 +182,9 @@ function PageShell({
               ].join(' ')}
             >
               {filter.label}
+              <span className={status === filter.value ? 'rounded-full bg-primary-foreground/20 px-1.5 text-[10px]' : 'rounded-full bg-muted px-1.5 text-[10px]'}>
+                {filter.value === 'all' ? visits.length : visits.filter((visit) => visit.statusLabel.toLowerCase().includes(statusLabelFragment(filter.value))).length}
+              </span>
             </Link>
           ))}
         </nav>
@@ -178,6 +193,12 @@ function PageShell({
       {children}
     </ForgePage>
   );
+}
+
+function statusLabelFragment(value: StatusFilter): string {
+  if (value === 'awaiting_scheduling') return 'awaiting';
+  if (value === 'in_progress') return 'progress';
+  return value;
 }
 
 function EmptyState({ query }: { query: string }) {

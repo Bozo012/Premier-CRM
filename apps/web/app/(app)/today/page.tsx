@@ -17,7 +17,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { signOutAction } from './actions';
 
 // ── LAYER 2: adapter / view-model (Forge V1.1 Today redesign, see ./_lib/view-model.ts) ──
-import { buildSnapshotItems, buildTodaySchedule, sortActionItems } from './_lib/view-model';
+import { buildKanbanCards, buildSnapshotItems, buildTodaySchedule, sortActionItems, type TodayBoardJob } from './_lib/view-model';
 
 // ── LAYER 3: presentation-only components ───────────────────────────────
 import { Button } from '@/components/ui/button';
@@ -26,14 +26,23 @@ import { QuickActions, type QuickActionItem } from './_components/quick-actions'
 import { SnapshotGrid } from './_components/snapshot-grid';
 import { TodaySchedule } from './_components/today-schedule';
 import { BrowseForge } from './_components/browse-forge';
+import { TodayBoard } from './_components/today-board';
 import { TodayViewToggle } from './_components/today-view-toggle';
 
 export const metadata: Metadata = { title: 'Today' };
 
 interface TodayJob {
+  customers: TodayBoardJob['customers'];
   id: string;
+  priority: TodayBoardJob['priority'];
+  properties: TodayBoardJob['properties'];
   scheduled_start: string | null;
+  status: string;
   title: string;
+}
+
+interface TodayPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 /**
@@ -50,7 +59,9 @@ interface TodayJob {
  * page either shows real values or an honest "no active organization"
  * state — never a placeholder next to a role that looks legitimate.
  */
-export default async function TodayPage() {
+export default async function TodayPage({ searchParams }: TodayPageProps) {
+  const params = await searchParams;
+  const activeView = readViewParam(params.view);
   const supabase = await getServerSupabase();
   const {
     data: { user },
@@ -91,7 +102,7 @@ export default async function TodayPage() {
       supabase.from('service_requests').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', 'new'),
       supabase
         .from('jobs')
-        .select('id, title, scheduled_start')
+        .select('id, title, scheduled_start, status, priority, customers(display_name, company_name, first_name, last_name), properties(address_line_1, city, state)')
         .eq('org_id', orgId)
         .gte('scheduled_start', startOfDay.toISOString())
         .lt('scheduled_start', endOfDay.toISOString())
@@ -123,6 +134,7 @@ export default async function TodayPage() {
   // ── adapter calls (Layer 2) ───────────────────────────────────────────
   const sortedActionItems = sortActionItems(actionItems);
   const schedule = buildTodaySchedule(todayJobs, siteVisits);
+  const boardCards = buildKanbanCards(todayJobs, siteVisits);
   const snapshotItems = buildSnapshotItems({
     newRequestCount: requestsResult.count ?? 0,
     todayScheduleCount: schedule.length,
@@ -141,17 +153,26 @@ export default async function TodayPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-24 pt-6 sm:px-6 md:pb-10 lg:px-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <QuickActions actions={quickActions} />
-        <TodayViewToggle />
+        <TodayViewToggle activeView={activeView} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-8">
-        <div className="space-y-8">
-          <ActionQueue actionItems={sortedActionItems} quoteActivity={quoteActivity} />
-          <TodaySchedule entries={schedule} />
-          <SnapshotGrid items={snapshotItems} />
+      {activeView === 'board' ? (
+        <TodayBoard cards={boardCards} />
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-8">
+          <div className="space-y-8">
+            <ActionQueue actionItems={sortedActionItems} quoteActivity={quoteActivity} />
+            <TodaySchedule entries={schedule} />
+            <SnapshotGrid items={snapshotItems} />
+          </div>
+          <BrowseForge />
         </div>
-        <BrowseForge />
-      </div>
+      )}
     </main>
   );
+}
+
+function readViewParam(value: string | string[] | undefined): 'today' | 'board' {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === 'board' ? 'board' : 'today';
 }

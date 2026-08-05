@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSnapshotItems, buildTodaySchedule, deriveFirstName, deriveGreeting, formatScheduledTime, sortActionItems } from './view-model';
+import { buildKanbanCards, buildSnapshotItems, buildTodaySchedule, deriveFirstName, deriveGreeting, formatScheduledTime, sortActionItems } from './view-model';
 import type { TodayActionItem, TodaySiteVisit } from '@premier/db';
 
 describe('sortActionItems — pure presentation ordering, no workflow decisions', () => {
@@ -56,6 +56,50 @@ describe('buildTodaySchedule — merges jobs and site visits, no workflow decisi
 
   it('returns an empty array when nothing is scheduled', () => {
     expect(buildTodaySchedule([], [])).toEqual([]);
+  });
+});
+
+describe('buildKanbanCards — maps real statuses into board columns', () => {
+  it('groups job statuses into the Base44 board columns without changing workflow state', () => {
+    const cards = buildKanbanCards(
+      [
+        {
+          customers: { company_name: null, display_name: 'Customer Cedar', first_name: null, last_name: null },
+          id: 'job-1',
+          priority: 'emergency',
+          properties: { address_line_1: '142 Cedar Lane', city: 'Demo County', state: 'KY' },
+          scheduled_start: '2026-01-01T14:00:00Z',
+          status: 'on_hold',
+          title: 'Gutter repair',
+        },
+      ],
+      []
+    );
+
+    expect(cards[0]).toMatchObject({
+      customer: 'Customer Cedar',
+      flag: 'Emergency',
+      href: '/jobs/job-1',
+      priority: 'high',
+      property: '142 Cedar Lane, Demo County, KY',
+      stage: 'on_hold',
+      title: 'Gutter repair',
+    });
+  });
+
+  it('adds site visits to the scheduled column with a property fallback', () => {
+    const cards = buildKanbanCards([], [
+      { appointmentId: 'appt-1', siteVisitId: 'visit-1', scheduledStart: '2026-01-01T09:00:00Z', contactName: null, propertyAddress: null },
+    ]);
+
+    expect(cards).toEqual([
+      expect.objectContaining({
+        customer: 'Customer',
+        href: '/site-visits/visit-1',
+        property: 'Property',
+        stage: 'scheduled',
+      }),
+    ]);
   });
 });
 

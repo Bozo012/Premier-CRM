@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { LogOut, Plus, UserRound } from 'lucide-react';
+import { LogOut, Plus } from 'lucide-react';
 
 import { getActiveOrgContext } from '@premier/db';
 
@@ -10,6 +10,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { signOutAction } from '@/app/(app)/today/actions';
 import { OrgSwitcher } from '@/app/(app)/today/_components/org-switcher';
+import { AppAccountMenu } from './app-account-menu';
 
 const createLinks = [
   { href: '/requests', label: 'Create request' },
@@ -38,7 +39,9 @@ export async function AppTopbar() {
 
   const orgName = orgContext.success ? orgContext.data.orgName : 'No active organization';
   const displayName = profile.data?.full_name?.trim() || user.email || 'Staff';
+  const email = user.email ?? 'No email';
   const initials = getInitials(displayName);
+  const roleLabel = orgContext.success ? formatRoleLabel(orgContext.data.role) : 'No active role';
 
   return (
     <header className="sticky top-0 z-30 hidden min-h-16 border-b border-border bg-card/95 px-6 backdrop-blur md:block">
@@ -76,10 +79,7 @@ export async function AppTopbar() {
             </div>
           )}
           <ThemeControl />
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-nav text-sm font-bold text-nav-active-foreground">
-            {initials}
-          </div>
-          <UserRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <AppAccountMenu displayName={displayName} email={email} initials={initials} orgName={orgName} roleLabel={roleLabel} />
           <form action={signOutAction}>
             <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
               <LogOut className="h-4 w-4" aria-hidden="true" />
@@ -89,6 +89,10 @@ export async function AppTopbar() {
       </div>
     </header>
   );
+}
+
+function formatRoleLabel(value: string): string {
+  return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function getInitials(value: string): string {
