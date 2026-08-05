@@ -1,21 +1,22 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { ChevronRight, FileSignature, Plus, Search, SearchX } from 'lucide-react';
 
-import { getActiveOrgContext, listQuotes, type QuoteListItem } from '@premier/db';
+import { getActiveOrgContext, listQuotes } from '@premier/db';
 import { QuoteStatusSchema, type QuoteStatus } from '@premier/shared';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presentation';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { NewQuoteDialog } from './_components/new-quote-dialog';
+import { toForgeQuoteSummary, type ForgeQuoteSummary } from './_lib/forge-quote-view-model';
 
 export const metadata: Metadata = { title: 'Quotes' };
 
 const STATUS_FILTERS: Array<{ label: string; value?: QuoteStatus }> = [
-  { label: 'All quotes' },
+  { label: 'All', value: undefined },
   { label: 'Draft', value: 'draft' },
   { label: 'Sent', value: 'sent' },
   { label: 'Viewed', value: 'viewed' },
@@ -23,7 +24,7 @@ const STATUS_FILTERS: Array<{ label: string; value?: QuoteStatus }> = [
   { label: 'Declined', value: 'declined' },
   { label: 'Expired', value: 'expired' },
   { label: 'Revised', value: 'revised' },
-] as const;
+];
 
 interface QuotesPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -53,12 +54,11 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
       </PageShell>
     );
   }
-  const { orgId } = orgContextResult.data;
 
   const result = await listQuotes(supabase, {
     limit: 100,
     offset: 0,
-    orgId,
+    orgId: orgContextResult.data.orgId,
     search,
     status,
   });
@@ -71,254 +71,218 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
     );
   }
 
-  const { quotes, total } = result.data;
+  const quotes = result.data.quotes.map((quote) => toForgeQuoteSummary(quote));
 
   return (
-    <PageShell
-      search={search}
-      status={status}
-      newQuoteSlot={
-        <div className="flex shrink-0 items-center gap-2">
-          <Button asChild size="sm">
-            <Link href="/quotes/new">New quote</Link>
-          </Button>
-          <NewQuoteDialog />
-        </div>
-      }
-    >
-      <p className="text-sm text-muted-foreground">
-        {formatTotal(total, search, status)}
+    <PageShell search={search} status={status} total={result.data.total}>
+      <p className="text-sm font-medium text-muted-foreground">
+        {formatTotal(result.data.total, search, status)}
       </p>
 
       {quotes.length === 0 ? (
         <EmptyState search={search} status={status} />
       ) : (
-        <ul className="divide-y rounded-md border bg-background">
-          {quotes.map((item) => (
-            <li key={item.quote.id}>
-              <Link
-                href={`/quotes/${item.quote.id}`}
-                className="block space-y-3 px-4 py-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-5"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-base font-medium text-foreground">
-                    {resolveQuoteTitle(item)}
-                  </p>
-                  <StatusBadge status={item.quote.status} />
-                </div>
-
-                <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                  <p>
-                    <span className="font-medium text-foreground">Total:</span>{' '}
-                    {formatMoney(item.quote.total)}
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">
-                      Customer:
-                    </span>{' '}
-                    {item.customer?.displayName || 'Unknown customer'}
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">
-                      Line items:
-                    </span>{' '}
-                    {item.lineItemCount}
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">
-                      Created:
-                    </span>{' '}
-                    {formatDate(item.quote.created_at)}
-                  </p>
-                </div>
-
-                {item.quote.valid_until ? (
-                  <p className="text-sm text-muted-foreground">
-                    Valid until {formatDate(item.quote.valid_until)}
-                  </p>
-                ) : null}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <>
+          <QuotesTable quotes={quotes} />
+          <div className="grid gap-3 lg:hidden">
+            {quotes.map((quote) => (
+              <QuoteCard key={quote.id} quote={quote} />
+            ))}
+          </div>
+        </>
       )}
     </PageShell>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Shell and sub-components
-// ---------------------------------------------------------------------------
-
 function PageShell({
   children,
-  newQuoteSlot,
   search = '',
   status,
+  total = 0,
 }: {
   children: React.ReactNode;
-  newQuoteSlot?: React.ReactNode;
   search?: string;
   status?: QuoteStatus;
+  total?: number;
 }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
-      <header className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
+    <ForgePage className="max-w-6xl gap-5 md:gap-6">
+      <header className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Quotes
-            </h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Quotes</h1>
             <p className="text-sm text-muted-foreground">
-              Browse and manage quotes across all jobs.
+              Track proposals sent to customers and their approval status.
             </p>
           </div>
-          {newQuoteSlot}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Link
+              href="/quotes/new"
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              New quote
+            </Link>
+            <NewQuoteDialog />
+          </div>
         </div>
 
-        <form action="/quotes" className="flex flex-col gap-2 lg:flex-row">
-          <Input
+        <form action="/quotes" className="relative">
+          {status ? <input type="hidden" name="status" value={status} /> : null}
+          <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <input
+            aria-label="Search quotes"
+            className="min-h-12 w-full rounded-xl border border-input bg-card py-2.5 pl-10 pr-4 text-sm font-medium shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             defaultValue={search}
             name="q"
-            placeholder="Search by title or quote number..."
+            placeholder="Search by quote number, customer, or job…"
+            type="search"
           />
-          <select
-            defaultValue={status ?? ''}
-            name="status"
-            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring lg:max-w-48"
-          >
-            {STATUS_FILTERS.map((filter) => (
-              <option key={filter.label} value={filter.value ?? ''}>
-                {filter.label}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
         </form>
+
+        <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Filter quotes">
+          {STATUS_FILTERS.map((filter) => {
+            const active = status === filter.value || (!status && !filter.value);
+            const href = `/quotes${buildQuery({ q: search, status: filter.value })}`;
+            return (
+              <Link
+                key={filter.label}
+                href={href}
+                className={[
+                  'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'border bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
+                ].join(' ')}
+              >
+                {filter.label}
+                {active ? (
+                  <span className="rounded-full bg-primary-foreground/20 px-1.5 text-[10px]">{total}</span>
+                ) : null}
+              </Link>
+            );
+          })}
+        </nav>
       </header>
 
       {children}
-    </main>
+    </ForgePage>
   );
 }
 
-function EmptyState({
-  search,
-  status,
-}: {
-  search?: string;
-  status?: QuoteStatus;
-}) {
-  if (search || status) {
-    return (
-      <div className="space-y-3 rounded-md border bg-background px-4 py-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          No quotes match the current search and filter.
-        </p>
-        <Button asChild variant="outline">
-          <Link href="/quotes">Clear filters</Link>
-        </Button>
-      </div>
-    );
-  }
-
+function QuotesTable({ quotes }: { quotes: ForgeQuoteSummary[] }) {
   return (
-    <div className="rounded-md border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
-      No quotes yet. Use the <strong className="font-medium text-foreground">New quote</strong> button above to get started.
+    <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm lg:block">
+      <table className="w-full text-left text-sm">
+        <thead className="border-b bg-muted/50">
+          <tr className="text-muted-foreground">
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Quote</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Customer</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Amount</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Status</th>
+            <th className="px-5 py-3 text-xs font-bold uppercase tracking-wide">Expires</th>
+            <th className="px-5 py-3"><span className="sr-only">Open</span></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {quotes.map((quote) => (
+            <tr key={quote.id} className="transition hover:bg-muted/30">
+              <td className="px-5 py-4">
+                <Link href={`/quotes/${quote.id}`} className="group flex items-center gap-2 font-bold text-foreground">
+                  <FileSignature className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <span className="group-hover:underline">{quote.number}</span>
+                </Link>
+                <div className="mt-0.5 text-xs text-muted-foreground">{quote.originLabel}</div>
+              </td>
+              <td className="px-5 py-4">
+                <div className="font-medium text-foreground">{quote.customerName}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{quote.propertyName}</div>
+              </td>
+              <td className="px-5 py-4 font-bold text-foreground">{quote.amountLabel}</td>
+              <td className="px-5 py-4"><ForgeStatusPill tone={quote.statusTone}>{quote.statusLabel}</ForgeStatusPill></td>
+              <td className="px-5 py-4 text-xs text-muted-foreground">{quote.expiresLabel}</td>
+              <td className="px-5 py-4 text-right">
+                <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    accepted: 'bg-green-50 text-green-700',
-    declined: 'bg-red-50 text-red-700',
-    draft: 'bg-slate-100 text-slate-600',
-    expired: 'bg-orange-50 text-orange-700',
-    revised: 'bg-blue-50 text-blue-700',
-    sent: 'bg-violet-50 text-violet-700',
-    viewed: 'bg-indigo-50 text-indigo-700',
-  };
-
-  const color = colorMap[status] ?? 'bg-slate-100 text-slate-600';
-
+function QuoteCard({ quote }: { quote: ForgeQuoteSummary }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {formatEnumLabel(status)}
-    </span>
+    <Link
+      href={`/quotes/${quote.id}`}
+      className="rounded-xl border bg-card p-4 text-left shadow-sm transition hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-bold text-foreground">{quote.number}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {quote.customerName} · {quote.propertyName}
+          </div>
+        </div>
+        <ForgeStatusPill tone={quote.statusTone}>{quote.statusLabel}</ForgeStatusPill>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-lg font-bold text-foreground">{quote.amountLabel}</span>
+        <span className="text-xs font-bold text-primary">{quote.nextActionLabel} →</span>
+      </div>
+    </Link>
+  );
+}
+
+function EmptyState({ search, status }: { search?: string; status?: QuoteStatus }) {
+  return (
+    <ForgeCard className="grid min-h-[40vh] place-items-center px-4 text-center">
+      <div>
+        <SearchX className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
+        <h2 className="mt-3 text-lg font-bold">
+          {search || status ? 'No quotes found' : 'No quotes yet'}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {search || status ? 'Try adjusting your search or filters.' : 'Create a quote from an approved estimate or job.'}
+        </p>
+      </div>
+    </ForgeCard>
   );
 }
 
 function ErrorPanel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       {children}
     </p>
   );
 }
 
-
-// ---------------------------------------------------------------------------
-// Formatters and param readers
-// ---------------------------------------------------------------------------
-
-function resolveQuoteTitle(item: QuoteListItem): string {
-  if (item.quote.title?.trim()) return item.quote.title.trim();
-  if (item.quote.quote_number?.trim()) return item.quote.quote_number.trim();
-  if (item.job.title.trim()) return `Quote for ${item.job.title.trim()}`;
-  if (item.job.jobNumber) return `Quote for job ${item.job.jobNumber}`;
-  return 'Untitled quote';
+function formatTotal(total: number, search: string | undefined, status: QuoteStatus | undefined): string {
+  const noun = total === 1 ? 'quote' : 'quotes';
+  if (search || status) return `${total} ${noun} match the filter`;
+  return `${total} ${noun} total`;
 }
 
-function formatMoney(value: number | null): string {
-  if (value === null) return '—';
-  return new Intl.NumberFormat('en-US', {
-    currency: 'USD',
-    style: 'currency',
-  }).format(value);
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(value));
-}
-
-function formatEnumLabel(value: string): string {
-  return value
-    .split('_')
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join(' ');
-}
-
-function formatTotal(
-  total: number,
-  search: string | undefined,
-  status: QuoteStatus | undefined
-): string {
-  if (search || status) {
-    return `${total} quote${total === 1 ? '' : 's'} match the filter`;
-  }
-  return `${total} quote${total === 1 ? '' : 's'} total`;
-}
-
-function readStringParam(
-  value: string | string[] | undefined
-): string | undefined {
+function readStringParam(value: string | string[] | undefined): string | undefined {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw?.trim()) return undefined;
   return raw.trim();
 }
 
-function readStatusParam(
-  value: string | string[] | undefined
-): QuoteStatus | undefined {
+function readStatusParam(value: string | string[] | undefined): QuoteStatus | undefined {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return undefined;
   const parsed = QuoteStatusSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
+}
+
+function buildQuery(params: { q?: string; status?: QuoteStatus }): string {
+  const searchParams = new URLSearchParams();
+  if (params.q) searchParams.set('q', params.q);
+  if (params.status) searchParams.set('status', params.status);
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
 }

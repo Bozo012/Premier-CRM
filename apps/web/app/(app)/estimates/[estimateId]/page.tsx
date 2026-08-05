@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import {
   createServiceClient,
+  type EstimateStatus,
   getActiveOrgContext,
   getEstimateById,
   listEstimateLineItems,
@@ -10,12 +11,14 @@ import {
 } from '@premier/db';
 import { hasCapability, type OrgRole } from '@premier/shared';
 
+import { ForgeBackLink, ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presentation';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { AdvanceStatusButton } from '../_components/advance-status-button';
 import { CreateQuoteButton } from '../_components/create-quote-button';
 import { LineItemsSection } from '../_components/line-items-section';
 import { PricingReviewPanel } from '../_components/pricing-review-panel';
+import { estimateStatusTone } from '../_lib/forge-estimate-view-model';
 
 interface EstimateDetailPageProps {
   params: Promise<{ estimateId: string }>;
@@ -52,14 +55,14 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
 
   if (!result.success) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
+      <ForgePage className="max-w-6xl gap-5 md:gap-6">
         <BackLink />
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {result.error === 'NOT_FOUND'
             ? 'Estimate not found.'
             : `Failed to load estimate: ${result.error}`}
         </p>
-      </main>
+      </ForgePage>
     );
   }
 
@@ -72,13 +75,13 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
     : null;
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
+    <ForgePage className="max-w-6xl gap-5 md:gap-6">
       <BackLink />
 
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm text-muted-foreground">
-            {estimate.estimateNumber}
+          {estimate.estimateNumber}
           </span>
           <StatusBadge status={estimate.status} />
         </div>
@@ -92,15 +95,15 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
       </header>
 
       {estimate.sourceSiteVisitId ? (
-        <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
-          <p className="font-medium text-foreground">Generated from completed site visit</p>
+        <ForgeCard className="text-sm">
+          <p className="font-bold text-foreground">Generated from completed site visit</p>
           <Link
             href={`/site-visits/${estimate.sourceSiteVisitId}`}
             className="text-sm font-medium underline-offset-2 hover:underline"
           >
             View site visit
           </Link>
-        </div>
+        </ForgeCard>
       ) : (
         <AdvanceStatusButton estimateId={estimate.id} currentStatus={estimate.status} />
       )}
@@ -211,11 +214,11 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
         </div>
 
         {quotes.length === 0 ? (
-          <p className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          <p className="rounded-xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             No quotes yet. Use &ldquo;Create quote&rdquo; above to build the first one.
           </p>
         ) : (
-          <ul className="divide-y rounded-md border">
+          <ul className="divide-y overflow-hidden rounded-xl border bg-card">
             {quotes.map((q) => (
               <li key={q.id}>
                 <Link
@@ -245,7 +248,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
           </ul>
         )}
       </section>
-    </main>
+    </ForgePage>
   );
 }
 
@@ -254,14 +257,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
 // ---------------------------------------------------------------------------
 
 function BackLink() {
-  return (
-    <Link
-      href="/estimates"
-      className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-    >
-      ← Estimates
-    </Link>
-  );
+  return <ForgeBackLink href="/estimates">Estimates</ForgeBackLink>;
 }
 
 function InfoCard({
@@ -272,57 +268,29 @@ function InfoCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1 rounded-md border bg-background p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <ForgeCard className="space-y-1">
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </p>
       <div>{children}</div>
-    </div>
+    </ForgeCard>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    draft: 'bg-slate-100 text-slate-600',
-    site_visit_scheduled: 'bg-blue-50 text-blue-700',
-    site_visit_complete: 'bg-indigo-50 text-indigo-700',
-    quoted: 'bg-purple-50 text-purple-700',
-    accepted: 'bg-green-50 text-green-700',
-    declined: 'bg-red-50 text-red-700',
-    expired: 'bg-slate-100 text-slate-500',
-    converted: 'bg-emerald-50 text-emerald-700',
-  };
-  const color = colorMap[status] ?? 'bg-slate-100 text-slate-600';
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {status
-        .split('_')
-        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(' ')}
-    </span>
-  );
+  return <ForgeStatusPill tone={estimateStatusTone(status as EstimateStatus)}>{formatEnumLabel(status)}</ForgeStatusPill>;
 }
 
-const QUOTE_STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-700',
-  sent: 'bg-violet-50 text-violet-700',
-  viewed: 'bg-indigo-50 text-indigo-700',
-  accepted: 'bg-green-50 text-green-700',
-  declined: 'bg-red-50 text-red-700',
-  expired: 'bg-orange-50 text-orange-700',
-  revised: 'bg-blue-50 text-blue-700',
-};
-
 function QuoteStatusBadge({ status }: { status: string }) {
-  const colorClass = QUOTE_STATUS_COLORS[status] ?? 'bg-slate-100 text-slate-700';
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
-      {status
-        .split('_')
-        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(' ')}
-    </span>
-  );
+  const tone = status === 'accepted' ? 'emerald' : status === 'declined' ? 'red' : status === 'sent' || status === 'viewed' ? 'blue' : 'neutral';
+  return <ForgeStatusPill tone={tone}>{formatEnumLabel(status)}</ForgeStatusPill>;
+}
+
+function formatEnumLabel(value: string): string {
+  return value
+    .split('_')
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
 }
 
 function formatDate(value: string): string {

@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getActiveOrgContext, getInvoiceById, type InvoiceLineItemSummary, type Payment } from '@premier/db';
 import { ErrorCode } from '@premier/shared';
 
+import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presentation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
@@ -13,6 +14,7 @@ import { LineItemEditor } from '../_components/line-item-editor';
 import { RecordPaymentForm } from '../_components/record-payment-form';
 import { SendInvoiceButton } from '../_components/send-invoice-button';
 import { VoidInvoiceButton } from '../_components/void-invoice-button';
+import { invoiceStatusTone } from '../_lib/forge-invoice-view-model';
 
 interface InvoiceDetailPageProps {
   params: Promise<{ invoiceId: string }>;
@@ -294,11 +296,7 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
 }
 
 function PageShell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
-      {children}
-    </main>
-  );
+  return <ForgePage className="max-w-6xl gap-5 md:gap-6">{children}</ForgePage>;
 }
 
 function InfoCard({
@@ -314,31 +312,31 @@ function InfoCard({
 }) {
   const content = (
     <>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="pb-2">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
           {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1">
+        </p>
+      </div>
+      <div className="space-y-1">
         <p className="text-base font-medium text-foreground">{value}</p>
         <p className="text-sm text-muted-foreground">{helper}</p>
-      </CardContent>
+      </div>
     </>
   );
 
   if (!href) {
-    return <Card>{content}</Card>;
+    return <ForgeCard>{content}</ForgeCard>;
   }
 
   return (
-    <Card className="transition-colors hover:bg-muted/30">
+    <ForgeCard className="transition-colors hover:bg-muted/30">
       <Link
         href={href}
         className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         {content}
       </Link>
-    </Card>
+    </ForgeCard>
   );
 }
 
@@ -399,29 +397,13 @@ function PaymentRow({ payment }: { payment: Payment }) {
   );
 }
 
-const INVOICE_STATUS_BADGE_COLORS: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-700',
-  sent: 'bg-violet-50 text-violet-700',
-  viewed: 'bg-indigo-50 text-indigo-700',
-  partially_paid: 'bg-amber-50 text-amber-700',
-  paid: 'bg-green-50 text-green-700',
-  overdue: 'bg-red-50 text-red-700',
-  void: 'bg-slate-100 text-slate-500',
-  refunded: 'bg-orange-50 text-orange-700',
-};
-
 function InvoiceStatusBadge({ status }: { status: string }) {
-  const colorClass = INVOICE_STATUS_BADGE_COLORS[status] ?? 'bg-slate-100 text-slate-700';
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
-      {formatEnumLabel(status)}
-    </span>
-  );
+  return <ForgeStatusPill tone={invoiceStatusTone(status)}>{formatEnumLabel(status)}</ForgeStatusPill>;
 }
 
 function InvoiceKindBadge({ kind }: { kind: string }) {
   return (
-    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">
       {formatEnumLabel(kind)}
     </span>
   );
