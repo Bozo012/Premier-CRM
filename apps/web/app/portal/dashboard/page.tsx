@@ -25,8 +25,10 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { AddChangeOrderCommentForm } from '../_components/add-change-order-comment-form';
 import { BookSchedulingSlotForm } from '../_components/book-scheduling-slot-form';
+import { PortalContactSheet } from '../_components/portal-contact-sheet';
 import { RequestChangeOrderForm } from '../_components/request-change-order-form';
 import { RespondToChangeOrderForm } from '../_components/respond-change-order-form';
+import { buildPortalContactViewModel } from '../_lib/portal-contact-view-model';
 import { signOutCustomerPortal } from '../actions';
 
 interface CustomerAccountRow {
@@ -205,6 +207,11 @@ export default async function PortalDashboardPage() {
   const properties = asCustomerPropertyRows(propertiesResult.data);
   const activeRequests = serviceRequests.filter((request) => !isCompleted(request.status));
   const completedRequests = serviceRequests.filter((request) => isCompleted(request.status));
+  const contactModel = buildPortalContactViewModel({
+    customerEmail: account.email,
+    properties,
+    serviceRequests,
+  });
 
   // Customer-safe presentation: this is the ONLY way the portal reads
   // site-visit data — via the get_my_site_visit_summary() RPC, called with
@@ -276,9 +283,12 @@ export default async function PortalDashboardPage() {
             Signed in as {account.email}. Your customer account is separate from internal Premier org_members.
           </p>
         </div>
-        <form action={signOutCustomerPortal}>
-          <Button type="submit" variant="outline">Sign out</Button>
-        </form>
+        <div className="flex flex-wrap gap-2">
+          <PortalContactSheet model={contactModel} />
+          <form action={signOutCustomerPortal}>
+            <Button type="submit" variant="outline">Sign out</Button>
+          </form>
+        </div>
       </header>
 
       {(serviceRequestsResult.error || propertiesResult.error) ? (
