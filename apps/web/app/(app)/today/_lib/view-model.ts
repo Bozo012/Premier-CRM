@@ -39,6 +39,44 @@ export interface ScheduleEntry {
   kind: 'job' | 'site_visit';
 }
 
+export type KanbanStage = 'scheduled' | 'in_progress' | 'on_hold' | 'completed';
+
+export interface TodayBoardJob {
+  id: string;
+  priority: 'low' | 'normal' | 'high' | 'emergency';
+  scheduled_start: string | null;
+  status: string;
+  title: string;
+  customers:
+    | {
+        company_name: string | null;
+        display_name: string | null;
+        first_name: string | null;
+        last_name: string | null;
+      }
+    | null;
+    properties:
+      | {
+        address_line_1: string;
+        city: string;
+        state: string;
+      }
+      | null;
+}
+
+export interface KanbanCardModel {
+  assignment?: string;
+  customer: string;
+  flag?: string;
+  href: string;
+  id: string;
+  priority: 'low' | 'normal' | 'high';
+  property: string;
+  stage: KanbanStage;
+  timeLabel?: string;
+  title: string;
+}
+
 /** Merges today's jobs and today's site visits into one chronological
  * schedule — pure presentation ordering, not a workflow decision (both
  * lists were already independently, correctly scoped by Layer 1). */
@@ -65,6 +103,58 @@ export function buildTodaySchedule(
   }));
 
   return [...jobEntries, ...visitEntries].sort((a, b) => a.timeLabel.localeCompare(b.timeLabel));
+}
+
+export function buildKanbanCards(jobs: TodayBoardJob[], siteVisits: TodaySiteVisit[]): KanbanCardModel[] {
+  const jobCards: KanbanCardModel[] = jobs.map((job) => ({
+    customer: resolveCustomerName(job.customers),
+    flag: job.priority === 'emergency' ? 'Emergency' : job.priority === 'high' ? 'High priority' : undefined,
+    href: `/jobs/${job.id}`,
+    id: `job-${job.id}`,
+    priority: job.priority === 'emergency' ? 'high' : job.priority,
+    property: resolvePropertyName(job.properties),
+    stage: normalizeJobStage(job.status),
+    timeLabel: job.scheduled_start ? formatScheduledTime(job.scheduled_start) : undefined,
+    title: job.title,
+  }));
+
+  const visitCards: KanbanCardModel[] = siteVisits.map((visit) => ({
+    assignment: 'Site visit',
+    customer: visit.contactName ?? 'Customer',
+    href: `/site-visits/${visit.siteVisitId}`,
+    id: `visit-${visit.siteVisitId}`,
+    priority: 'normal',
+    property: visit.propertyAddress ?? 'Property',
+    stage: 'scheduled',
+    timeLabel: visit.scheduledStart ? formatScheduledTime(visit.scheduledStart) : undefined,
+    title: visit.contactName ? `${visit.contactName} visit` : 'Site visit',
+  }));
+
+  return [...jobCards, ...visitCards].sort((left, right) => {
+    const leftTime = left.timeLabel ?? '99:99';
+    const rightTime = right.timeLabel ?? '99:99';
+    return leftTime.localeCompare(rightTime);
+  });
+}
+
+function normalizeJobStage(status: string): KanbanStage {
+  if (status === 'in_progress') return 'in_progress';
+  if (status === 'on_hold') return 'on_hold';
+  if (status === 'completed' || status === 'invoiced' || status === 'paid') return 'completed';
+  return 'scheduled';
+}
+
+function resolveCustomerName(customer: TodayBoardJob['customers']): string {
+  if (!customer) return 'Customer';
+  if (customer.display_name) return customer.display_name;
+  if (customer.company_name) return customer.company_name;
+  const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(' ').trim();
+  return fullName || 'Customer';
+}
+
+function resolvePropertyName(property: TodayBoardJob['properties']): string {
+  if (!property) return 'Property';
+  return `${property.address_line_1}, ${property.city}, ${property.state}`;
 }
 
 export interface SnapshotItem {
