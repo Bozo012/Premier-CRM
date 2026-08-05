@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as PremierDb from '@premier/db';
 
 // Regression coverage for Batch 8's triage consolidation
 // (docs/ux/forge-base44-batch-8-requests-site-visits-inspection-report.md):
@@ -20,7 +21,7 @@ vi.mock('@/lib/supabase-server', () => ({
 }));
 
 vi.mock('@premier/db', async () => {
-  const actual = await vi.importActual<typeof import('@premier/db')>('@premier/db');
+  const actual = await vi.importActual<typeof PremierDb>('@premier/db');
   return {
     ...actual,
     getActiveOrgContext: getActiveOrgContextMock,

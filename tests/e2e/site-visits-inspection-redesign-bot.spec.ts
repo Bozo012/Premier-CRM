@@ -14,6 +14,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@premier/db';
 
@@ -23,7 +24,7 @@ import { viewportProfiles } from './utils/mobile';
 const canRun = () => hasApiTestCredentials() && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SKIP_REASON = 'NEXT_PUBLIC_SUPABASE_URL/ANON_KEY and/or SUPABASE_SERVICE_ROLE_KEY not set in .env.test';
 
-async function login(page: import('@playwright/test').Page, account: { email: string; password: string }) {
+async function login(page: Page, account: { email: string; password: string }) {
   await page.goto('/login');
   await page.getByPlaceholder('you@company.com').fill(account.email);
   await page.getByPlaceholder('Enter your password').fill(account.password);
