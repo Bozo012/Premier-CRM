@@ -44,50 +44,72 @@ export async function AppTopbar() {
   const roleLabel = orgContext.success ? formatRoleLabel(orgContext.data.role) : 'No active role';
 
   return (
-    <header className="sticky top-0 z-30 hidden min-h-16 border-b border-border bg-card/95 px-6 backdrop-blur md:block">
-      <div className="flex min-h-16 items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="hidden min-w-0 lg:block">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Active organization</p>
-            <p className="truncate text-sm font-bold text-foreground">{orgName}</p>
+    <>
+      <header className="sticky top-0 z-30 border-b border-border bg-card/95 px-3 py-2 backdrop-blur md:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+              Active organization
+            </p>
+            {orgContext.success && orgContext.data.hasMultipleOrgs && orgContext.data.availableOrgs ? (
+              <OrgSwitcher
+                currentOrgId={orgContext.data.orgId}
+                availableOrgs={orgContext.data.availableOrgs}
+                className="mt-1 w-full"
+              />
+            ) : (
+              <p className="truncate text-sm font-bold text-foreground">{orgName}</p>
+            )}
           </div>
-          <Button asChild className="h-11 rounded-xl px-4 font-bold">
-            <Link href="/requests">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Create
-            </Link>
-          </Button>
-          <nav className="hidden items-center gap-2 xl:flex" aria-label="Create shortcuts">
-            {createLinks.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
-        <div className="flex min-w-0 items-center gap-3">
-          {orgContext.success && orgContext.data.hasMultipleOrgs && orgContext.data.availableOrgs ? (
-            <OrgSwitcher currentOrgId={orgContext.data.orgId} availableOrgs={orgContext.data.availableOrgs} />
-          ) : (
-            <div className="hidden max-w-[280px] rounded-xl border border-border bg-background px-3 py-2 text-sm font-bold lg:block">
-              <span className="block truncate">{orgName}</span>
-            </div>
-          )}
-          <ThemeControl />
           <AppAccountMenu displayName={displayName} email={email} initials={initials} orgName={orgName} roleLabel={roleLabel} />
-          <form action={signOutAction}>
-            <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </form>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <header className="sticky top-0 z-30 hidden min-h-16 border-b border-border bg-card/95 px-6 backdrop-blur md:block">
+        <div className="flex min-h-16 items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="hidden min-w-0 lg:block">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Active organization</p>
+              <p className="truncate text-sm font-bold text-foreground">{orgName}</p>
+            </div>
+            <Button asChild className="h-11 rounded-xl px-4 font-bold">
+              <Link href="/requests">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Create
+              </Link>
+            </Button>
+            <nav className="hidden items-center gap-2 xl:flex" aria-label="Create shortcuts">
+              {createLinks.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+
+          <div className="flex min-w-0 items-center gap-3">
+            {orgContext.success && orgContext.data.hasMultipleOrgs && orgContext.data.availableOrgs ? (
+              <OrgSwitcher currentOrgId={orgContext.data.orgId} availableOrgs={orgContext.data.availableOrgs} />
+            ) : (
+              <div className="hidden max-w-[280px] rounded-xl border border-border bg-background px-3 py-2 text-sm font-bold lg:block">
+                <span className="block truncate">{orgName}</span>
+              </div>
+            )}
+            <ThemeControl />
+            <AppAccountMenu displayName={displayName} email={email} initials={initials} orgName={orgName} roleLabel={roleLabel} />
+            <form action={signOutAction}>
+              <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </form>
+          </div>
+        </div>
+      </header>
+    </>
   );
 }
 
