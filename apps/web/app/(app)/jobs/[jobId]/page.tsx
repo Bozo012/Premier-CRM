@@ -15,7 +15,6 @@ import {
   type ChangeOrderThreadDetail,
   type DepositState,
   type JobInvoiceSummary,
-  type JobPhaseSummary,
   type JobQuoteSummary,
   type WorkingInvoiceDetail,
 } from '@premier/db';
@@ -172,56 +171,52 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
 
   return (
     <PageShell>
-      <header className="space-y-4">
+      <header className="space-y-5">
         <Link
           href="/jobs"
-          className="inline-flex text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
         >
-          Back to jobs
+          ← Back to jobs
         </Link>
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              {job.title.trim() || job.job_number || 'Untitled job'}
-            </h1>
+
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            <span>Job</span>
+            <span>{job.job_number || 'No job number'}</span>
             <StatusBadge status={job.status} />
-            <PriorityBadge priority={job.priority} />
           </div>
-          <p className="text-sm text-muted-foreground">
-            {[job.job_number || 'No job number', category?.name || 'Uncategorized']
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            {job.title.trim() || job.job_number || 'Untitled job'}
+          </h1>
+          <div className="flex flex-wrap gap-2">
+            {customer ? (
+              <Link
+                href={`/customers/${customer.id}`}
+                className="rounded-full border bg-card px-3 py-2 text-sm font-bold text-foreground hover:bg-muted"
+              >
+                {customer.displayName} →
+              </Link>
+            ) : null}
+            {property ? (
+              <Link
+                href={`/properties/${property.id}`}
+                className="rounded-full border bg-card px-3 py-2 text-sm font-bold text-foreground hover:bg-muted"
+              >
+                {formatShortPropertyName(property)} →
+              </Link>
+            ) : null}
+            <span className="rounded-full border bg-card px-3 py-2 text-sm font-bold text-muted-foreground">
+              {formatJobSource(job, sourceEstimate, sourceRequest)}
+            </span>
+          </div>
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <InfoCard
-          label="Next scheduled"
-          value={formatScheduledAt(job.scheduled_start ?? job.scheduled_end)}
-          helper={
-            job.estimated_duration_minutes
-              ? `${job.estimated_duration_minutes} minute estimate`
-              : 'No duration estimate yet'
-          }
-        />
-        <InfoCard
-          label="Customer"
-          value={customer?.displayName || 'Unknown customer'}
-          helper={customer ? 'Open linked customer record' : 'Customer link missing'}
-          href={customer ? `/customers/${customer.id}` : undefined}
-        />
-        <InfoCard
-          label="Property"
-          value={property ? formatPropertyAddress(property) : 'Unknown property'}
-          helper={property ? 'Open linked property record' : 'Property link missing'}
-          href={property ? `/properties/${property.id}` : undefined}
-        />
-        <InfoCard
-          label="Phases"
-          value={String(phases.length)}
-          helper={summarizePhaseState(phases)}
-        />
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Stage" value={formatEnumLabel(job.status)} />
+        <MetricCard label="Priority" value={formatEnumLabel(job.priority)} valueClassName="text-primary" />
+        <MetricCard label="Scheduled" value={formatScheduledAt(job.scheduled_start ?? job.scheduled_end)} />
+        <MetricCard label="Lead technician" value="Unassigned" />
         {sourceEstimate ? (
           <InfoCard
             label="Source estimate"
@@ -238,6 +233,34 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
             href={`/requests/${sourceRequest.id}`}
           />
         ) : null}
+      </section>
+
+      <section className="rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          Next action
+        </p>
+        <p className="mt-2 text-base font-bold text-foreground">{getNextJobAction(job.status)}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{getNextJobActionHelper(job.status)}</p>
+      </section>
+
+      <section className="flex gap-2 overflow-x-auto pb-1">
+        {job.status === 'approved' ? (
+          <Button asChild className="shrink-0 rounded-xl font-bold">
+            <a href="#schedule-job">Schedule job</a>
+          </Button>
+        ) : null}
+        <Button asChild variant="outline" className="shrink-0 rounded-xl font-bold">
+          <Link href="/expenses/new">Add expense</Link>
+        </Button>
+        <Button asChild variant="outline" className="shrink-0 rounded-xl font-bold">
+          <a href="#change-orders">Create change order</a>
+        </Button>
+        <Button disabled variant="outline" className="shrink-0 rounded-xl font-bold">
+          Add log
+        </Button>
+        <Button disabled variant="outline" className="shrink-0 rounded-xl font-bold">
+          Add photo
+        </Button>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr,0.95fr]">
@@ -269,7 +292,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="schedule-job">
           <CardHeader>
             <CardTitle>Schedule & financial snapshot</CardTitle>
           </CardHeader>
@@ -446,7 +469,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         <WorkingInvoiceCard jobId={job.id} workingInvoice={workingInvoice} />
       </section>
 
-      <section>
+      <section id="change-orders">
         <ChangeOrdersCard jobId={job.id} threads={changeOrders} />
       </section>
     </PageShell>
@@ -804,6 +827,27 @@ function InfoCard({
   );
 }
 
+function MetricCard({
+  label,
+  value,
+  valueClassName = '',
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-1 p-4">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className={`text-base font-bold text-foreground ${valueClassName}`}>{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DetailRow({
   label,
   value,
@@ -818,25 +862,6 @@ function DetailRow({
       </p>
       <p className="text-sm text-foreground">{value}</p>
     </div>
-  );
-}
-
-function FutureSectionCard({
-  description,
-  title,
-}: {
-  description: string;
-  title: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -876,27 +901,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function PriorityBadge({
-  priority,
-}: {
-  priority: 'emergency' | 'high' | 'low' | 'normal';
-}) {
-  const classes =
-    priority === 'emergency'
-      ? 'bg-red-50 text-red-700'
-      : priority === 'high'
-        ? 'bg-amber-50 text-amber-700'
-        : priority === 'low'
-          ? 'bg-slate-100 text-slate-700'
-          : 'bg-muted text-muted-foreground';
-
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${classes}`}>
-      {formatEnumLabel(priority)}
-    </span>
-  );
-}
-
 function ErrorPanel({ children }: { children: React.ReactNode }) {
   return (
     <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -916,6 +920,76 @@ function formatPropertyAddress(property: {
   return [property.addressLine1, property.addressLine2, `${property.city}, ${property.state} ${property.zip}`]
     .filter(Boolean)
     .join(', ');
+}
+
+function formatShortPropertyName(property: { addressLine1: string }) {
+  return property.addressLine1.split(',')[0] || property.addressLine1;
+}
+
+function formatJobSource(
+  job: { origin_estimate_id: string | null; origin_quote_id: string | null; origin_request_id: string | null },
+  sourceEstimate: { estimate_number: string | null; title: string | null } | null,
+  sourceRequest: { request_number: string | null; service_title: string | null } | null
+) {
+  if (sourceEstimate) {
+    return `From estimate ${sourceEstimate.estimate_number ?? sourceEstimate.title ?? ''}`.trim();
+  }
+
+  if (sourceRequest) {
+    return `From request ${sourceRequest.request_number ?? sourceRequest.service_title ?? ''}`.trim();
+  }
+
+  if (job.origin_quote_id) {
+    return 'From accepted quote';
+  }
+
+  if (job.origin_estimate_id) {
+    return 'From estimate';
+  }
+
+  if (job.origin_request_id) {
+    return 'From customer request';
+  }
+
+  return 'Manually created';
+}
+
+function getNextJobAction(status: string) {
+  switch (status) {
+    case 'approved':
+      return 'Schedule the approved work';
+    case 'scheduled':
+      return 'Crew check-in at the scheduled window';
+    case 'in_progress':
+      return 'Finish job progress and capture completion notes';
+    case 'completed':
+      return 'Review job costs and create the customer invoice';
+    case 'invoiced':
+      return 'Track invoice collection';
+    case 'cancelled':
+      return 'No active next action';
+    default:
+      return 'Review job details and decide the next step';
+  }
+}
+
+function getNextJobActionHelper(status: string) {
+  switch (status) {
+    case 'approved':
+      return 'Use the scheduling form below so calendar state and customer notifications stay tied to the real job.';
+    case 'scheduled':
+      return 'Customer, property, and schedule context are already attached.';
+    case 'in_progress':
+      return 'Log-only and photo-only quick actions still need dedicated backend writes before activation.';
+    case 'completed':
+      return 'Expenses and invoice generation remain separate so customer charges are reviewed first.';
+    case 'invoiced':
+      return 'Payment status remains authoritative from the invoice module.';
+    case 'cancelled':
+      return 'This job is retained for audit history.';
+    default:
+      return 'No unsupported workflow transition is executed from this page.';
+  }
 }
 
 function formatMoney(value: number | null) {
@@ -991,28 +1065,6 @@ function formatPreferredChannel(value: string | null) {
   }
 
   return `${formatEnumLabel(value)} preferred`;
-}
-
-function summarizePhaseState(phases: JobPhaseSummary[]) {
-  if (phases.length === 0) {
-    return 'No phases yet';
-  }
-
-  const inProgressCount = phases.filter((phase) => phase.status === 'in_progress').length;
-  if (inProgressCount > 0) {
-    return inProgressCount === 1
-      ? '1 phase in progress'
-      : `${inProgressCount} phases in progress`;
-  }
-
-  const nextScheduledPhase =
-    phases.find((phase) => Boolean(phase.scheduledStart || phase.scheduledEnd)) ?? null;
-
-  if (nextScheduledPhase) {
-    return `Next: ${nextScheduledPhase.name}`;
-  }
-
-  return 'Phases attached';
 }
 
 function isUuid(value: string): boolean {

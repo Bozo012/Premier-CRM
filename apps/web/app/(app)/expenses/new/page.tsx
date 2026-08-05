@@ -29,6 +29,33 @@ const PAYMENT_METHODS = ['card', 'ach', 'check', 'cash', 'venmo', 'other'] as co
 const FIELD_INPUT_CLASS =
   'min-h-11 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring';
 
+const EXPENSE_ORIGIN_OPTIONS = [
+  {
+    available: true,
+    carriedForward: ['Nothing prefilled', 'You choose job, customer, and property', 'Origin recorded as Manual entry'],
+    description: 'Log a cost that was not captured by another workflow.',
+    title: 'Manual entry',
+  },
+  {
+    available: true,
+    carriedForward: ['Job number and title', 'Customer and property', 'Supplied job cost context'],
+    description: 'Add a cost against an existing job.',
+    title: 'From a job',
+  },
+  {
+    available: false,
+    carriedForward: ['Visit property and customer', 'Linked job when the visit has one', 'Visit date'],
+    description: 'Capture a cost noted during a visit.',
+    title: 'From a site visit',
+  },
+  {
+    available: false,
+    carriedForward: ['Receipt attachment placeholder', 'Vendor when supplied', 'Receipt visibility'],
+    description: 'Start from a receipt captured in the field.',
+    title: 'From a receipt',
+  },
+];
+
 interface NewExpensePageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
@@ -66,14 +93,42 @@ export default async function NewExpensePage({ searchParams }: NewExpensePagePro
 
   return (
     <ForgePage className="max-w-4xl gap-5 md:gap-6">
-      <ForgeBackLink href="/expenses">Back to expenses</ForgeBackLink>
+      <div className="flex items-center justify-between gap-3">
+        <ForgeBackLink href="/expenses">Cancel</ForgeBackLink>
+        <span className="hidden rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700 sm:inline-flex">
+          Manual entry
+        </span>
+      </div>
 
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">New expense</h1>
+      <header className="space-y-2">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Log an expense</h1>
         <p className="text-sm text-muted-foreground">
-          Record Premier&apos;s job cost without changing customer invoice totals.
+          Expenses track Premier&apos;s cost. What the customer owes is decided separately by Forge.
         </p>
+        <div className="grid grid-cols-5 gap-1.5 pt-3" aria-label="Log expense progress">
+          <span className="h-1 rounded-full bg-primary" />
+          <span className="h-1 rounded-full bg-muted" />
+          <span className="h-1 rounded-full bg-muted" />
+          <span className="h-1 rounded-full bg-muted" />
+          <span className="h-1 rounded-full bg-muted" />
+        </div>
+        <p className="text-sm font-semibold text-foreground">Step 1 of 5: Origin</p>
       </header>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-bold text-foreground">How should this expense begin?</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Forge carries forward only the context the origin actually provides.
+          </p>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {EXPENSE_ORIGIN_OPTIONS.map((option) => (
+            <OriginOptionCard key={option.title} {...option} />
+          ))}
+        </div>
+      </section>
 
       {error ? (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
@@ -96,9 +151,9 @@ export default async function NewExpensePage({ searchParams }: NewExpensePagePro
           </Button>
         </ForgeCard>
       ) : (
-        <form action={createExpenseAction} className="space-y-5">
+        <form id="manual-expense-form" action={createExpenseAction} className="space-y-5">
           <ForgeCard className="space-y-4">
-            <ForgeSectionTitle>Expense details</ForgeSectionTitle>
+            <ForgeSectionTitle>Manual expense details</ForgeSectionTitle>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1.5 sm:col-span-2">
                 <span className="text-sm font-bold text-foreground">Description</span>
@@ -214,6 +269,54 @@ export default async function NewExpensePage({ searchParams }: NewExpensePagePro
         </form>
       )}
     </ForgePage>
+  );
+}
+
+function OriginOptionCard({
+  available,
+  carriedForward,
+  description,
+  title,
+}: {
+  available: boolean;
+  carriedForward: string[];
+  description: string;
+  title: string;
+}) {
+  return (
+    <article
+      aria-disabled={!available}
+      className={[
+        'rounded-xl border bg-card p-4 text-card-foreground shadow-sm',
+        available ? 'border-primary/60' : 'opacity-80',
+        title === 'Manual entry' ? 'ring-1 ring-primary/40' : '',
+      ].join(' ')}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold text-foreground">{title}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        </div>
+        {title === 'Manual entry' ? <span className="text-primary">✓</span> : null}
+      </div>
+      <div className="mt-4 space-y-1">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          Carried forward
+        </p>
+        <ul className="space-y-0.5 text-sm font-semibold text-foreground">
+          {carriedForward.map((item) => (
+            <li key={item}>
+              <span className="text-primary">•</span> {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {!available ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Requires a real source record and handoff action before this origin can prefill expenses.
+        </p>
+      ) : null}
+    </article>
   );
 }
 
