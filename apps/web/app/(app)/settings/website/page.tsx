@@ -8,6 +8,7 @@ import {
   getWebsiteSettingsForOrg,
   listWebsitePromotionsForOrg,
   listWebsiteServiceHighlightsForOrg,
+  type WebsiteSettingsRecord,
 } from '@premier/db';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +20,32 @@ import { getServerSupabase } from '@/lib/supabase-server';
 import { WebsiteHighlightList } from './_components/website-highlight-list';
 import { WebsitePromotionList } from './_components/website-promotion-list';
 import { WebsiteSettingsForm } from './_components/website-settings-form';
+
+const CURRENT_PUBLIC_WEBSITE_COPY: WebsiteSettingsRecord = {
+  active: true,
+  availabilityText: 'Available 24/7',
+  callCtaLabel: 'Call Now',
+  createdAt: '',
+  emergencyMessage: 'Professional maintenance you can trust. Available 24/7 for emergencies.',
+  heroHeadline: 'ONE CALL. EVERY REPAIR. EVERY PROPERTY.',
+  heroSubheadline:
+    'Professional property maintenance and repair services for residential and commercial properties.',
+  homepageSeoDescription:
+    'Premier Property Maintenance handles repairs, plumbing, HVAC, painting, carpentry, and emergency service for residential and commercial properties.',
+  homepageSeoTitle: 'Premier Property Maintenance | Repair, Plumbing, HVAC, Painting',
+  id: 'current-public-website-copy',
+  orgId: 'current-public-website-copy',
+  phoneDisplay: '(859) 912-0526',
+  phoneE164: '+18599120526',
+  portalCtaLabel: 'Request Your First Service',
+  portalStatusMessage: 'Manage your properties, services, and billing all in one place',
+  published: true,
+  requestServiceCtaLabel: 'Request Service',
+  serviceAreaSummary:
+    'Professional property maintenance and repair services for residential and commercial properties.',
+  textCtaLabel: 'Text Us',
+  updatedAt: '',
+};
 
 export default async function WebsiteSettingsPage() {
   const supabase = await getServerSupabase();
@@ -111,8 +138,14 @@ export default async function WebsiteSettingsPage() {
         <CardHeader>
           <CardTitle>Website settings</CardTitle>
         </CardHeader>
-        <CardContent>
-          <WebsiteSettingsForm settings={settingsResult.data} />
+        <CardContent className="space-y-4">
+          {!settingsResult.data ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Showing the current public-site fallback copy. Saving creates the first
+              CRM-backed settings row for this organization.
+            </p>
+          ) : null}
+          <WebsiteSettingsForm settings={settingsResult.data ?? CURRENT_PUBLIC_WEBSITE_COPY} />
         </CardContent>
       </Card>
 

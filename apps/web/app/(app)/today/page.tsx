@@ -25,7 +25,6 @@ import { ActionQueue } from './_components/action-queue';
 import { QuickActions, type QuickActionItem } from './_components/quick-actions';
 import { SnapshotGrid } from './_components/snapshot-grid';
 import { TodaySchedule } from './_components/today-schedule';
-import { AdminLinks } from './_components/admin-links';
 import { BrowseForge } from './_components/browse-forge';
 import { TodayViewToggle } from './_components/today-view-toggle';
 
@@ -78,7 +77,6 @@ export default async function TodayPage() {
   }
 
   const { orgId, role } = orgContextResult.data;
-  const canManageTeam = role === 'owner' || role === 'admin';
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
@@ -151,7 +149,6 @@ export default async function TodayPage() {
           <ActionQueue actionItems={sortedActionItems} quoteActivity={quoteActivity} />
           <TodaySchedule entries={schedule} />
           <SnapshotGrid items={snapshotItems} />
-          <AdminLinks canManageTeam={canManageTeam} />
         </div>
         <BrowseForge />
       </div>

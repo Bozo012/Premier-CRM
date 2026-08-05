@@ -13,10 +13,13 @@ import {
   createOrgInvite,
   createServiceClient,
   getActiveOrgContext,
+  isTeamAvailabilityStatus,
   listPendingInvites,
   resendOrgInvite,
   revokeOrgInvite,
+  upsertTeamMemberAvailability,
   type OrgInvite,
+  type TeamAvailabilityStatus,
 } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
@@ -239,4 +242,60 @@ export async function listPendingInvitesAction(): Promise<ListPendingInvitesActi
 
   const serviceClient = createServiceClient();
   return listPendingInvites(serviceClient, { orgId: contextResult.data.orgId });
+}
+
+export type UpdateTeamAvailabilityActionState = Result<{
+  status: TeamAvailabilityStatus;
+  userId: string;
+}>;
+
+export async function updateTeamAvailabilityAction(
+  formData: FormData
+): Promise<UpdateTeamAvailabilityActionState> {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return err(ErrorCode.FORBIDDEN, 'You must be signed in to update availability.');
+  }
+
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
+  }
+
+  const userId = typeof formData.get('userId') === 'string' ? (formData.get('userId') as string).trim() : '';
+  const status = formData.get('availabilityStatus');
+
+  if (!userId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Team member is required.');
+  }
+
+  if (!isTeamAvailabilityStatus(status)) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Choose a valid availability status.');
+  }
+
+  const { orgId, role } = orgContextResult.data;
+  const canManageTeam = role === 'owner' || role === 'admin';
+  if (userId !== user.id && !canManageTeam) {
+    return err(ErrorCode.FORBIDDEN, 'Only owners and admins can update another team member.');
+  }
+
+  const result = await upsertTeamMemberAvailability(supabase, {
+    actorUserId: user.id,
+    orgId,
+    status,
+    userId,
+  });
+  if (!result.success) return result;
+
+  revalidatePath('/team');
+  return ok({ status, userId });
+}
+
+export async function updateTeamAvailabilityFormAction(formData: FormData): Promise<void> {
+  await updateTeamAvailabilityAction(formData);
 }
