@@ -17,16 +17,17 @@ import { ErrorState } from '@/components/ui/error-state';
 import { signOutAction } from './actions';
 
 // ── LAYER 2: adapter / view-model (Forge V1.1 Today redesign, see ./_lib/view-model.ts) ──
-import { buildSnapshotItems, buildTodaySchedule, deriveFirstName, deriveGreeting, sortActionItems } from './_lib/view-model';
+import { buildSnapshotItems, buildTodaySchedule, sortActionItems } from './_lib/view-model';
 
 // ── LAYER 3: presentation-only components ───────────────────────────────
 import { Button } from '@/components/ui/button';
-import { TodayHeader } from './_components/today-header';
 import { ActionQueue } from './_components/action-queue';
 import { QuickActions, type QuickActionItem } from './_components/quick-actions';
 import { SnapshotGrid } from './_components/snapshot-grid';
 import { TodaySchedule } from './_components/today-schedule';
 import { AdminLinks } from './_components/admin-links';
+import { BrowseForge } from './_components/browse-forge';
+import { TodayViewToggle } from './_components/today-view-toggle';
 
 export const metadata: Metadata = { title: 'Today' };
 
@@ -76,7 +77,7 @@ export default async function TodayPage() {
     );
   }
 
-  const { orgId, orgName, role, hasMultipleOrgs, availableOrgs } = orgContextResult.data;
+  const { orgId, role } = orgContextResult.data;
   const canManageTeam = role === 'owner' || role === 'admin';
 
   const startOfDay = new Date();
@@ -87,9 +88,8 @@ export default async function TodayPage() {
   const recentActivitySince = new Date();
   recentActivitySince.setDate(recentActivitySince.getDate() - 14);
 
-  const [profileResult, requestsResult, todayJobsResult, actionItemsResult, quoteActivityResult, siteVisitsResult, invoicesNeedingActionResult] =
+  const [requestsResult, todayJobsResult, actionItemsResult, quoteActivityResult, siteVisitsResult, invoicesNeedingActionResult] =
     await Promise.all([
-      supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle(),
       supabase.from('service_requests').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', 'new'),
       supabase
         .from('jobs')
@@ -130,43 +130,31 @@ export default async function TodayPage() {
     todayScheduleCount: schedule.length,
     invoicesNeedingActionCount,
   });
-  const firstName = deriveFirstName(profileResult.data?.full_name ?? null, user.email ?? null);
-  const greeting = deriveGreeting(new Date());
-  const formattedDate = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const userEmail = user.email || 'No email found';
-
   // Capability filtering happens here (Layer 1) — the only layer allowed
   // to call hasCapability(). Layer 3 never decides which actions render.
   const quickActions: QuickActionItem[] = [
-    { id: 'new-customer', label: 'New customer', href: '/customers/new' },
-    ...(hasCapability(role, 'canCreateEstimates') ? [{ id: 'new-estimate', label: 'New estimate', href: '/estimates/new' }] : []),
-    ...(hasCapability(role, 'canCreateInvoices') ? [{ id: 'new-invoice', label: 'New invoice', href: '/invoices' }] : []),
-    { id: 'review-quotes', label: 'Review quotes', href: '/quotes' },
+    { id: 'create-request', label: 'Create request', href: '/requests' },
+    { id: 'create-customer', label: 'Create customer', href: '/customers/new' },
+    ...(hasCapability(role, 'canCreateEstimates') ? [{ id: 'create-estimate', label: 'Create estimate', href: '/estimates/new' }] : []),
+    ...(hasCapability(role, 'canCreateDirectWorkOrder') ? [{ id: 'schedule-work', label: 'Schedule work', href: '/jobs/new' }] : []),
   ];
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
-      <TodayHeader
-        firstName={firstName}
-        formattedDate={formattedDate}
-        greeting={greeting}
-        userEmail={userEmail}
-        orgId={orgId}
-        orgName={orgName}
-        role={role}
-        hasMultipleOrgs={hasMultipleOrgs}
-        availableOrgs={availableOrgs}
-      />
+    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-24 pt-6 sm:px-6 md:pb-10 lg:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <QuickActions actions={quickActions} />
+        <TodayViewToggle />
+      </div>
 
-      <ActionQueue actionItems={sortedActionItems} quoteActivity={quoteActivity} />
-
-      <TodaySchedule entries={schedule} />
-
-      <SnapshotGrid items={snapshotItems} />
-
-      <QuickActions actions={quickActions} />
-
-      <AdminLinks canManageTeam={canManageTeam} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-8">
+        <div className="space-y-8">
+          <ActionQueue actionItems={sortedActionItems} quoteActivity={quoteActivity} />
+          <TodaySchedule entries={schedule} />
+          <SnapshotGrid items={snapshotItems} />
+          <AdminLinks canManageTeam={canManageTeam} />
+        </div>
+        <BrowseForge />
+      </div>
     </main>
   );
 }

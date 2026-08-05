@@ -1,10 +1,8 @@
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Clock, Hourglass, type LucideIcon } from 'lucide-react';
 
 import type { QuoteActivityItem, TodayActionItem } from '@premier/db';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusPill } from '@/components/ui/status-pill';
 
@@ -66,31 +64,24 @@ export function ActionQueue({
           {count} {count === 1 ? 'item' : 'items'}
         </span>
       </div>
-      <Card className="border-l-4 border-l-primary">
-        <CardContent className="divide-y pt-6">
+      <div className="grid gap-3 md:grid-cols-2">
           {actionItems.map((item) => (
             <ActionItemRow key={`${item.kind}-${'estimateId' in item ? item.estimateId : item.quoteId}`} item={item} />
           ))}
           {quoteActivity.map((entry) => (
-            <div key={entry.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0 space-y-1">
-                <p className="text-sm font-medium">
-                  {entry.isAccepted ? 'Quote accepted — ' : 'Quote declined — '}
-                  {entry.label}
-                </p>
-                {entry.message ? <p className="text-xs text-muted-foreground">{entry.message}</p> : null}
-                <StatusPill tone={entry.isAccepted ? 'emerald' : 'amber'}>{entry.isAccepted ? 'Ready to create a job' : 'Declined'}</StatusPill>
-              </div>
-              <Button asChild size="sm" variant={entry.isAccepted ? 'default' : 'outline'} className="shrink-0 gap-1.5">
-                <Link href={`/quotes/${entry.quoteId}`}>
-                  {entry.isAccepted ? 'Review & create job' : 'View quote'}
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </Link>
-              </Button>
-            </div>
+            <AttentionCard
+              key={entry.id}
+              badgeTone={entry.isAccepted ? 'emerald' : 'amber'}
+              badgeIcon={entry.isAccepted ? Clock : Hourglass}
+              badgeLabel={entry.isAccepted ? 'Ready to convert' : 'Awaiting follow-up'}
+              title={entry.isAccepted ? 'Quote accepted — ready for job review' : 'Follow up on quote decision'}
+              description={entry.message ?? entry.label}
+              customer={entry.label}
+              actionHref={`/quotes/${entry.quoteId}`}
+              actionLabel={entry.isAccepted ? 'Open quote' : 'View quote'}
+            />
           ))}
-        </CardContent>
-      </Card>
+      </div>
     </section>
   );
 }
@@ -99,60 +90,87 @@ export function ActionQueue({
 function ActionItemRow({ item }: { item: TodayActionItem }) {
   if (item.kind === 'pricing_review_requested') {
     return (
-      <div className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <p className="text-sm font-medium">
-            {item.estimateNumber} — {item.title}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {item.customerName ?? 'No customer'} • {formatMoney(item.proposedTotal)}
-            {item.submittedByName ? ` • Submitted by ${item.submittedByName}` : ''}
-          </p>
-          <StatusPill tone="amber">Awaiting your review</StatusPill>
-        </div>
-        <Button asChild size="sm" className="shrink-0 gap-1.5">
-          <Link href={`/estimates/${item.estimateId}`}>
-            Review estimate
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </Link>
-        </Button>
-      </div>
+      <AttentionCard
+        badgeTone="red"
+        badgeIcon={AlertTriangle}
+        badgeLabel="Pricing review"
+        title="Approve estimate pricing review before it blocks scheduling"
+        description={`${item.estimateNumber} · ${formatMoney(item.proposedTotal)}${item.submittedByName ? ` · Submitted by ${item.submittedByName}` : ''}`}
+        customer={item.customerName ?? 'No customer'}
+        actionHref={`/estimates/${item.estimateId}`}
+        actionLabel="Open estimate"
+      />
     );
   }
 
   if (item.kind === 'create_quote') {
     return (
-      <div className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <p className="text-sm font-medium">
-            {item.estimateNumber} — {item.title}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">{item.customerName ?? 'No customer'}</p>
-          <StatusPill tone="emerald">Pricing approved — ready to quote</StatusPill>
-        </div>
-        <Button asChild size="sm" className="shrink-0 gap-1.5">
-          <Link href={`/estimates/${item.estimateId}`}>
-            Create quote
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </Link>
-        </Button>
-      </div>
+      <AttentionCard
+        badgeTone="emerald"
+        badgeIcon={Clock}
+        badgeLabel="Ready to quote"
+        title="Create quote from approved estimate"
+        description={`${item.estimateNumber} · ${item.title}`}
+        customer={item.customerName ?? 'No customer'}
+        actionHref={`/estimates/${item.estimateId}`}
+        actionLabel="Create quote"
+      />
     );
   }
 
   return (
-    <div className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <p className="truncate text-sm font-medium">{item.quoteNumber ?? item.title ?? 'Quote'}</p>
-        <p className="truncate text-xs text-muted-foreground">{item.customerName ?? 'No customer'}</p>
-        <StatusPill tone="blue">Draft quote ready — send quote</StatusPill>
-      </div>
-      <Button asChild size="sm" className="shrink-0 gap-1.5">
-        <Link href={`/quotes/${item.quoteId}`}>
-          Send quote
+    <AttentionCard
+      badgeTone="blue"
+      badgeIcon={Clock}
+      badgeLabel="Draft quote"
+      title="Send quote before the customer waits"
+      description={item.quoteNumber ?? item.title ?? 'Quote'}
+      customer={item.customerName ?? 'No customer'}
+      actionHref={`/quotes/${item.quoteId}`}
+      actionLabel="Send quote"
+    />
+  );
+}
+
+function AttentionCard({
+  actionHref,
+  actionLabel,
+  badgeIcon: Icon,
+  badgeLabel,
+  badgeTone,
+  customer,
+  description,
+  title,
+}: {
+  actionHref: string;
+  actionLabel: string;
+  badgeIcon: LucideIcon;
+  badgeLabel: string;
+  badgeTone: 'amber' | 'blue' | 'emerald' | 'red';
+  customer: string;
+  description: string;
+  title: string;
+}) {
+  return (
+    <article className="rounded-2xl border bg-card p-4 shadow-sm">
+      <div className="space-y-3">
+        <StatusPill tone={badgeTone}>
+          <Icon className="h-3 w-3" aria-hidden="true" />
+          {badgeLabel}
+        </StatusPill>
+        <div>
+          <h3 className="text-base font-bold leading-tight text-card-foreground">{title}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        </div>
+        <p className="truncate text-xs font-bold text-card-foreground">{customer}</p>
+        <Link
+          href={actionHref}
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {actionLabel}
           <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
         </Link>
-      </Button>
-    </div>
+      </div>
+    </article>
   );
 }
