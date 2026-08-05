@@ -1,16 +1,30 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Clock, MapPin } from 'lucide-react';
 
 import { createServiceClient, getActiveOrgContext, getSiteVisitById } from '@premier/db';
 import type { InspectionFieldDefinition } from '@premier/shared';
 
+import {
+  ForgeBackLink,
+  ForgeCard,
+  ForgePage,
+  ForgeSectionTitle,
+  ForgeStatusPill,
+} from '@/components/forge/presentation';
 import { getServerSupabase } from '@/lib/supabase-server';
 
-import { ScheduleForm } from '../_components/schedule-form';
-import { LifecycleButtons } from '../_components/lifecycle-buttons';
-import { InspectionForm } from '../_components/inspection-form';
 import { GenerateEstimateButton } from '../_components/generate-estimate-button';
+import { LifecycleButtons } from '../_components/lifecycle-buttons';
+import { ScheduleForm } from '../_components/schedule-form';
+import { StartInspectionButton } from '../_components/start-inspection-button';
+import {
+  inspectionDetailProgress,
+  siteVisitDetailActions,
+  siteVisitStatusLabel,
+  siteVisitStatusTone,
+} from '../_lib/forge-site-visit-view-model';
 
 export const metadata: Metadata = { title: 'Site Visits' };
 
@@ -41,47 +55,55 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
 
   if (!result.success) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6">
-        <BackLink requestId={null} />
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <ForgePage className="max-w-3xl gap-5">
+        <ForgeBackLink href="/site-visits">Site Visits</ForgeBackLink>
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {result.error === 'NOT_FOUND' ? 'Site visit not found.' : `Failed to load site visit: ${result.error}`}
         </p>
-      </main>
+      </ForgePage>
     );
   }
 
   const visit = result.data;
   const fieldDefinitions = visit.fieldDefinitions as InspectionFieldDefinition[];
+  const progress = inspectionDetailProgress(visit.inspectionResponses ?? {}, fieldDefinitions);
+  const actions = siteVisitDetailActions(visit);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6">
-      <BackLink requestId={visit.serviceRequestId} />
+    <ForgePage className="max-w-3xl gap-5 md:gap-6">
+      <ForgeBackLink href="/site-visits">Site Visits</ForgeBackLink>
 
-      <header className="space-y-1">
+      <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={visit.status} />
+          <ForgeStatusPill tone={siteVisitStatusTone(visit.status)}>
+            {siteVisitStatusLabel(visit.status)}
+          </ForgeStatusPill>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            SV-{visit.id.slice(0, 8).toUpperCase()}
+          </span>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{visit.serviceRequestTitle}</h1>
-        <p className="text-sm text-muted-foreground">{visit.customerDisplayName}</p>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{visit.serviceRequestTitle}</h1>
+          <p className="text-sm text-muted-foreground">{visit.customerDisplayName}</p>
+        </div>
       </header>
 
       {visit.generatedEstimateId ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <ForgeCard className="border-emerald-200 bg-emerald-50 text-sm text-emerald-800">
           Estimate generated.{' '}
-          <Link href={`/estimates/${visit.generatedEstimateId}`} className="font-medium underline underline-offset-2">
+          <Link href={`/estimates/${visit.generatedEstimateId}`} className="font-bold underline underline-offset-2">
             View estimate →
           </Link>
-        </div>
+        </ForgeCard>
       ) : null}
 
-      <section className="space-y-3 rounded-md border bg-background p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Appointment</h2>
+      <ForgeCard className="space-y-3">
+        <ForgeSectionTitle>Appointment</ForgeSectionTitle>
         {visit.activeAppointment ? (
-          <div className="space-y-1 text-sm">
-            <p className="font-medium">
-              {formatDateTime(visit.activeAppointment.scheduledStart)} – {formatDateTime(visit.activeAppointment.scheduledEnd)}
-            </p>
-          </div>
+          <p className="flex items-center gap-1.5 text-sm font-bold">
+            <Clock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            {formatDateTime(visit.activeAppointment.scheduledStart)} – {formatDateTime(visit.activeAppointment.scheduledEnd)}
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground">Not yet scheduled.</p>
         )}
@@ -92,60 +114,166 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
             currentAppointmentId={visit.activeAppointment?.id ?? null}
           />
         ) : null}
-      </section>
+      </ForgeCard>
 
-      <section className="flex flex-wrap items-center gap-2">
-        <LifecycleButtons siteVisitId={visit.id} status={visit.status} />
-      </section>
+      <ForgeCard className="space-y-3">
+        <ForgeSectionTitle>Inspection handoff</ForgeSectionTitle>
+        <div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-muted-foreground">
+              Inspection progress: {progress.completed}/{progress.total}
+            </span>
+            <span className="font-bold text-primary">
+              {progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0}%
+            </span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0}%` }}
+            />
+          </div>
+        </div>
 
-      {visit.status === 'in_progress' || visit.status === 'completed' ? (
-        <section className="space-y-3 rounded-md border bg-background p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Inspection findings</h2>
-          <InspectionForm
-            siteVisitId={visit.id}
-            fieldDefinitions={fieldDefinitions}
-            initialResponses={visit.inspectionResponses ?? {}}
-            readOnly={visit.status === 'completed'}
-          />
-        </section>
+        {progress.missingRequired.length > 0 && visit.status !== 'completed' ? (
+          <p className="text-xs text-muted-foreground">
+            Required before completion: {progress.missingRequired.join(', ')}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {actions.map((action) => {
+            if (action.id === 'start-inspection') return <StartInspectionButton key={action.id} siteVisitId={visit.id} />;
+            if (action.id === 'generate-estimate') return <GenerateEstimateButton key={action.id} siteVisitId={visit.id} />;
+            if (action.href) {
+              const href = action.href === 'inspection' ? `/site-visits/${visit.id}/inspection` : action.href;
+              return (
+                <Link
+                  key={action.id}
+                  href={href}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:opacity-90"
+                >
+                  {action.label} →
+                </Link>
+              );
+            }
+            return null;
+          })}
+          <LifecycleButtons siteVisitId={visit.id} status={visit.status} hideStart />
+        </div>
+      </ForgeCard>
+
+      <VisitContextCard visit={visit} />
+
+      {visit.status === 'completed' ? (
+        <CompletedInspectionSummary
+          responses={visit.inspectionResponses ?? {}}
+          fieldDefinitions={fieldDefinitions}
+        />
       ) : null}
-
-      {visit.status === 'completed' && !visit.generatedEstimateId ? (
-        <GenerateEstimateButton siteVisitId={visit.id} />
-      ) : null}
-    </main>
+    </ForgePage>
   );
 }
 
-function BackLink({ requestId }: { requestId: string | null }) {
+function VisitContextCard({
+  visit,
+}: {
+  visit: {
+    serviceRequestId: string;
+    customerId: string;
+    customerDisplayName: string;
+    serviceRequestTitle: string;
+    activeAppointment: { scheduledStart: string; scheduledEnd: string } | null;
+  };
+}) {
   return (
-    <Link
-      href={requestId ? `/requests/${requestId}` : '/requests'}
-      className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-    >
-      ← Back to request
-    </Link>
+    <ForgeCard className="space-y-3">
+      <ForgeSectionTitle>Related records</ForgeSectionTitle>
+      <div className="grid gap-2 text-sm">
+        <Link href={`/requests/${visit.serviceRequestId}`} className="rounded-xl border px-3 py-2 font-bold hover:bg-muted">
+          Source request →
+        </Link>
+        <Link href={`/customers/${visit.customerId}`} className="rounded-xl border px-3 py-2 font-bold hover:bg-muted">
+          {visit.customerDisplayName} →
+        </Link>
+      </div>
+    </ForgeCard>
   );
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  awaiting_scheduling: 'bg-slate-100 text-slate-600',
-  scheduled: 'bg-blue-50 text-blue-700',
-  in_progress: 'bg-amber-50 text-amber-700',
-  completed: 'bg-emerald-50 text-emerald-700',
-  cancelled: 'bg-red-50 text-red-700',
-};
+function CompletedInspectionSummary({
+  responses,
+  fieldDefinitions,
+}: {
+  responses: Record<string, unknown>;
+  fieldDefinitions: InspectionFieldDefinition[];
+}) {
+  const visibleResponses = fieldDefinitions
+    .filter((field) => hasInspectionValue(responses[field.key]))
+    .sort((a, b) => a.displayOrder - b.displayOrder);
 
-function StatusBadge({ status }: { status: string }) {
-  const color = STATUS_COLORS[status] ?? 'bg-slate-100 text-slate-600';
+  if (visibleResponses.length === 0) return null;
+
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {status
-        .split('_')
-        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(' ')}
-    </span>
+    <ForgeCard className="space-y-3">
+      <ForgeSectionTitle>Completed inspection summary</ForgeSectionTitle>
+      <div className="grid gap-3">
+        {visibleResponses.map((field) => (
+          <div key={field.key} className="rounded-xl border bg-muted/20 p-3">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              {field.label}
+            </p>
+            <div className="mt-1 text-sm">
+              <InspectionValue value={responses[field.key]} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </ForgeCard>
   );
+}
+
+function InspectionValue({ value }: { value: unknown }) {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return <span>{String(value)}</span>;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-muted-foreground">None</span>;
+    return (
+      <ul className="space-y-1">
+        {value.map((entry, index) => (
+          <li key={index} className="flex items-start gap-1">
+            <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span>{formatInspectionEntry(entry)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return <span>{formatInspectionEntry(value)}</span>;
+}
+
+function formatInspectionEntry(value: unknown): string {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value && typeof value === 'object') {
+    return Object.entries(value)
+      .map(([key, entry]) => `${formatKey(key)}: ${String(entry)}`)
+      .join(', ');
+  }
+  return 'Recorded';
+}
+
+function hasInspectionValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function formatKey(value: string): string {
+  return value.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
 }
 
 function formatDateTime(value: string): string {

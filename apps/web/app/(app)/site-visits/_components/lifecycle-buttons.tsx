@@ -10,9 +10,10 @@ import { startSiteVisitAction, undoSiteVisitStartAction, cancelSiteVisitAction }
 interface LifecycleButtonsProps {
   siteVisitId: string;
   status: string;
+  hideStart?: boolean;
 }
 
-export function LifecycleButtons({ siteVisitId, status }: LifecycleButtonsProps) {
+export function LifecycleButtons({ siteVisitId, status, hideStart = false }: LifecycleButtonsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -51,7 +52,7 @@ export function LifecycleButtons({ siteVisitId, status }: LifecycleButtonsProps)
 
   const buttons: React.ReactNode[] = [];
 
-  if (status === 'scheduled') {
+  if (status === 'scheduled' && !hideStart) {
     buttons.push(
       <button
         key="start"
