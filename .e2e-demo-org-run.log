@@ -1,0 +1,464 @@
+◇ injected env (14) from .env.test // tip: ⌘ override existing { override: true }
+
+Running 173 tests using 1 worker
+
+◇ injected env (0) from .env.test // tip: ◈ encrypted .env [www.dotenvx.com]
+  ✓    1 [chromium] › tests\e2e\auth-bot.spec.ts:14:7 › auth bot › app loads (6.9s)
+  ✓    2 [chromium] › tests\e2e\auth-bot.spec.ts:19:7 › auth bot › login page is reachable and renders the sign-in form (1.7s)
+  ✓    3 [chromium] › tests\e2e\auth-bot.spec.ts:28:7 › auth bot › submitting bad credentials shows an error, not a silent failure (4.0s)
+  ✓    4 [chromium] › tests\e2e\auth-bot.spec.ts:42:7 › auth bot › admin can log in with valid credentials (1.4s)
+  ✓    5 [chromium] › tests\e2e\cleanup-safety.spec.ts:21:7 › cleanup safety guards › refuses to run for a marker without the E2E_TEST_ prefix (8ms)
+  ✓    6 [chromium] › tests\e2e\cleanup-safety.spec.ts:27:7 › cleanup safety guards › refuses to run against a non-local Supabase URL without explicit opt-in (2ms)
+  ✓    7 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:62:9 › customer command center bot › command center — active surfaces › opens a customer and sees stats, contact, and notes (5.2s)
+  ✓    8 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:80:9 › customer command center bot › command center — active surfaces › properties tile: navigate to a property and back (4.5s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....4.4s
+Create Property.....2.0s
+Cleanup.............0.5s
+
+  ✓    9 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:101:9 › customer command center bot › command center — active surfaces › session fixtures are reused, not recreated, on a second call (1ms)
+  -   10 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:115:8 › customer command center bot › jobs tile: navigate to filtered jobs for this customer
+  -   11 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:124:8 › customer command center bot › invoices tile: navigate to filtered invoices for this customer
+  -   12 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:130:8 › customer command center bot › estimates tile: navigate to filtered estimates for this customer
+  -   13 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:136:8 › customer command center bot › payments: view payments recorded against this customer
+  -   14 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:144:8 › customer command center bot › notes: add or edit a note on this customer
+  -   15 [chromium] › tests\e2e\customer-command-center-bot.spec.ts:154:8 › customer command center bot › documents: upload or view a document on this customer
+  ✓   16 [chromium] › tests\e2e\customer-crud-bot.spec.ts:44:7 › customer crud bot › customers page redirects to login when not authenticated (1.7s)
+  ✓   17 [chromium] › tests\e2e\customer-crud-bot.spec.ts:50:7 › customer crud bot › customers page is reachable after login (2.0s)
+  ✓   18 [chromium] › tests\e2e\customer-crud-bot.spec.ts:69:9 › customer crud bot › full create → search → detail → cleanup flow › creates a new test customer end to end (2.9s)
+  ✓   19 [chromium] › tests\e2e\customer-crud-bot.spec.ts:92:9 › customer crud bot › full create → search → detail → cleanup flow › appears in customer search results (1.9s)
+  ✓   20 [chromium] › tests\e2e\customer-crud-bot.spec.ts:105:9 › customer crud bot › full create → search → detail → cleanup flow › opens the customer detail page directly by id (2.0s)
+  -   21 [chromium] › tests\e2e\customer-crud-bot.spec.ts:120:10 › customer crud bot › full create → search → detail → cleanup flow › edits an existing test customer
+  ✓   22 [chromium] › tests\e2e\customer-crud-bot.spec.ts:131:9 › customer crud bot › full create → search → detail → cleanup flow › cleans up the created test customer (400ms)
+  ✓   23 [chromium] › tests\e2e\customer-intake-bot.spec.ts:54:9 › customer intake bot › POST /api/v1/service-requests › 1. happy path creates a service_requests row and sends a confirmation email (2.1s)
+  ✓   24 [chromium] › tests\e2e\customer-intake-bot.spec.ts:105:9 › customer intake bot › POST /api/v1/service-requests › 2. honeypot submission is silently accepted without creating a lead (298ms)
+  ✓   25 [chromium] › tests\e2e\customer-intake-bot.spec.ts:125:9 › customer intake bot › POST /api/v1/service-requests › 3. invalid payload is rejected with a 400 and validation issues (30ms)
+  ✓   26 [chromium] › tests\e2e\customer-intake-bot.spec.ts:140:9 › customer intake bot › POST /api/v1/quote-requests › 5. happy path creates a tasks row (not service_requests) and sends no email — locks in current behavior (2.4s)
+  ✓   27 [chromium] › tests\e2e\customer-intake-bot.spec.ts:182:9 › customer intake bot › POST /api/v1/quote-requests › 6. deduplicates by email on a second submission from the same address (591ms)
+
+Performance metrics
+Login...............1.4s
+Cleanup.............0.0s
+
+  ✓   28 [chromium] › tests\e2e\customer-intake-bot.spec.ts:218:9 › customer intake bot › (app)/requests review page › 7. UI + DB: owner marks a new request as reviewing (6.6s)
+  ✓   29 [chromium] › tests\e2e\customer-intake-bot.spec.ts:263:9 › customer intake bot › POST /api/v1/service-requests rate limiting › 8. exceeding the per-IP rate limit returns 429 (8.2s)
+  ✓   30 [chromium] › tests\e2e\dashboard-org-resolution-bot.spec.ts:49:9 › dashboard org resolution bot › pending + active membership — dashboard must pick the active one › 1. real active membership resolves correctly before any pending row exists (568ms)
+  ✓   31 [chromium] › tests\e2e\dashboard-org-resolution-bot.spec.ts:56:9 › dashboard org resolution bot › pending + active membership — dashboard must pick the active one › 2. a stale pending row in a second org does not change what the dashboard shows (673ms)
+
+Performance metrics
+Login...............1.3s
+Cleanup.............0.0s
+
+  ✓   32 [chromium] › tests\e2e\dashboard-org-resolution-bot.spec.ts:96:9 › dashboard org resolution bot › pending + active membership — dashboard must pick the active one › 3. after cleaning up the throwaway pending row, the dashboard still resolves correctly (692ms)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.5s
+Create Job..........7.1s
+Create Invoice......5.0s
+Cleanup.............0.6s
+
+  ✓   33 [chromium] › tests\e2e\data-consistency-bot.spec.ts:25:7 › data consistency bot › invoice total equals the sum of its line items (19.2s)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.3s
+Create Job..........2.3s
+Create Invoice......1.8s
+Cleanup.............0.6s
+
+  ✓   34 [chromium] › tests\e2e\data-consistency-bot.spec.ts:44:7 › data consistency bot › invoice list totals match invoice detail totals (9.8s)
+  -   35 [chromium] › tests\e2e\data-consistency-bot.spec.ts:67:8 › data consistency bot › revenue summary matches sum of paid invoices in the period
+  -   36 [chromium] › tests\e2e\data-consistency-bot.spec.ts:72:8 › data consistency bot › customer command center invoice count matches invoices list filtered by customer
+  -   37 [chromium] › tests\e2e\data-consistency-bot.spec.ts:76:8 › data consistency bot › material pass-through and markup totals reconcile for a commercial vs residential job
+  ✓   38 [chromium] › tests\e2e\demonstration-org-bootstrap-bot.spec.ts:53:7 › demonstration organization bootstrap bot › 1. is restricted to service_role — a real authenticated client is denied (386ms)
+  ✓   39 [chromium] › tests\e2e\demonstration-org-bootstrap-bot.spec.ts:68:7 › demonstration organization bootstrap bot › 2. is idempotent — two calls return the same organization ID, no duplicate row (149ms)
+  ✓   40 [chromium] › tests\e2e\demonstration-org-bootstrap-bot.spec.ts:81:7 › demonstration organization bootstrap bot › 3. creates an audit record identifying who initiated it (49ms)
+  ✓   41 [chromium] › tests\e2e\demonstration-org-bootstrap-bot.spec.ts:92:7 › demonstration organization bootstrap bot › 4. the created organization has the expected identity and timezone (33ms)
+  ✓   42 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:64:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 1. owner has an active shared customer + property, employee confirmed active (2ms)
+  ✓   43 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:71:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 2. employee finds the shared customer and opens the shared property (1.1s)
+  ✓   44 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:85:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 3. employee creates an estimate for the shared customer/property (5.2s)
+  ✓   45 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:90:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 4. employee can leave and reopen the estimate — data persists (1.1s)
+  ✓   46 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:101:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 5. the same estimate reopens correctly after a fresh employee login (1.7s)
+  -   47 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:121:10 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › employee edits the draft estimate's title/description, or adds line items to it directly
+  ✓   48 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:129:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 6. employee advances the estimate toward a site visit (the one real "edit" a draft supports) (1.4s)
+  ✓   49 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:138:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 7. employee approves the estimate into a draft quote and adds a line item (4.3s)
+  ✓   50 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:157:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 8. employee leaves and reopens the quote — the line item persists (1.2s)
+  ✓   51 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:164:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 9. owner opens the same customer and finds the employee-created estimate (1.2s)
+  ✓   52 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:179:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 10. owner sees creator attribution on the employee-created estimate (484ms)
+  ✓   53 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:185:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 11. owner sees the employee-added line item and can continue the quote (1.5s)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.3s
+Create Property.....1.4s
+Cleanup.............0.5s
+
+
+Performance metrics
+Login...............1.4s
+Create Estimate.....5.2s
+Cleanup.............0.0s
+
+  ✓   54 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:199:9 › employee estimate workflow bot › desktop: shared estimate workflow (Phase 4 & 5) › 12. only one shared customer exists — no duplicate created by either session (523ms)
+  ✓   55 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:231:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — phone-small (375x667) › employee can find the shared customer, open the property, and create an estimate (2.4s)
+  ✓   56 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:244:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — phone-small (375x667) › no horizontal overflow on the estimate creation form at this viewport (480ms)
+  ✓   57 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:259:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — phone-small (375x667) › key touch targets meet the app's minimum comfortable tap size (458ms)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.4s
+Create Property.....1.4s
+Cleanup.............0.5s
+
+
+Performance metrics
+Login...............1.4s
+Create Estimate.....1.9s
+Cleanup.............0.0s
+
+  ✓   58 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:271:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — phone-small (375x667) › no owner-only controls are shown to the employee on the estimate detail page (507ms)
+  ✓   59 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:231:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — phone-standard (390x844) › employee can find the shared customer, open the property, and create an estimate (2.6s)
+  ✓   60 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:244:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — phone-standard (390x844) › no horizontal overflow on the estimate creation form at this viewport (408ms)
+  ✓   61 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:259:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — phone-standard (390x844) › key touch targets meet the app's minimum comfortable tap size (514ms)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.4s
+Create Property.....1.4s
+Cleanup.............0.5s
+
+
+Performance metrics
+Login...............1.4s
+Create Estimate.....2.0s
+Cleanup.............0.0s
+
+  ✓   62 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:271:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — phone-standard (390x844) › no owner-only controls are shown to the employee on the estimate detail page (547ms)
+  ✓   63 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:231:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — tablet (820x1180) › employee can find the shared customer, open the property, and create an estimate (2.5s)
+  ✓   64 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:244:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — tablet (820x1180) › no horizontal overflow on the estimate creation form at this viewport (397ms)
+  ✓   65 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:259:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — tablet (820x1180) › key touch targets meet the app's minimum comfortable tap size (434ms)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.3s
+Create Property.....1.4s
+Cleanup.............0.6s
+
+
+Performance metrics
+Login...............1.4s
+Create Estimate.....1.9s
+Cleanup.............0.0s
+
+  ✓   66 [chromium] › tests\e2e\employee-estimate-workflow-bot.spec.ts:271:11 › employee estimate workflow bot › mobile/tablet: employee estimate workflow — tablet (820x1180) › no owner-only controls are shown to the employee on the estimate detail page (483ms)
+  ✓   67 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:117:9 › employee onboarding — admin invite bot › clean-room onboarding: brand-new address via Supabase admin invite › 1. owner sends the invitation and the Supabase admin invite call succeeds (3.5s)
+  ✓   68 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:147:9 › employee onboarding — admin invite bot › clean-room onboarding: brand-new address via Supabase admin invite › 4. invitation callback establishes a session and 5. activates the intended org membership (3.4s)
+  ✓   69 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:201:9 › employee onboarding — admin invite bot › clean-room onboarding: brand-new address via Supabase admin invite › 6. invite becomes accepted and 7. dashboard displays the real organization name (565ms)
+  ✓   70 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:213:9 › employee onboarding — admin invite bot › clean-room onboarding: brand-new address via Supabase admin invite › 8. employee sees shared CRM records (555ms)
+  ✓   71 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:222:9 › employee onboarding — admin invite bot › clean-room onboarding: brand-new address via Supabase admin invite › 9. logout and login work (2.2s)
+
+Performance metrics
+Login...............1.8s
+Cleanup.............0.0s
+
+  ✓   72 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:234:9 › employee onboarding — admin invite bot › clean-room onboarding: brand-new address via Supabase admin invite › 10. exactly one membership exists, and re-opening /auth/accept-invite is a safe no-op (2.7s)
+  ✓   73 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:326:9 › employee onboarding — admin invite bot › existing confirmed user joins via the app join email › 2. owner invites that email and the app join-email path is used (no duplicate Auth user) (1.4s)
+  ✓   74 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:348:9 › employee onboarding — admin invite bot › existing confirmed user joins via the app join email › 3. user signs in and 4. the secure join link activates membership (3.7s)
+  ✓   75 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:390:9 › employee onboarding — admin invite bot › existing confirmed user joins via the app join email › only one membership row exists for this user (36ms)
+  ✓   76 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:399:9 › employee onboarding — admin invite bot › existing confirmed user joins via the app join email › wrong signed-in email is refused for the continue link (4.4s)
+  ✓   77 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:464:9 › employee onboarding — admin invite bot › existing confirmed user joins via the app join email › revoked invite is refused for the continue link (4.0s)
+  ✓   78 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:520:9 › employee onboarding — admin invite bot › existing confirmed user joins via the app join email › expired invite is refused for the continue link (4.2s)
+
+Performance metrics
+Login...............1.3s
+Cleanup.............0.0s
+
+  ✓   79 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:578:9 › employee onboarding — admin invite bot › existing confirmed user joins via the app join email › accepted invite is idempotent when the continue link is reused (2.0s)
+  ✓   80 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:636:9 › employee onboarding — admin invite bot › owner-side invite management (duplicate, revoke, resend, expiry) › duplicate pending invite is handled clearly (2.9s)
+  ✓   81 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:662:9 › employee onboarding — admin invite bot › owner-side invite management (duplicate, revoke, resend, expiry) › owner can revoke a pending invite (2.3s)
+  ✓   82 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:683:9 › employee onboarding — admin invite bot › owner-side invite management (duplicate, revoke, resend, expiry) › owner can resend a pending invite (new-user path re-attempts admin.inviteUserByEmail) (3.1s)
+
+Performance metrics
+Login...............1.3s
+Cleanup.............0.0s
+
+  ✓   83 [chromium] › tests\e2e\employee-onboarding-admin-invite-bot.spec.ts:736:9 › employee onboarding — admin invite bot › owner-side invite management (duplicate, revoke, resend, expiry) › expired invite cannot be accepted (2.5s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.3s
+Create Property.....1.9s
+Create Estimate.....1.8s
+Cleanup.............0.5s
+
+  ✓   84 [chromium] › tests\e2e\estimates-lifecycle-bot.spec.ts:25:7 › estimates lifecycle bot › 1. UI + DB: draft → site_visit_scheduled → site_visit_complete → quoted, with the site-visit email firing (10.8s)
+  -   85 [chromium] › tests\e2e\future-automation-readiness-bot.spec.ts:14:8 › future automation readiness bot › AI-generated daily briefing summarizes today’s jobs accurately
+  -   86 [chromium] › tests\e2e\future-automation-readiness-bot.spec.ts:20:8 › future automation readiness bot › SMS notification is sent and logged for a job status change
+  -   87 [chromium] › tests\e2e\future-automation-readiness-bot.spec.ts:26:8 › future automation readiness bot › AI vault search surfaces the right result for a natural-language query
+  -   88 [chromium] › tests\e2e\future-automation-readiness-bot.spec.ts:31:8 › future automation readiness bot › automated report generation produces a GPT-style narrative summary
+  -   89 [chromium] › tests\e2e\future-automation-readiness-bot.spec.ts:36:8 › future automation readiness bot › automation rule engine fires an action when its trigger condition is met
+  -   90 [chromium] › tests\e2e\future-automation-readiness-bot.spec.ts:42:8 › future automation readiness bot › pricing suggestion tool returns a market-calibrated estimate
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.3s
+Create Property.....1.4s
+Create Estimate.....1.9s
+Cleanup.............0.6s
+
+  ✓   91 [chromium] › tests\e2e\integrated-lifecycle-bot.spec.ts:78:7 › integrated request-to-payment lifecycle › 1. happy path: quote acceptance -> exactly one job -> scheduling -> deposit -> working invoice -> proposed change order -> customer approval -> incorporated once -> final invoice ready (26.6s)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.6s
+Create Property.....1.4s
+Create Estimate.....1.8s
+Cleanup.............0.5s
+
+  ✓   92 [chromium] › tests\e2e\integrated-lifecycle-bot.spec.ts:300:7 › integrated request-to-payment lifecycle › 2. duplicate quote acceptance cannot create duplicate jobs (11.5s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.3s
+Create Property.....1.4s
+Create Job..........4.4s
+Cleanup.............0.5s
+
+  ✓   93 [chromium] › tests\e2e\integrated-lifecycle-bot.spec.ts:367:7 › integrated request-to-payment lifecycle › 3. unauthorized customer cannot approve another customer's change order; declined change orders do not alter the working invoice; approved/incorporated revisions are immutable (10.3s)
+  ✓   94 [chromium] › tests\e2e\invoice-management-bot.spec.ts:21:7 › invoice management bot › invoices page redirects to login when not authenticated (2.9s)
+  ✓   95 [chromium] › tests\e2e\invoice-management-bot.spec.ts:27:7 › invoice management bot › invoices page is reachable after login (1.9s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.5s
+Create Job..........2.1s
+Create Invoice......2.4s
+Cleanup.............0.6s
+
+  ✓   96 [chromium] › tests\e2e\invoice-management-bot.spec.ts:37:7 › invoice management bot › creates a new invoice for a test job (8.1s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.3s
+Create Job..........2.5s
+Create Invoice......1.8s
+Cleanup.............0.6s
+
+  ✓   97 [chromium] › tests\e2e\invoice-management-bot.spec.ts:53:7 › invoice management bot › sends a test invoice and confirms status updates (12.4s)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.4s
+Create Job..........2.2s
+Create Invoice......2.4s
+Cleanup.............0.6s
+
+  ✓   98 [chromium] › tests\e2e\invoice-management-bot.spec.ts:91:7 › invoice management bot › records a payment against a test invoice (12.6s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.4s
+Create Job..........2.0s
+Create Invoice......2.5s
+Cleanup.............0.6s
+
+  ✓   99 [chromium] › tests\e2e\invoice-management-bot.spec.ts:130:7 › invoice management bot › voids a test invoice (11.3s)
+  ✓  100 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:24:9 › mobile simplicity bot — phone-small (375x667) › login page renders and the sign-in button is a comfortable tap target (525ms)
+  ✓  101 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:43:9 › mobile simplicity bot — phone-small (375x667) › login page has no horizontal scroll at this viewport (490ms)
+  ✓  102 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:24:9 › mobile simplicity bot — phone-standard (390x844) › login page renders and the sign-in button is a comfortable tap target (646ms)
+  ✓  103 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:43:9 › mobile simplicity bot — phone-standard (390x844) › login page has no horizontal scroll at this viewport (514ms)
+  ✓  104 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:24:9 › mobile simplicity bot — tablet (820x1180) › login page renders and the sign-in button is a comfortable tap target (584ms)
+  ✓  105 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:43:9 › mobile simplicity bot — tablet (820x1180) › login page has no horizontal scroll at this viewport (521ms)
+  -  106 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:71:8 › mobile simplicity bot — authenticated screens (TODO) › bottom nav is usable and all items are tappable on phone
+  -  107 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:76:8 › mobile simplicity bot — authenticated screens (TODO) › today screen is legible without zoom on phone
+  -  108 [chromium] › tests\e2e\mobile-simplicity-bot.spec.ts:80:8 › mobile simplicity bot — authenticated screens (TODO) › customer command center is usable on tablet
+  ✓  109 [chromium] › tests\e2e\multi-org-switching-bot.spec.ts:76:7 › multi-org switching bot › 1. a user with two active memberships defaults to the OLDEST (deterministic, no random/unstable ordering) (72ms)
+  ✓  110 [chromium] › tests\e2e\multi-org-switching-bot.spec.ts:89:7 › multi-org switching bot › 2. switch_active_org() denies switching to an org the user is NOT a member of (137ms)
+  ✓  111 [chromium] › tests\e2e\multi-org-switching-bot.spec.ts:97:7 › multi-org switching bot › 3. switch_active_org() succeeds for a real active membership and updates the preference (79ms)
+  ✓  112 [chromium] › tests\e2e\multi-org-switching-bot.spec.ts:105:7 › multi-org switching bot › 4. getActiveOrgContext() — the function every server action/page actually calls — resolves to the org the user just switched to, not the oldest default (73ms)
+  ✓  113 [chromium] › tests\e2e\multi-org-switching-bot.spec.ts:120:7 › multi-org switching bot › 4b. RLS correctly allows reading either org the user genuinely belongs to (multi-membership, not the active-org preference, governs raw table access) — the active-org preference is an application-layer default, not an RLS boundary (126ms)
+  ✓  114 [chromium] › tests\e2e\multi-org-switching-bot.spec.ts:141:7 › multi-org switching bot › 5. switching back to the other real membership works (round-trip, not one-way) (92ms)
+
+Performance metrics
+Login...............1.8s
+Open Dashboard......0.5s
+Create Customer.....1.3s
+Search Customer.....1.1s
+Open Customer.......0.9s
+Create Property.....1.5s
+Open Property.......2.4s
+Create Job..........2.5s
+Create Estimate.....2.9s
+Create Invoice......2.4s
+Return to Dashboard...0.6s
+Cleanup.............0.7s
+
+  ✓  115 [chromium] › tests\e2e\operator-workflow-bot.spec.ts:22:7 › operator workflow bot › a realistic workday: dashboard, find customer, review, create work, back to dashboard (18.6s)
+  ✓  116 [chromium] › tests\e2e\permissions-bot.spec.ts:17:7 › permissions bot › unauthenticated request to an owner/staff route is denied and redirected (5.0s)
+  ✓  117 [chromium] › tests\e2e\permissions-bot.spec.ts:25:7 › permissions bot › unauthenticated request to the team route is denied and redirected (737ms)
+  -  118 [chromium] › tests\e2e\permissions-bot.spec.ts:31:8 › permissions bot › customer account cannot view another customer’s invoices
+  -  119 [chromium] › tests\e2e\permissions-bot.spec.ts:40:8 › permissions bot › customer account cannot view another customer’s properties
+  -  120 [chromium] › tests\e2e\permissions-bot.spec.ts:44:8 › permissions bot › customer portal magic-link token is single-use and scoped
+  ✓  121 [chromium] › tests\e2e\portal-auth-bot.spec.ts:53:9 › portal auth bot › A1: signup confirmation › 1. a real signup confirmation link lands the browser on an authenticated portal dashboard (6.3s)
+  ✓  122 [chromium] › tests\e2e\portal-auth-bot.spec.ts:163:9 › portal auth bot › A5: forgot password + deterministic routing › 1. a real recovery link routes a customer-only account to /portal/dashboard, not /today (2.9s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.6s
+Create Property.....1.4s
+Create Estimate.....2.6s
+Cleanup.............0.7s
+
+  ✓  123 [chromium] › tests\e2e\quote-response-bot.spec.ts:30:7 › quote response bot › 1. customer accepts a quote: activity_log entry, staff notification, exactly one auto-created unscheduled job (15.3s)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.7s
+Create Property.....2.2s
+Create Estimate.....1.9s
+Cleanup.............0.6s
+
+  ✓  124 [chromium] › tests\e2e\quote-response-bot.spec.ts:112:7 › quote response bot › 2. customer declines a quote: activity_log entry with reason, no dashboard action-required styling (12.4s)
+
+Performance metrics
+Login...............3.3s
+Cleanup.............0.0s
+
+  ✓  125 [chromium] › tests\e2e\request-conversion-bot.spec.ts:58:9 › request conversion bot › inspection-first conversion (Phase 3) › 1. UI + DB: "Start inspection flow" creates a draft estimate linked to the request (13.8s)
+
+Performance metrics
+Login...............1.3s
+Cleanup.............0.0s
+
+  ✓  126 [chromium] › tests\e2e\request-conversion-bot.spec.ts:137:9 › request conversion bot › direct work-order conversion (Phase 4) › 2. UI + DB: "Create work order" creates an approved job with no estimate/quote backing (4.4s)
+  ✓  127 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:155:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 1. triage into site_visit_required creates ONLY a site_visits row — no estimate exists yet (133ms)
+  ✓  128 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:167:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 2. schedule then reschedule preserves appointment history (never overwritten in place) (217ms)
+  ✓  129 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:189:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 3. start, save findings (server-action-only path), complete (245ms)
+  ✓  130 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:217:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 4. estimate generation is idempotent and concurrent-safe (93ms)
+  ✓  131 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:231:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 5. quote creation is rejected before pricing approval — RPC AND raw DB trigger both enforce it (97ms)
+  ✓  132 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:240:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 6. subcontractor cannot approve pricing or create/send a quote (capability separation) (70ms)
+  ✓  133 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:245:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 7. owner approves pricing; editing a line item afterward is locked until reopened (129ms)
+  ✓  134 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:254:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 8. employee creates the quote after owner approved pricing (capability separation, positive case) — line items snapshotted (187ms)
+  ✓  135 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:267:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 9. customer-safe summary returns only approved fields; direct base-table SELECT is denied outright (221ms)
+  ✓  136 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:285:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 10. org2 staff cannot act on org1 site visit (cross-org denial) (60ms)
+  ✓  137 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:290:9 › request → site visit → estimate → quote workflow bot › golden path, gating, and isolation › 10b. getSiteVisitById() (service-role query layer) is org-scoped — a real defect found by audit and fixed (246ms)
+  ✓  138 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:409:9 › request → site visit → estimate → quote workflow bot › lifecycle guards, corrections, and DWO authorization › 11. appointment uniqueness — cannot schedule a second active appointment while one is already scheduled (145ms)
+  ✓  139 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:432:9 › request → site visit → estimate → quote workflow bot › lifecycle guards, corrections, and DWO authorization › 12. visit transition protection — illegal status jumps are rejected (80ms)
+  ✓  140 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:443:9 › request → site visit → estimate → quote workflow bot › lifecycle guards, corrections, and DWO authorization › 13. partial inspection autosave persists without completing the visit (108ms)
+  ✓  141 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:458:9 › request → site visit → estimate → quote workflow bot › lifecycle guards, corrections, and DWO authorization › 14. completed inspection is immutable — further saves are rejected (114ms)
+  ✓  142 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:478:9 › request → site visit → estimate → quote workflow bot › lifecycle guards, corrections, and DWO authorization › 15. reopen-for-edit clears pricing approval and unlocks line items (284ms)
+  ✓  143 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:500:9 › request → site visit → estimate → quote workflow bot › lifecycle guards, corrections, and DWO authorization › 16. triage correction: allowed when nothing irreversible has happened, forbidden once it has (332ms)
+  ✓  144 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:532:9 › request → site visit → estimate → quote workflow bot › lifecycle guards, corrections, and DWO authorization › 17. structured direct-work-order authorization: conditional fields are enforced per type (200ms)
+  ✓  145 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:564:9 › request → site visit → estimate → quote workflow bot › lifecycle guards, corrections, and DWO authorization › 18. timeline events for the request are linked and chronologically ordered (42ms)
+  ✓  146 [chromium] › tests\e2e\request-site-visit-workflow-bot.spec.ts:586:9 › request → site visit → estimate → quote workflow bot › capability parity — TypeScript vs SQL › every role/capability pair matches between packages/shared/permissions.ts and role_has_capability() (3.1s)
+
+Performance metrics
+Login...............1.3s
+Cleanup.............0.0s
+
+  ✓  147 [chromium] › tests\e2e\scheduling-bot.spec.ts:54:7 › scheduling bot › 1. UI + DB: scheduling an approved job sets status/window, cascades to the linked request, and emails the customer (6.5s)
+
+Performance metrics
+Login...............1.3s
+Cleanup.............0.0s
+
+  ✓  148 [chromium] › tests\e2e\scheduling-bot.spec.ts:123:7 › scheduling bot › 2. UI: scheduling is refused for a job that is not yet approved (6.4s)
+  ✓  149 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:81:9 › staff permissions bot › employee allowed actions (Phase 2) › 1. employee is signed in under its own persistent account (6ms)
+  ✓  150 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:87:9 › staff permissions bot › employee allowed actions (Phase 2) › 2. employee can access the dashboard (954ms)
+  ✓  151 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:93:9 › staff permissions bot › employee allowed actions (Phase 2) › 3. employee can list and find the owner-created customer (526ms)
+  ✓  152 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:101:9 › staff permissions bot › employee allowed actions (Phase 2) › 4. employee can open the customer and see the owner-created property (607ms)
+  ✓  153 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:111:9 › staff permissions bot › employee allowed actions (Phase 2) › 5. employee can view org-wide lists (jobs, invoices, quotes, estimates) (9.6s)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....2.5s
+Create Property....10.9s
+Cleanup.............0.9s
+
+
+Performance metrics
+Login...............1.4s
+Cleanup.............0.0s
+
+  ✓  154 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:121:9 › staff permissions bot › employee allowed actions (Phase 2) › 6. employee session survives logout and re-login (2.9s)
+  ✓  155 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:151:9 › staff permissions bot › owner-only restrictions (Phase 3) › 1. UI: employee cannot view team management (539ms)
+  ✓  156 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:159:9 › staff permissions bot › owner-only restrictions (Phase 3) › 2. UI: owner can still view team management from its own context (512ms)
+  ✓  157 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:165:9 › staff permissions bot › owner-only restrictions (Phase 3) › 3. UI: employee cannot view website settings (3.9s)
+  ✓  158 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:172:9 › staff permissions bot › owner-only restrictions (Phase 3) › 4. direct API: employee cannot create an org invite (bypassing the UI) (228ms)
+  ✓  159 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:189:9 › staff permissions bot › owner-only restrictions (Phase 3) › 5. direct API: employee cannot promote itself to owner/admin (358ms)
+  ✓  160 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:214:9 › staff permissions bot › owner-only restrictions (Phase 3) › 5b. direct API: employee cannot insert an org_members row directly (Auth Reset architecture) (190ms)
+  ✓  161 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:232:9 › staff permissions bot › owner-only restrictions (Phase 3) › 6. direct API: employee cannot rename or delete the organization (266ms)
+
+Performance metrics
+Login...............1.4s
+Cleanup.............0.0s
+
+
+Performance metrics
+Login...............1.4s
+Cleanup.............0.0s
+
+  -  162 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:255:10 › staff permissions bot › owner-only restrictions (Phase 3) › no UI or server action exists yet for ownership transfer or org deletion
+  ✓  163 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:304:9 › staff permissions bot › financial capability restrictions (Phase 4) › 1. UI + DB: employee CAN send an invoice (canSendInvoices stays open to employees) (9.1s)
+  ✓  164 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:329:9 › staff permissions bot › financial capability restrictions (Phase 4) › 2. UI: employee attempting to record a payment is refused with a capability error (809ms)
+  ✓  165 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:345:9 › staff permissions bot › financial capability restrictions (Phase 4) › 3. direct API: employee cannot insert a payment row (bypassing the UI) (249ms)
+  ✓  166 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:359:9 › staff permissions bot › financial capability restrictions (Phase 4) › 4. UI: employee attempting to void the invoice is refused with a capability error (780ms)
+  ✓  167 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:369:9 › staff permissions bot › financial capability restrictions (Phase 4) › 5. direct API: employee cannot update the invoice status to void (bypassing the UI) (519ms)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.6s
+Create Property.....1.5s
+Create Job..........3.7s
+Create Invoice......3.5s
+Cleanup.............0.9s
+
+
+Performance metrics
+Login...............1.4s
+Cleanup.............0.0s
+
+  ✓  168 [chromium] › tests\e2e\staff-permissions-bot.spec.ts:392:9 › staff permissions bot › financial capability restrictions (Phase 4) › 6. UI + DB: owner CAN record a payment and void an invoice (positive control) (10.5s)
+
+Performance metrics
+Login...............1.4s
+Create Customer.....1.7s
+Create Property.....1.5s
+Create Estimate.....7.8s
+Cleanup.............0.5s
+
+  ✓  169 [chromium] › tests\e2e\transactional-email-bot.spec.ts:58:7 › transactional email bot › 1. quote_sent: send still succeeds (customer link generated) even when email delivery fails (15.8s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.4s
+Create Job..........2.7s
+Create Invoice......2.5s
+Cleanup.............0.7s
+
+  ✓  170 [chromium] › tests\e2e\transactional-email-bot.spec.ts:103:7 › transactional email bot › 2. invoice_sent: send still succeeds (customer link generated) even when email delivery fails (10.6s)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.4s
+Create Job..........2.1s
+Create Invoice......1.8s
+Cleanup.............0.6s
+
+  ✓  171 [chromium] › tests\e2e\transactional-email-bot.spec.ts:139:7 › transactional email bot › 3. invoice_payment_recorded: recordPaymentAction reaches the notification call (delivery not independently observable) (12.1s)
+  ✓  172 [chromium] › tests\e2e\working-invoice-protection-bot.spec.ts:81:9 › working invoice protection bot › kind is locked at the DB layer (A2) › 1. a direct API kind change is rejected by the DB trigger (112ms)
+
+Performance metrics
+Login...............1.3s
+Create Customer.....1.3s
+Create Property.....1.5s
+Create Job..........4.1s
+Cleanup.............0.6s
+
+  ✓  173 [chromium] › tests\e2e\working-invoice-protection-bot.spec.ts:99:9 › working invoice protection bot › kind is locked at the DB layer (A2) › 2. the invoice detail page hides edit/send/pay controls for a working invoice (553ms)
+
+  24 skipped
+  149 passed (8.9m)

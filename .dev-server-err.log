@@ -1,0 +1,10 @@
+[email] Resend delivery failed: {
+  statusCode: 422,
+  name: 'validation_error',
+  message: 'Invalid `to` field. Please use our testing email address instead of domains like `example.com`. See our documentation for more information.'
+}
+[email] Resend delivery failed: {
+  statusCode: 422,
+  name: 'validation_error',
+  message: 'Invalid `to` field. Please use our testing email address instead of domains like `example.com`. See our documentation for more information.'
+}

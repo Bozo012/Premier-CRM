@@ -1,0 +1,51 @@
+
+> @premier/web@0.0.1 dev C:\dev\Premier-CRM\apps\web
+> next dev
+
+   ▲ Next.js 15.5.15
+   - Local:        http://localhost:3000
+   - Network:      http://169.254.83.107:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+ ○ (pwa) PWA support is disabled.
+ ✓ Ready in 2.9s
+ ○ Compiling / ...
+ ✓ Compiled / in 1451ms (603 modules)
+ ✓ Compiled in 182ms (239 modules)
+ GET / 307 in 50ms
+ ✓ Compiled /api/e2e-health in 280ms (620 modules)
+ GET /api/e2e-health 200 in 380ms
+ GET /api/e2e-health 200 in 12ms
+ ○ Compiling /api/v1/service-requests ...
+ ✓ Compiled /api/v1/service-requests in 727ms (919 modules)
+ POST /api/v1/service-requests 200 in 2231ms
+ ○ Compiling /login ...
+ ✓ Compiled /login in 1540ms (1240 modules)
+ GET /login 200 in 1865ms
+ ✓ Compiled in 271ms (1240 modules)
+ GET /login 200 in 113ms
+ ○ Compiling /today ...
+ ✓ Compiled /today in 1035ms (1409 modules)
+ GET /today 200 in 571ms
+ GET /today 200 in 1845ms
+ ○ Compiling /requests/[taskId] ...
+ ✓ Compiled /requests/[taskId] in 803ms (1631 modules)
+ GET /requests/8384cbc7-d6f9-4d51-acee-1910f8874c22 200 in 2574ms
+ GET /requests/8384cbc7-d6f9-4d51-acee-1910f8874c22 200 in 228ms
+ POST /requests/8384cbc7-d6f9-4d51-acee-1910f8874c22 200 in 1336ms
+ ✓ Compiled in 464ms (1631 modules)
+ GET /requests/8384cbc7-d6f9-4d51-acee-1910f8874c22 200 in 480ms
+ GET /requests/8384cbc7-d6f9-4d51-acee-1910f8874c22 200 in 75ms
+ POST /requests/8384cbc7-d6f9-4d51-acee-1910f8874c22 200 in 201ms
+ ✓ Compiled in 356ms (1631 modules)
+ GET /requests/8384cbc7-d6f9-4d51-acee-1910f8874c22 200 in 401ms
+ GET /requests/8384cbc7-d6f9-4d51-acee-1910f8874c22 200 in 63ms
+ POST /api/v1/service-requests 200 in 823ms
+ GET /login 200 in 169ms
+ GET /today 200 in 371ms
+ GET /requests/c5eecbf4-174f-43c3-b4d2-a4b1c5b8af33 200 in 210ms
+ ✓ Compiled in 209ms (422 modules)
+ POST /requests/c5eecbf4-174f-43c3-b4d2-a4b1c5b8af33 200 in 596ms
+ GET /requests/c5eecbf4-174f-43c3-b4d2-a4b1c5b8af33 200 in 110ms
+ GET /requests/c5eecbf4-174f-43c3-b4d2-a4b1c5b8af33 200 in 209ms
