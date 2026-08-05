@@ -12,12 +12,14 @@ Auth, session cookies, customer-account resolution, password recovery, and the
 authenticated customer dashboard at `/portal/dashboard`. The previous Forge
 `/portal` and `/portal/login` marketing-style pages are redirect-only now, so
 there is no competing customer sign-in landing inside Forge.
+The public website `/request-service` form remains a no-login intake path and
+continues to populate Forge CRM through `POST /api/v1/service-requests`.
 
 ## What becomes portal-controlled (authenticated, customer-scoped)
 
 - Customer sign-in / account, via Supabase Auth
 - Dashboard: active requests, completed services, properties, outstanding balance
-- Service request submission — writes to `service_requests`, the same table the CRM's Request inbox already reads
+- Authenticated follow-up on service history; public service-request intake remains on the website and writes to `service_requests`, the same table the CRM's Request inbox already reads
 - Service history: past requests, estimates, quotes, jobs, invoices tied to that customer
 - Billing & payments view — read-only invoice/payment history; no online payment processing in this slice (matches the CRM invoice plan's Phase 1 deferral of Stripe)
 - Property management view — properties tied to that customer
@@ -80,7 +82,11 @@ This matters immediately: the current portal mockup's "3 Active Requests / 12 Co
    back to the marketing doorway with safe status codes only.
 3. **RLS verification/completion** — confirm the customer-scoped RLS policies described above actually exist and are correct on `service_requests` and `customer_properties` (and any other table the ported dashboard reads); add what's missing (CRM repo).
 4. **Read integration** — port the dashboard's real queries (already working in the CRM's version) into the website's existing design, replacing the hardcoded mockup numbers.
-5. **Write actions** — port the request-submission logic so "Request Service" on the website actually creates a `service_requests` row; wire quote acceptance if a portal-based accept flow is wanted alongside the token link.
+5. ~~Public service-request intake~~ — the website's `/request-service` form
+   posts to Forge CRM `POST /api/v1/service-requests`; Forge validates the
+   website payload, deduplicates or creates customer/property records, links the
+   customer to the property, inserts the `service_requests` row, and sends the
+   confirmation notification.
 6. **Token routes** — confirm/implement `/i/[token]` and the quote equivalent per the CRM invoice spec, independent of portal auth.
 7. **Staff login entry point** — add a simple link/button on the website (nav or footer) pointing to the CRM app's own `/login` URL (not `/portal` — that's the customer route). No new auth surface needed on the website side.
 8. ~~Retire the CRM's duplicate public doorway~~ — `/portal` and `/portal/login`

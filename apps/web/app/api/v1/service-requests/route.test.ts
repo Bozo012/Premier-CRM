@@ -87,7 +87,26 @@ describe('POST /api/v1/service-requests', () => {
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.data.ticket_id).toBe('request-1');
-    expect(createServiceRequestMock).toHaveBeenCalled();
+    expect(createServiceRequestMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        orgId: 'a0000000-0000-0000-0000-000000000001',
+        payload: expect.objectContaining({
+          name: 'Jane Smith',
+          email: 'customer@example.com',
+          phone: '615-555-0100',
+          address_line_1: '123 Main St',
+          city: 'Nashville',
+          state: 'TN',
+          zip: '37201',
+          property_type: 'single_family',
+          service_category: 'Lawn cleanup',
+          service_title: 'Lawn cleanup',
+          service_description: 'Need lawn cleanup',
+          priority: 'normal',
+        }),
+      })
+    );
     expect(sendServiceRequestSubmittedNotificationMock).toHaveBeenCalledWith({
       customerEmail: 'customer@example.com',
       customerName: 'Jane Smith',

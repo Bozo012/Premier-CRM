@@ -157,3 +157,9 @@ match-or-create linking, password recovery, and the authenticated
 `/portal/dashboard`. Forge `/portal` and `/portal/login` are redirect-only to
 avoid a second customer sign-in landing. No database migrations, merges, or
 deployments were performed in this checkpoint.
+
+Also re-verified the existing public service-request intake: the marketing
+site `/request-service` form posts to Forge CRM `POST /api/v1/service-requests`
+via `VITE_CRM_API_URL`; Forge validates the website payload, applies CORS,
+honeypot, and rate-limit protections, creates or deduplicates the CRM
+customer/property records, links them, and inserts the `service_requests` row.
