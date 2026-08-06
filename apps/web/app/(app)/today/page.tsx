@@ -143,7 +143,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   // Capability filtering happens here (Layer 1) — the only layer allowed
   // to call hasCapability(). Layer 3 never decides which actions render.
   const quickActions: QuickActionItem[] = [
-    { id: 'create-request', label: 'Create request', href: '/requests' },
+    { id: 'create-request', label: 'Create request', href: '/requests/new' },
     { id: 'create-customer', label: 'Create customer', href: '/customers/new' },
     ...(hasCapability(role, 'canCreateEstimates') ? [{ id: 'create-estimate', label: 'Create estimate', href: '/estimates/new' }] : []),
     ...(hasCapability(role, 'canCreateDirectWorkOrder') ? [{ id: 'schedule-work', label: 'Schedule work', href: '/jobs/new' }] : []),

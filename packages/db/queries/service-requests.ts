@@ -2,6 +2,9 @@ import type { ServiceRequestPayload } from '@premier/shared';
 import { ErrorCode, err, ok, type Result } from '@premier/shared';
 
 import type { DbClient } from '../client';
+import type { Database } from '../types';
+
+type ServiceRequestSource = Database['public']['Enums']['service_request_source'];
 
 export interface CreateServiceRequestResult {
   serviceRequestId: string;
@@ -41,9 +44,9 @@ function propertyNotes(payload: ServiceRequestPayload): string | null {
 
 export async function createServiceRequest(
   client: DbClient,
-  args: { orgId: string; payload: ServiceRequestPayload }
+  args: { orgId: string; payload: ServiceRequestPayload; source?: ServiceRequestSource }
 ): Promise<Result<CreateServiceRequestResult>> {
-  const { orgId, payload } = args;
+  const { orgId, payload, source = 'website' } = args;
   const normalizedPhone = payload.phone
     ? normalizePhoneForLookup(payload.phone)
     : null;
@@ -100,9 +103,9 @@ export async function createServiceRequest(
         email: payload.email ?? null,
         phone_primary: payload.phone ?? null,
         preferred_channel: payload.preferred_channel ?? 'sms',
-        source: 'website_service_request',
-        tags: ['website', 'service_request', 'unreviewed'],
-        notes: `Created from website service request: ${payload.service_title}`,
+        source: source === 'website' ? 'website_service_request' : 'manual_service_request',
+        tags: [source, 'service_request', 'unreviewed'],
+        notes: `Created from ${source === 'website' ? 'website' : 'manual'} service request: ${payload.service_title}`,
       })
       .select('id')
       .single();
@@ -187,7 +190,7 @@ export async function createServiceRequest(
     .from('service_requests')
     .insert({
       org_id: orgId,
-      source: 'website',
+      source,
       status: 'new',
       priority: payload.priority,
       customer_id: customerId,

@@ -2,8 +2,16 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { ErrorCode, err, hasCapability, ok, type OrgRole, type Result } from '@premier/shared';
-import { createServiceClient, getActiveOrgContext, logActivity } from '@premier/db';
+import {
+  ErrorCode,
+  ServiceRequestPayloadSchema,
+  err,
+  hasCapability,
+  ok,
+  type OrgRole,
+  type Result,
+} from '@premier/shared';
+import { createServiceClient, createServiceRequest, getActiveOrgContext, logActivity } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -43,6 +51,11 @@ async function getRequestActionContext(): Promise<Result<RequestActionContext>> 
 function readString(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function readOptionalString(formData: FormData, key: string): string | undefined {
+  const value = readString(formData, key);
+  return value || undefined;
 }
 
 async function getRequestConversionContext(args: {
@@ -128,6 +141,67 @@ async function getRequestConversionContext(args: {
     propertyId,
     request,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Manual staff request intake
+// ---------------------------------------------------------------------------
+
+export type CreateManualRequestActionState = Result<{ requestId: string }>;
+
+export async function createManualRequestAction(
+  _prevState: CreateManualRequestActionState | null,
+  formData: FormData
+): Promise<CreateManualRequestActionState> {
+  const contextResult = await getRequestActionContext();
+  if (!contextResult.success) return contextResult;
+  const { orgId, role } = contextResult.data;
+
+  if (!hasCapability(role, 'canTriageRequests')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not have permission to create requests.');
+  }
+
+  const parsed = ServiceRequestPayloadSchema.safeParse({
+    name: readString(formData, 'name'),
+    email: readOptionalString(formData, 'email'),
+    phone: readOptionalString(formData, 'phone'),
+    preferred_channel: readOptionalString(formData, 'preferredChannel'),
+    address_line_1: readString(formData, 'addressLine1'),
+    address_line_2: readOptionalString(formData, 'addressLine2'),
+    city: readString(formData, 'city'),
+    state: readString(formData, 'state'),
+    zip: readString(formData, 'zip'),
+    country: readOptionalString(formData, 'country') ?? 'US',
+    property_type: readOptionalString(formData, 'propertyType'),
+    service_category: readOptionalString(formData, 'serviceCategory'),
+    service_title: readString(formData, 'serviceTitle'),
+    service_description: readString(formData, 'serviceDescription'),
+    preferred_date: readOptionalString(formData, 'preferredDate'),
+    preferred_time: readOptionalString(formData, 'preferredTime'),
+    access_notes: readOptionalString(formData, 'accessNotes'),
+    priority: readOptionalString(formData, 'priority') ?? 'normal',
+  });
+
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    return err(ErrorCode.VALIDATION_ERROR, firstIssue?.message ?? 'Invalid request details.');
+  }
+
+  const client = createServiceClient();
+  const result = await createServiceRequest(client, {
+    orgId,
+    payload: parsed.data,
+    source: 'manual',
+  });
+
+  if (!result.success) {
+    return result;
+  }
+
+  revalidatePath('/requests');
+  revalidatePath('/today');
+
+  return ok({ requestId: result.data.serviceRequestId });
 }
 
 // ---------------------------------------------------------------------------

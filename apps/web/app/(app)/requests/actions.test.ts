@@ -11,11 +11,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // checking whether a UI button is hidden — matching the established
 // pattern in jobs/actions.test.ts and quotes/actions.test.ts.
 
-const { getServerSupabaseMock, getActiveOrgContextMock, createServiceClientMock, logActivityMock, fromMock } =
+const { getServerSupabaseMock, getActiveOrgContextMock, createServiceClientMock, createServiceRequestMock, logActivityMock, fromMock } =
   vi.hoisted(() => ({
     getServerSupabaseMock: vi.fn(),
     getActiveOrgContextMock: vi.fn(),
     createServiceClientMock: vi.fn(),
+    createServiceRequestMock: vi.fn(),
     logActivityMock: vi.fn(),
     fromMock: vi.fn(),
   }));
@@ -27,6 +28,7 @@ vi.mock('@/lib/supabase-server', () => ({
 vi.mock('@premier/db', () => ({
   getActiveOrgContext: getActiveOrgContextMock,
   createServiceClient: createServiceClientMock,
+  createServiceRequest: createServiceRequestMock,
   logActivity: logActivityMock,
 }));
 
@@ -37,6 +39,7 @@ vi.mock('next/cache', () => ({
 import {
   createEstimateFromRequestAction,
   createJobFromRequestAction,
+  createManualRequestAction,
   markRequestReviewedAction,
 } from './actions';
 
@@ -49,6 +52,37 @@ const JOB_ID = 'job-1';
 function buildFormData(requestId: string): FormData {
   const fd = new FormData();
   fd.set('requestId', requestId);
+  return fd;
+}
+
+function buildManualRequestFormData(overrides: Record<string, string> = {}): FormData {
+  const fd = new FormData();
+  const values = {
+    name: 'Test Customer',
+    email: 'customer@example.com',
+    phone: '',
+    preferredChannel: 'email',
+    addressLine1: '123 Test Lane',
+    addressLine2: '',
+    city: 'Lexington',
+    state: 'KY',
+    zip: '40502',
+    country: 'US',
+    propertyType: 'single_family',
+    serviceCategory: 'Gutter cleaning',
+    serviceTitle: 'Gutter issue',
+    serviceDescription: 'Water is overflowing from the front gutter.',
+    preferredDate: '',
+    preferredTime: '',
+    accessNotes: '',
+    priority: 'normal',
+    ...overrides,
+  };
+
+  for (const [key, value] of Object.entries(values)) {
+    fd.set(key, value);
+  }
+
   return fd;
 }
 
@@ -95,6 +129,69 @@ function mockServiceClientForConversion(createdTable: 'jobs' | 'estimates', crea
     throw new Error(`Unexpected table in test: ${table}`);
   });
 }
+
+describe('manual staff request intake (createManualRequestAction)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createServiceClientMock.mockReturnValue({ from: fromMock });
+  });
+
+  it('creates a manual-origin request and returns its detail route id', async () => {
+    mockSignedInAs('employee');
+    createServiceRequestMock.mockResolvedValue({
+      success: true,
+      data: {
+        serviceRequestId: REQUEST_ID,
+        requestNumber: 'SR-000001',
+        customerId: CUSTOMER_ID,
+        propertyId: PROPERTY_ID,
+        dedupedCustomer: false,
+        dedupedProperty: false,
+      },
+    });
+
+    const result = await createManualRequestAction(null, buildManualRequestFormData());
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.requestId).toBe(REQUEST_ID);
+    expect(createServiceRequestMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        orgId: ORG_ID,
+        source: 'manual',
+        payload: expect.objectContaining({
+          email: 'customer@example.com',
+          priority: 'normal',
+          service_title: 'Gutter issue',
+        }),
+      })
+    );
+  });
+
+  it('viewer cannot create a staff request', async () => {
+    mockSignedInAs('viewer');
+
+    const result = await createManualRequestAction(null, buildManualRequestFormData());
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toContain('create requests');
+    expect(createServiceClientMock).not.toHaveBeenCalled();
+    expect(createServiceRequestMock).not.toHaveBeenCalled();
+  });
+
+  it('validates required contact details before creating anything', async () => {
+    mockSignedInAs('employee');
+
+    const result = await createManualRequestAction(
+      null,
+      buildManualRequestFormData({ email: '', phone: '' })
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toContain('At least one of email or phone is required');
+    expect(createServiceRequestMock).not.toHaveBeenCalled();
+  });
+});
 
 describe('direct-work-order authorization boundary (createJobFromRequestAction)', () => {
   beforeEach(() => {
