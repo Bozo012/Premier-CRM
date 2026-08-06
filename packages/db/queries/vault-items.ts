@@ -19,7 +19,7 @@ export const ATTACHMENT_JPEG_QUALITY = 85;
 
 export interface RequestPendingUploadInput {
   orgId: string;
-  entityType: 'site_visit' | 'estimate';
+  entityType: 'site_visit' | 'estimate' | 'job';
   entityId: string;
   actorUserId: string;
   declaredMimeType: string;
@@ -70,7 +70,9 @@ export async function requestPendingUpload(
   const entityOrgQuery =
     input.entityType === 'site_visit'
       ? client.from('site_visits').select('id').eq('id', input.entityId).eq('org_id', input.orgId).maybeSingle()
-      : client.from('estimates').select('id').eq('id', input.entityId).eq('org_id', input.orgId).maybeSingle();
+      : input.entityType === 'job'
+        ? client.from('jobs').select('id').eq('id', input.entityId).eq('org_id', input.orgId).maybeSingle()
+        : client.from('estimates').select('id').eq('id', input.entityId).eq('org_id', input.orgId).maybeSingle();
   const { data: entityOwnership, error: entityOwnershipError } = await entityOrgQuery;
   if (entityOwnershipError) return err(ErrorCode.DB_ERROR, entityOwnershipError.message);
   if (!entityOwnership) return err(ErrorCode.NOT_FOUND, `${input.entityType.replace('_', ' ')} not found.`);
@@ -79,7 +81,9 @@ export async function requestPendingUpload(
   const { count, error: countError } =
     input.entityType === 'site_visit'
       ? await countQuery.eq('site_visit_id', input.entityId)
-      : await countQuery.eq('estimate_id', input.entityId);
+      : input.entityType === 'job'
+        ? await countQuery.eq('job_id', input.entityId)
+        : await countQuery.eq('estimate_id', input.entityId);
   if (countError) return err(ErrorCode.DB_ERROR, countError.message);
   if ((count ?? 0) >= ATTACHMENT_FILE_COUNT_CAP) {
     return err(ErrorCode.VALIDATION_ERROR, `This ${input.entityType.replace('_', ' ')} already has the maximum of ${ATTACHMENT_FILE_COUNT_CAP} photos.`);
@@ -144,6 +148,7 @@ export async function insertFinalizedVaultItem(
         image_url: input.storagePath,
         site_visit_id: input.entityType === 'site_visit' ? input.entityId : null,
         estimate_id: input.entityType === 'estimate' ? input.entityId : null,
+        job_id: input.entityType === 'job' ? input.entityId : null,
         created_by: input.createdBy,
       },
       { onConflict: 'storage_object_key' }

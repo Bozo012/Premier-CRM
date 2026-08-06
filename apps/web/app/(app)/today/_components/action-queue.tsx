@@ -66,7 +66,7 @@ export function ActionQueue({
       </div>
       <div className="grid gap-3 md:grid-cols-2">
           {actionItems.map((item) => (
-            <ActionItemRow key={`${item.kind}-${'estimateId' in item ? item.estimateId : item.quoteId}`} item={item} />
+            <ActionItemRow key={`${item.kind}-${getActionItemId(item)}`} item={item} />
           ))}
           {quoteActivity.map((entry) => (
             <AttentionCard
@@ -86,8 +86,29 @@ export function ActionQueue({
   );
 }
 
+function getActionItemId(item: TodayActionItem): string {
+  if (item.kind === 'new_request') return item.requestId;
+  if (item.kind === 'pricing_review_requested' || item.kind === 'create_quote') return item.estimateId;
+  return item.quoteId;
+}
+
 // BASE44-REPLACEABLE: every branch below returns representative-only JSX.
 function ActionItemRow({ item }: { item: TodayActionItem }) {
+  if (item.kind === 'new_request') {
+    return (
+      <AttentionCard
+        badgeTone={item.priority === 'emergency' || item.priority === 'high' ? 'red' : 'amber'}
+        badgeIcon={AlertTriangle}
+        badgeLabel="Needs review now"
+        title="Triage new service request"
+        description={`${item.requestNumber} · ${item.title}`}
+        customer={item.contactName ?? 'New customer'}
+        actionHref={`/requests/${item.requestId}`}
+        actionLabel="Review request"
+      />
+    );
+  }
+
   if (item.kind === 'pricing_review_requested') {
     return (
       <AttentionCard

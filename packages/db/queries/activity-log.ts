@@ -35,7 +35,10 @@ export type ActivityLogEventType =
   | 'expense_submitted'
   | 'expense_approved'
   | 'expense_rejected'
-  | 'expense_voided';
+  | 'expense_voided'
+  | 'job_note_general'
+  | 'job_note_material'
+  | 'job_note_safety';
 
 /** Single shared insert path — every write site should call this, not `.insert()` directly. */
 export async function logActivity(

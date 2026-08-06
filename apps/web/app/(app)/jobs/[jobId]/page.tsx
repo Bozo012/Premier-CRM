@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
 import {
   createServiceClient,
@@ -8,6 +8,7 @@ import {
   getEntityTimeline,
   getJobById,
   getJobInvoiceTotals,
+  getSignedReadUrl,
   getWorkingInvoice,
   listChangeOrdersForJob,
   listInvoicesForJob,
@@ -31,6 +32,8 @@ import {
   ProposeChangeOrderButton,
   WithdrawChangeOrderButton,
 } from '../_components/change-order-action-buttons';
+import { AddJobLogForm } from '../_components/add-job-log-form';
+import { AddJobPhotoForm } from '../_components/add-job-photo-form';
 import { ChangeOrderDraftForm } from '../_components/change-order-draft-form';
 import { CreateDraftQuoteButton } from '../_components/create-draft-quote-button';
 import { CreateInvoiceButton } from '../_components/create-invoice-button';
@@ -49,7 +52,11 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const { jobId } = await params;
 
   if (!isUuid(jobId)) {
-    notFound();
+    return (
+      <PageShell>
+        <JobNotFoundPanel />
+      </PageShell>
+    );
   }
 
   const supabase = await getServerSupabase();
@@ -87,6 +94,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     workingInvoiceResult,
     changeOrdersResult,
     timelineResult,
+    photosResult,
   ] = await Promise.all([
     getJobById(supabase, {
       jobId,
@@ -120,11 +128,22 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     getWorkingInvoice(serviceClient, { orgId, jobId }),
     listChangeOrdersForJob(serviceClient, { orgId, jobId }),
     getEntityTimeline(serviceClient, { orgId, entityType: 'job', entityId: jobId }),
+    serviceClient
+      .from('vault_items')
+      .select('id, content, created_at, storage_object_key, image_url')
+      .eq('org_id', orgId)
+      .eq('job_id', jobId)
+      .eq('type', 'photo')
+      .order('created_at', { ascending: false }),
   ]);
 
   if (!result.success) {
     if (result.code === ErrorCode.NOT_FOUND) {
-      notFound();
+      return (
+        <PageShell>
+          <JobNotFoundPanel />
+        </PageShell>
+      );
     }
 
     return (
@@ -168,6 +187,18 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         createdAt: entry.created_at,
       }))
     : [];
+  const jobPhotos = await Promise.all(
+    (photosResult.data ?? []).map(async (item) => {
+      const storagePath = item.storage_object_key ?? item.image_url;
+      const signedUrl = storagePath ? await getSignedReadUrl(serviceClient, storagePath) : null;
+      return {
+        id: item.id,
+        caption: item.content?.trim() || 'Job photo',
+        createdAt: item.created_at,
+        imageUrl: signedUrl?.success ? signedUrl.data : null,
+      };
+    })
+  );
 
   return (
     <PageShell>
@@ -243,6 +274,19 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         <p className="mt-1 text-sm text-muted-foreground">{getNextJobActionHelper(job.status)}</p>
       </section>
 
+      <section className="rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          Stage &amp; progress
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <StatusBadge status={job.status} />
+          <p className="text-sm text-muted-foreground">
+            Milestone {getStageMilestone(job.status).position} of {getStageMilestone(job.status).total}
+          </p>
+        </div>
+        <p className="mt-2 text-sm text-foreground">{getStageMilestone(job.status).explanation}</p>
+      </section>
+
       <section className="flex gap-2 overflow-x-auto pb-1">
         {job.status === 'approved' ? (
           <Button asChild className="shrink-0 rounded-xl font-bold">
@@ -255,11 +299,11 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         <Button asChild variant="outline" className="shrink-0 rounded-xl font-bold">
           <a href="#change-orders">Create change order</a>
         </Button>
-        <Button disabled variant="outline" className="shrink-0 rounded-xl font-bold">
-          Add log
+        <Button asChild variant="outline" className="shrink-0 rounded-xl font-bold">
+          <a href="#job-logs">Add log</a>
         </Button>
-        <Button disabled variant="outline" className="shrink-0 rounded-xl font-bold">
-          Add photo
+        <Button asChild variant="outline" className="shrink-0 rounded-xl font-bold">
+          <a href="#job-photos">Add photo</a>
         </Button>
       </section>
 
@@ -408,6 +452,59 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         <Timeline entries={timelineEntries} />
       </section>
 
+      <section id="job-logs">
+        <Card>
+          <CardHeader>
+            <CardTitle>Job logs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AddJobLogForm jobId={job.id} />
+          </CardContent>
+        </Card>
+      </section>
+
+      <section id="job-photos">
+        <Card>
+          <CardHeader>
+            <CardTitle>Job photos</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <AddJobPhotoForm jobId={job.id} />
+            {jobPhotos.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No photos added to this job yet.</p>
+            ) : (
+              <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {jobPhotos.map((photo) => (
+                  <li key={photo.id}>
+                    <Link
+                      href={`/site-photos/${photo.id}`}
+                      className="block overflow-hidden rounded-md border transition hover:opacity-90"
+                    >
+                      <div className="grid aspect-video place-items-center bg-muted">
+                        {photo.imageUrl ? (
+                          <div
+                            role="img"
+                            aria-label={photo.caption}
+                            className="h-full w-full bg-cover bg-center"
+                            style={{ backgroundImage: `url(${photo.imageUrl})` }}
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Preview unavailable</span>
+                        )}
+                      </div>
+                      <div className="p-2">
+                        <p className="line-clamp-1 text-xs font-medium text-foreground">{photo.caption}</p>
+                        <p className="text-xs text-muted-foreground">{formatScheduledAt(photo.createdAt)}</p>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
       <section>
         <Card>
           <CardHeader>
@@ -473,6 +570,24 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         <ChangeOrdersCard jobId={job.id} threads={changeOrders} />
       </section>
     </PageShell>
+  );
+}
+
+function JobNotFoundPanel() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Job not found</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          This job may have been moved, deleted, or created in a different organization.
+        </p>
+        <Button asChild>
+          <Link href="/jobs">Back to jobs</Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -989,6 +1104,21 @@ function getNextJobActionHelper(status: string) {
       return 'This job is retained for audit history.';
     default:
       return 'No unsupported workflow transition is executed from this page.';
+  }
+}
+
+function getStageMilestone(status: string) {
+  switch (status) {
+    case 'approved':
+      return { position: 1, total: 4, explanation: 'Approved work is ready to be scheduled.' };
+    case 'scheduled':
+      return { position: 2, total: 4, explanation: 'Crew timing is set and the job is ready for field work.' };
+    case 'in_progress':
+      return { position: 3, total: 4, explanation: 'Work is underway; keep logs and photos current.' };
+    case 'completed':
+      return { position: 4, total: 4, explanation: 'Field work is complete and ready for closeout.' };
+    default:
+      return { position: 1, total: 4, explanation: 'Track this job through scheduling, field work, and closeout.' };
   }
 }
 
