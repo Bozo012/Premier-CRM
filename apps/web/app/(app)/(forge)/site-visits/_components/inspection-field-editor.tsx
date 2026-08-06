@@ -32,8 +32,9 @@ export function FieldEditor({
   siteVisitId: string;
   onChange: (value: unknown) => void;
 }) {
+  const inputId = `field-${field.key}`;
   const label = (
-    <label className="block text-sm font-medium text-foreground">
+    <label htmlFor={inputId} className="block text-sm font-medium text-foreground">
       {field.label}
       {field.required ? <span className="ml-0.5 text-red-500">*</span> : null}
     </label>
@@ -45,6 +46,7 @@ export function FieldEditor({
         <div className="space-y-1">
           {label}
           <input
+            id={inputId}
             type="text"
             disabled={readOnly}
             value={(value as string) ?? ''}
@@ -58,6 +60,7 @@ export function FieldEditor({
         <div className="space-y-1">
           {label}
           <textarea
+            id={inputId}
             disabled={readOnly}
             value={(value as string) ?? ''}
             onChange={(e) => onChange(e.target.value)}
@@ -71,6 +74,7 @@ export function FieldEditor({
         <div className="space-y-1">
           {label}
           <input
+            id={inputId}
             type="number"
             disabled={readOnly}
             value={typeof value === 'number' ? value : ''}
@@ -191,24 +195,27 @@ export function ListFieldEditor({
     onChange(rows.filter((_, i) => i !== index));
   };
 
+  const listLabelId = `field-${field.key}-label`;
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-foreground">
+      <label id={listLabelId} className="block text-sm font-medium text-foreground">
         {field.label}
         {field.required ? <span className="ml-0.5 text-red-500">*</span> : null}
       </label>
-      <div className="space-y-3">
+      <div className="space-y-3" role="group" aria-labelledby={listLabelId}>
         {rows.map((row, i) => (
           <div key={i} className="space-y-2 rounded-md border bg-muted/20 p-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               {columns.map((col) => {
                 const meta = COLUMN_META[col] ?? { label: col, placeholder: col, type: 'text' as const, widthClass: 'sm:flex-1' };
+                const rowInputId = `field-${field.key}-${i}-${col}`;
                 return (
                   <div key={col} className={`min-w-0 ${meta.widthClass}`}>
-                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <label htmlFor={rowInputId} className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       {meta.label}
                     </label>
                     <input
+                      id={rowInputId}
                       type={meta.type}
                       inputMode={meta.type === 'number' ? 'decimal' : undefined}
                       placeholder={meta.placeholder}

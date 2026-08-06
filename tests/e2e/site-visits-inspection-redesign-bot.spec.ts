@@ -182,7 +182,12 @@ test.describe('site visits + inspection redesign bot', () => {
       // Step 5 — Review: the real Complete inspection button only lives here.
       await expect(page.getByText(/ready to complete/i)).toBeVisible();
       await page.getByRole('button', { name: /complete inspection/i }).click();
-      await expect(page.getByText(/findings locked/i)).toBeVisible({ timeout: 10_000 });
+
+      // On success, handleComplete() redirects to the site-visit detail
+      // page (inspection-workflow.tsx) rather than staying on /inspection —
+      // "Findings locked" only appears if the inspection route is reloaded
+      // afterward, which test 3 below already covers.
+      await expect(page).toHaveURL(new RegExp(`/site-visits/${siteVisitId}$`), { timeout: 10_000 });
 
       const client = createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
         auth: { persistSession: false, autoRefreshToken: false },

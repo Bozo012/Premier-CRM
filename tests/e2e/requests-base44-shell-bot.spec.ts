@@ -109,7 +109,13 @@ test.describe('requests base44 shell bot', () => {
         await page.goto(routes.requests);
         await expect(page.getByRole('heading', { name: 'Requests' })).toBeVisible();
 
-        const firstCard = page.locator(`a[href^="${routes.requests}/"]`).first();
+        // Excludes /requests/new explicitly — a plain prefix match
+        // (`a[href^="/requests/"]`) also matches the "New request" link,
+        // which renders before the list and would win `.first()` instead
+        // of a real row.
+        const firstCard = page
+          .locator(`a[href^="${routes.requests}/"]:not([href="${routes.newRequest}"])`)
+          .first();
         const hasRequests = (await firstCard.count()) > 0;
         test.skip(!hasRequests, 'Org has no requests yet — nothing to open.');
 

@@ -142,17 +142,46 @@ export function InspectionWorkflow({
     return result;
   }, [fieldsByStep, responses, canComplete]);
 
+  // Holds the most recently changed field so a debounce still in flight can
+  // be flushed synchronously (see flushPendingSave) instead of silently
+  // dropped by step navigation or Complete outrunning the timer — the
+  // pending save this ref tracks always reflects the latest edit, since
+  // pendingSaveRef.current is overwritten (not queued) on every keystroke.
+  const pendingSaveRef = useRef<{ key: string; value: unknown } | null>(null);
+
+  const performSave = async (key: string, value: unknown) => {
+    setSaveState('saving');
+    const result = await saveSiteVisitInspectionAction(siteVisitId, fieldDefinitions, { [key]: value });
+    setSaveState(result.success ? 'saved' : 'error');
+    if (!result.success) toast.error(result.error ?? 'Autosave failed.');
+    return result;
+  };
+
   const scheduleAutosave = (key: string, value: unknown) => {
     if (readOnly) return;
+    pendingSaveRef.current = { key, value };
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      void (async () => {
-        setSaveState('saving');
-        const result = await saveSiteVisitInspectionAction(siteVisitId, fieldDefinitions, { [key]: value });
-        setSaveState(result.success ? 'saved' : 'error');
-        if (!result.success) toast.error(result.error ?? 'Autosave failed.');
-      })();
+      timerRef.current = null;
+      const pending = pendingSaveRef.current;
+      pendingSaveRef.current = null;
+      if (pending) void performSave(pending.key, pending.value);
     }, AUTOSAVE_DELAY_MS);
+  };
+
+  // Ensures the latest edit is actually persisted before the field it
+  // belongs to can leave the screen (step navigation) or before the visit
+  // is marked completed — otherwise a debounced save still waiting out its
+  // delay either gets silently superseded by the next field's edit, or
+  // fires after complete_site_visit() has already flipped status away from
+  // 'in_progress', which save_site_visit_inspection() then rejects outright.
+  const flushPendingSave = async () => {
+    if (!timerRef.current || !pendingSaveRef.current) return;
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+    const pending = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    await performSave(pending.key, pending.value);
   };
 
   const updateField = (key: string, value: unknown) => {
@@ -160,8 +189,23 @@ export function InspectionWorkflow({
     scheduleAutosave(key, value);
   };
 
+  // Deliberately does NOT await the flush — blocking the step transition on
+  // the network round-trip would leave the Continue/Back/step-rail buttons'
+  // onClick closures pointing at the pre-transition step for however long
+  // the request takes, so a fast double-click (or an automated test with no
+  // reason to pace itself) would silently land on the wrong step. The flush
+  // is dispatched immediately (synchronously pulling the pending value off
+  // pendingSaveRef before anything else can touch it) and the step change
+  // happens without waiting for its result — completion still awaits it
+  // (see handleComplete) since that ordering has to be guaranteed.
+  const goToStep = (step: InspectionStepId) => {
+    void flushPendingSave();
+    setActiveStep(step);
+  };
+
   const handleComplete = async () => {
     setIsCompleting(true);
+    await flushPendingSave();
     const result = await completeSiteVisitWithValidationAction(siteVisitId, fieldDefinitions, responses);
     setIsCompleting(false);
     if (result.success) {
@@ -197,7 +241,7 @@ export function InspectionWorkflow({
                   <li key={step} className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setActiveStep(step)}
+                      onClick={() => void goToStep(step)}
                       aria-current={active ? 'step' : undefined}
                       className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                         active
@@ -274,7 +318,7 @@ export function InspectionWorkflow({
             {prevStep && (
               <button
                 type="button"
-                onClick={() => setActiveStep(prevStep)}
+                onClick={() => void goToStep(prevStep)}
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border bg-secondary px-3 text-sm font-bold text-secondary-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -284,7 +328,7 @@ export function InspectionWorkflow({
             {nextStep ? (
               <button
                 type="button"
-                onClick={() => setActiveStep(nextStep)}
+                onClick={() => void goToStep(nextStep)}
                 className="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:opacity-90 active:scale-[.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Continue
