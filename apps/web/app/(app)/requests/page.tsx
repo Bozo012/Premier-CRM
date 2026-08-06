@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Clock, Inbox, Search } from 'lucide-react';
+import { Clock, Inbox, Plus, Search } from 'lucide-react';
 
 import { getActiveOrgContext, listRequests } from '@premier/db';
 
@@ -154,11 +154,20 @@ function PageShell({
   return (
     <ForgePage className="gap-5 md:gap-6">
       <header className="space-y-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Requests</h1>
-          <p className="text-sm text-muted-foreground">
-            Triage inbound work and hand it off to estimates, site visits, or approved work orders.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Requests</h1>
+            <p className="text-sm text-muted-foreground">
+              Triage inbound work and hand it off to estimates, site visits, or approved work orders.
+            </p>
+          </div>
+          <Link
+            href="/requests/new"
+            className="inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            New request
+          </Link>
         </div>
 
         <form action="/requests" className="relative">

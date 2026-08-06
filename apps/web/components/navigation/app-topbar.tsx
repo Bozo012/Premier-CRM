@@ -13,7 +13,7 @@ import { OrgSwitcher } from '@/app/(app)/today/_components/org-switcher';
 import { AppAccountMenu } from './app-account-menu';
 
 const createLinks = [
-  { href: '/requests', label: 'Create request' },
+  { href: '/requests/new', label: 'Create request' },
   { href: '/customers/new', label: 'Create customer' },
   { href: '/estimates/new', label: 'Create estimate' },
   { href: '/jobs/new', label: 'Schedule work' },
@@ -73,7 +73,7 @@ export async function AppTopbar() {
               <p className="truncate text-sm font-bold text-foreground">{orgName}</p>
             </div>
             <Button asChild className="h-11 rounded-xl px-4 font-bold">
-              <Link href="/requests">
+              <Link href="/requests/new">
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Create
               </Link>
