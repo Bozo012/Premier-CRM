@@ -21,13 +21,15 @@ export function TeamList({ model, callbacks }: { model: TeamListViewModel; callb
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Team</h1>
           <p className="mt-1 text-sm text-muted-foreground">Manage staff members, roles, and field availability.</p>
         </div>
-        <button
-          onClick={() => callbacks.onOpenAction('invite-member')}
-          type="button"
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Plus className="h-4 w-4" /> Invite member
-        </button>
+        {model.canInvite ? (
+          <button
+            onClick={() => callbacks.onOpenAction('invite-member')}
+            type="button"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Plus className="h-4 w-4" /> Invite member
+          </button>
+        ) : null}
       </div>
 
       <div className="relative mb-4">

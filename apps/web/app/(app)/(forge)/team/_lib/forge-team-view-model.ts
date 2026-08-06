@@ -139,8 +139,9 @@ export function toTeamListViewModel(args: {
   searchQuery: string;
   activeFilter: TeamAvailabilityStatus | 'all';
   error?: { title: string; message: string } | null;
+  canInvite?: boolean;
 }): TeamListViewModel {
-  const { members, searchQuery, activeFilter, error = null } = args;
+  const { members, searchQuery, activeFilter, error = null, canInvite = false } = args;
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
   const filtered = members.filter((member) => {
@@ -160,5 +161,6 @@ export function toTeamListViewModel(args: {
     filters: buildTeamFilters(members),
     isLoading: false,
     error,
+    canInvite,
   };
 }

@@ -31,6 +31,15 @@ export interface TeamListViewModel {
   filters: TeamFilter[];
   isLoading: boolean;
   error: { title: string; message: string } | null;
+  // Server-computed (role === 'owner' || role === 'admin'), NOT a
+  // client-only decision — controls whether the ported TeamList even
+  // offers the "Invite member" trigger. The gated #invite-member section
+  // it scrolls to is separately (and correctly) omitted from the DOM for
+  // non-managers by page.tsx; this flag closes the matching gap on the
+  // trigger button itself, which the ported presentation component has no
+  // way to know about on its own (portable components are permission-free
+  // by design).
+  canInvite: boolean;
 }
 
 export interface TeamCallbacks {

@@ -141,7 +141,7 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
     })
   );
 
-  const model = toTeamListViewModel({ members: teamMembers, searchQuery: search, activeFilter });
+  const model = toTeamListViewModel({ members: teamMembers, searchQuery: search, activeFilter, canInvite: canManageTeam });
 
   return (
     <TeamShell shellData={shellData} mobileNav={mobileNav}>
