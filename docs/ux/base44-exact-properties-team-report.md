@@ -125,24 +125,32 @@ Both detail routes confirmed to use the generic `RecordDetailView` kit in Base44
 - **Build (`pnpm --filter web build`):** succeeds. Confirmed in the route table: `/properties`, `/properties/[propertyId]`, `/team`, `/team/[memberId]` all present as dynamic (ƒ) routes; no middleware compiled.
 - **Lint:** `pnpm lint` has pre-existing errors (all in `scripts/*.mjs` Node scripts missing `no-undef` globals, and a couple of unrelated pre-existing e2e specs) — confirmed via `pnpm lint | grep -i "properties\|team"` that **none** of the flagged files are inside the new `(forge)/properties`/`(forge)/team` trees. The Next.js build's own integrated lint step (which does cover the new files) passed cleanly with only two pre-existing warnings in unrelated `quotes` files.
 
-## E2E status — written, not executed
+## E2E status — executed in a follow-up verification pass
 
-`.env.test` does not exist in this worktree (confirmed absent, and confirmed gitignored in `.gitignore`). Per the task's own instructions, the new specs were written and typechecked but not run:
-- `tests/e2e/properties-base44-shell-bot.spec.ts`
-- `tests/e2e/team-base44-shell-bot.spec.ts`
+The implementation pass had no `.env.test` in this worktree and honestly reported the specs as written-but-unrun. A follow-up verification pass copied `C:\dev\Premier-CRM\.env.test` into this worktree (confirmed gitignored here, confirmed non-production via `/api/e2e-health` → `premier-crm-e2e`, `slbnizoskumwhleeiccv`), started the dev server, and actually ran everything:
 
-Both typecheck cleanly against `tests/e2e/tsconfig.json` (`npx tsc --noEmit -p tests/e2e/tsconfig.json` — all reported errors belong to other, pre-existing spec files, none in the two new files or in the extended `tests/e2e/utils/selectors.ts`). `tests/e2e/utils/selectors.ts`'s `team.heading` selector was corrected from a stale `"Team access"` heading name to the new ported `TeamList`'s actual `<h1>Team</h1>`; a `memberCard` locator was added.
+- **`properties-base44-shell-bot`**: found 2 real failures (horizontal overflow at tablet-landscape and desktop) — see "Implementation defect found and fixed" below. **Clean after the fix.**
+- **`team-base44-shell-bot`**: **3 failures, all one root cause**: `premier-crm-e2e`'s applied migrations stop at `20260804000002` — it is missing `20260805084201_team_availability_model` (and everything after), so the `team_member_availability` table does not exist on that project at all (confirmed via direct `information_schema.tables` query — zero rows). Every Team test that loads `/team` hits `"Could not find the table 'public.team_member_availability' in the schema cache"` and fails. This is a **pre-existing environment gap** (the e2e project is out of sync with the repo's migration set), not a defect in this slice's code — the query logic was extracted unchanged from the pre-existing `(legacy)/team/page.tsx`, which has the identical dependency and would fail identically against this same environment. No migration was applied to fix this (out of this task's authorized scope — flagged for separate action).
+- **`customers-base44-shell-bot`** (regression check): 14/14 passing, run in isolation.
+- **`today-redesign-bot`** (regression check): 13/13 passing, run in isolation.
 
-## Visual evidence — blocked
+Both new spec files (`tests/e2e/properties-base44-shell-bot.spec.ts`, `tests/e2e/team-base44-shell-bot.spec.ts`) typecheck cleanly against `tests/e2e/tsconfig.json`. `tests/e2e/utils/selectors.ts`'s `team.heading` selector was corrected from a stale `"Team access"` heading name to the ported `TeamList`'s actual `<h1>Team</h1>`; a `memberCard` locator was added.
 
-Same root cause as the E2E status: no `.env.test`, so no safe dev-server environment could be started against the non-production `premier-crm-e2e` Supabase project per the task's required verification steps. No screenshots were captured; none are claimed.
+## Implementation defect found and fixed
+
+`properties-base44-shell-bot`'s overflow assertions failed at 1024×768 and 1440×900 (208px of horizontal overflow). Root cause: the desktop table's Property/Customer `<td>` cells had no word-breaking, so a long unbroken token forced the table wider than the viewport — accumulated E2E fixture names like `E2E_TEST_CONV_ESTIMATE_1785700637047_k0l7sn` are the worst case in this environment, but a genuinely long real address or business name with no spaces could trigger the same thing in production. Fixed with `max-w-0 break-words` on both cells; verified both previously-failing assertions now pass, plus a full clean re-run of the whole Properties bot. Also converted one literal `text-amber-700 dark:text-amber-400` to the existing `--st-warning-fg` token while in the file, matching the convention already established for Requests/Customers in prior slices.
+
+## Visual evidence — captured
+
+12 real authenticated screenshots captured in the follow-up pass (`scripts/capture-properties-team-evidence.mjs`, viewport crops not fullPage, not committed): Properties list/detail at desktop light/dark + mobile light (6 files, all genuine — Properties has no dependency on the missing table), Team list/detail at desktop light/dark + mobile light (6 files — the **list** screenshots are genuine; the **detail** screenshots show the same "Team could not be loaded" error state as the list, since no member row exists to click through to a real detail view while the table is missing). Shared directly with the reviewer rather than committed (22MB+ of PNGs doesn't belong in git history, same reasoning as PR #125).
 
 ## Known limitations
 
 1. Availability editing moved from the list page to the detail page (see "Actions wired vs. deferred").
 2. Properties list search/filter is server-side for text (`?q=`) but status/type remain post-fetch filters over the bounded 250-row page, matching the pre-existing legacy page's exact limitation — not a regression introduced here.
 3. Team Member Detail's "assigned"/"schedule" sections cover only `site_visits`/`site_visit_appointments`; no job-crew, completed-work, notes, or activity-history data exists to back the equivalent Base44 fixture sections (all explicitly omitted, not faked).
-4. Cross-org isolation for `getTeamMemberById` was verified by code-reading (matches the proven `getCustomer360`/`getPropertyMemory` pattern) but not exercised against a live second-org fixture in this pass, since no `.env.test` was available to run anything live.
+4. Cross-org isolation for `getTeamMemberById` was verified by code-reading (matches the proven `getCustomer360`/`getPropertyMemory` pattern) but could not be exercised against a live second-org fixture in this pass either, since the Team route is fully blocked by the missing-table issue.
+5. **`premier-crm-e2e` is missing at least one migration** (`20260805084201_team_availability_model`, and possibly others after `20260804000002`) — this blocks not just this PR's Team E2E coverage but any future work touching team availability against this environment. Needs someone with migration-apply authorization to run `supabase db push` (or equivalent) against the e2e project specifically — not attempted here, out of this task's scope.
 
 ## Next recommended slice
 
@@ -154,4 +162,7 @@ Job crew assignment as a first-class model (a real `job_assignments`/`crew` tabl
 2. `5934ac6` — feat(properties): port exact Base44 Properties list/detail onto real data
 3. `ce61146` — feat(team): port exact Base44 Team list, add real Team Member Detail route
 4. `c6ff0eb` — test(e2e): add properties/team base44-shell bot specs (written, not executed)
-5. (this commit) — docs(ux): add base44-exact-properties-team-report.md
+5. `b20c722` — docs(ux): add base44-exact-properties-team-report.md
+6. `def5337` — fix(properties): stop desktop table overflowing on long unbroken names (found by actually running the E2E bot in a follow-up pass)
+7. `78c8002` — chore: add properties/team visual-evidence capture script
+8. (this commit) — docs(ux): update report with follow-up E2E execution, the overflow fix, and captured visual evidence
