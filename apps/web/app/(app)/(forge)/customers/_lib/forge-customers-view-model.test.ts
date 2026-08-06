@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildCustomerFilters,
-  deriveCustomerStatus,
+  deriveCustomerPresentationStatus,
   formatRelativeActivity,
   resolveCustomerDisplayName,
   toCustomerSummary,
@@ -27,18 +27,18 @@ function makeCustomer(overrides: Partial<Record<string, unknown>> = {}) {
   } as never;
 }
 
-describe('deriveCustomerStatus', () => {
+describe('deriveCustomerPresentationStatus', () => {
   it('maps archived customers to inactive regardless of job history', () => {
-    expect(deriveCustomerStatus({ is_archived: true, total_jobs: 12 })).toBe('inactive');
+    expect(deriveCustomerPresentationStatus({ is_archived: true, total_jobs: 12 })).toBe('inactive');
   });
 
   it('maps non-archived customers with completed jobs to active', () => {
-    expect(deriveCustomerStatus({ is_archived: false, total_jobs: 3 })).toBe('active');
+    expect(deriveCustomerPresentationStatus({ is_archived: false, total_jobs: 3 })).toBe('active');
   });
 
   it('maps non-archived customers with no job history to prospect', () => {
-    expect(deriveCustomerStatus({ is_archived: false, total_jobs: 0 })).toBe('prospect');
-    expect(deriveCustomerStatus({ is_archived: false, total_jobs: null })).toBe('prospect');
+    expect(deriveCustomerPresentationStatus({ is_archived: false, total_jobs: 0 })).toBe('prospect');
+    expect(deriveCustomerPresentationStatus({ is_archived: false, total_jobs: null })).toBe('prospect');
   });
 });
 

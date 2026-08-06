@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { ForgeShell } from '@/components/forge-shell/ForgeShell';
 import type { ForgeShellCallbacks, ForgeShellData, MobileNavConfig } from '@/components/forge-shell/types';
 
-import { signOutAction, switchActiveOrgAction } from '@/app/(app)/today/actions';
+import { signOutAction, switchActiveOrgAction } from '@/app/(app)/(legacy)/today/actions';
 
 export function CustomersShell({
   shellData,

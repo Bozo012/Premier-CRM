@@ -7,7 +7,7 @@ import type { Customer } from '@premier/db';
 
 import type { CustomerFilter, CustomerSummary, CustomersListViewModel } from './forge-customers-contracts';
 
-export type CustomerStatus = CustomerSummary['status'];
+export type CustomerPresentationStatus = CustomerSummary['status'];
 
 export interface CustomerPropertyLink {
   customer_id: string;
@@ -19,28 +19,58 @@ export interface WorkCountRow {
   status: string;
 }
 
-const STATUS_LABELS: Record<CustomerStatus, string> = {
+const STATUS_LABELS: Record<CustomerPresentationStatus, string> = {
   active: 'Active',
   prospect: 'Prospect',
   inactive: 'Inactive',
 };
 
 /**
- * Approximates the Base44 presentation's `active | prospect | inactive`
- * customer status. Forge's `customers` table has no persisted status field
- * — the query layer instead filters lists by `archetype`
+ * ⚠️ PRESENTATION-ONLY DERIVATION — NOT AN AUTHORITATIVE FIELD.
+ *
+ * `deriveCustomerPresentationStatus` approximates the Base44 presentation's
+ * `active | prospect | inactive` vocabulary purely for the Customers
+ * list/filter UI. It is derived on every read from two REAL, authoritative
+ * fields (`customers.is_archived`, `customers.total_jobs`) — it is never
+ * itself stored, and no code anywhere writes a `status` value back to the
+ * `customers` table.
+ *
+ * Authoritative vs. derived, explicitly:
+ *   - `customer.is_archived` (real, persisted, RLS/query-filtered elsewhere
+ *     in the app) is the actual archived/active boundary Forge enforces.
+ *   - The `active | prospect | inactive` value this function returns is a
+ *     Base44-presentation-compatible LABEL computed from that real field
+ *     plus `total_jobs`, entirely for this list UI's benefit.
+ *
+ * Forge's `customers` table has no persisted lifecycle-status column at
+ * all — the query layer instead filters lists by `archetype`
  * (residential_one_off/residential_repeat/commercial_contract/etc.), which
  * is a DIFFERENT axis (service pattern, not lifecycle stage) and cannot be
- * mapped to Base44's status vocabulary. This derivation is a
- * backend-completion-required gap: a real lifecycle-status field would need
- * a schema addition, intentionally NOT made in this PR (see the Customers
- * route report). Rule (matches the equivalent, pre-existing derivation this
- * PR's page.tsx already had before this rebuild):
+ * mapped to Base44's status vocabulary. A real lifecycle-status field would
+ * need a schema addition — intentionally NOT made in this PR.
+ *
+ * MUST NOT be used to drive: permissions, capability checks, workflow-state
+ * transitions, RPC/query filters, automation-rule conditions, or RLS. If
+ * any of those ever need a customer's lifecycle state, they must read
+ * `is_archived` (or a future real backend field) directly — never this
+ * function's return value. This function has exactly one caller path:
+ * building `CustomerSummary.status`/`statusLabel` for display and for this
+ * page's client-side filter tabs.
+ *
+ * Presentation contract: `CustomerSummary.status`/`statusLabel` render as
+ * plain read-only text/filter-tab labels (see CustomersList) — there is no
+ * status-editing control anywhere, and none should be added until a real,
+ * authoritative customer-lifecycle backend contract exists to back it.
+ *
+ * Derivation rule (unchanged behavior from the pre-rebuild page.tsx this
+ * replaced):
  *   - is_archived -> "inactive"
  *   - not archived AND total_jobs > 0 -> "active"
  *   - not archived AND total_jobs === 0 (or null) -> "prospect"
  */
-export function deriveCustomerStatus(customer: Pick<Customer, 'is_archived' | 'total_jobs'>): CustomerStatus {
+export function deriveCustomerPresentationStatus(
+  customer: Pick<Customer, 'is_archived' | 'total_jobs'>
+): CustomerPresentationStatus {
   if (customer.is_archived) return 'inactive';
   return (customer.total_jobs ?? 0) > 0 ? 'active' : 'prospect';
 }
@@ -91,7 +121,7 @@ export function toCustomerSummary(
 
   const openRequests = requestRows.filter((row) => !['completed', 'cancelled', 'spam', 'estimate_created'].includes(row.status)).length;
   const openEstimates = estimateRows.filter((row) => !['declined', 'expired', 'converted'].includes(row.status)).length;
-  const status = deriveCustomerStatus(customer);
+  const status = deriveCustomerPresentationStatus(customer);
 
   // "Next action" is Base44 presentation copy describing the single most
   // relevant next step for staff — Forge has no equivalent computed field
@@ -125,7 +155,7 @@ function deriveNextAction({
 }: {
   openRequests: number;
   openEstimates: number;
-  status: CustomerStatus;
+  status: CustomerPresentationStatus;
 }): { nextActionLabel: string; nextActionId: string } {
   if (openRequests > 0) return { nextActionLabel: 'Triage open request', nextActionId: 'triage-request' };
   if (openEstimates > 0) return { nextActionLabel: 'Follow up on open estimate', nextActionId: 'follow-up-estimate' };
@@ -133,7 +163,7 @@ function deriveNextAction({
   return { nextActionLabel: 'View customer', nextActionId: 'view-customer' };
 }
 
-const FILTER_ORDER: { id: 'all' | CustomerStatus; label: string }[] = [
+const FILTER_ORDER: { id: 'all' | CustomerPresentationStatus; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'active', label: 'Active' },
   { id: 'prospect', label: 'Prospect' },
@@ -153,14 +183,14 @@ export function buildCustomerFilters(customers: CustomerSummary[]): CustomerFilt
  * real `listCustomers` query (server-side `ilike` on `display_name`) — this
  * function does not re-filter by name. `statusFilter` is applied here
  * because there is no persisted status column to push into the query (see
- * `deriveCustomerStatus`) — filter counts therefore reflect only the fetched
+ * `deriveCustomerPresentationStatus`) — filter counts therefore reflect only the fetched
  * page (bounded by `listCustomers`'s `limit`), not the org's full customer
  * set, exactly as the pre-existing (pre-rebuild) page.tsx already behaved.
  */
 export function toCustomersListViewModel(args: {
   customers: CustomerSummary[];
   searchQuery: string;
-  statusFilter: 'all' | CustomerStatus;
+  statusFilter: 'all' | CustomerPresentationStatus;
   error?: { title: string; message: string } | null;
 }): CustomersListViewModel {
   const { customers, searchQuery, statusFilter, error = null } = args;
