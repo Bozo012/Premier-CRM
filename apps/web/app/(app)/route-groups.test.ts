@@ -36,17 +36,15 @@ const LEGACY_ROUTES = [
   'quotes',
   'invoices',
   'expenses',
-  'requests',
   'services',
   'settings',
   'site-photos',
-  'site-visits',
   'calendar',
   'activity-logs',
   'estimates',
 ] as const;
 
-const FORGE_ROUTES = ['customers', 'properties', 'team'] as const;
+const FORGE_ROUTES = ['customers', 'properties', 'team', 'requests', 'site-visits'] as const;
 
 describe('(app) route-group split — no middleware, no duplicate/missing routes', () => {
   it('has no application middleware.ts anywhere under apps/web', () => {
@@ -92,6 +90,18 @@ describe('(app) route-group split — no middleware, no duplicate/missing routes
   it('team list and (new) detail routes have page.tsx (route resolves)', () => {
     expect(exists('(forge)', 'team', 'page.tsx')).toBe(true);
     expect(exists('(forge)', 'team', '[memberId]', 'page.tsx')).toBe(true);
+  });
+
+  it('requests list/detail/new routes have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'requests', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'requests', '[taskId]', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'requests', 'new', 'page.tsx')).toBe(true);
+  });
+
+  it('site-visits list/detail/inspection routes have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'site-visits', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'site-visits', '[siteVisitId]', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'site-visits', '[siteVisitId]', 'inspection', 'page.tsx')).toBe(true);
   });
 
   it('per-route error/loading boundaries moved with their routes', () => {
