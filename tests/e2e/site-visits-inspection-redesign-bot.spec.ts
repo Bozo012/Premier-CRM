@@ -1,14 +1,19 @@
 /**
  * site-visits-inspection-redesign-bot: UI-click coverage for the Site
  * Visit detail and Inspection routes, added in Base44 UX Batch 8
- * (docs/ux/forge-base44-batch-8-requests-site-visits-inspection-report.md).
+ * (docs/ux/forge-base44-batch-8-requests-site-visits-inspection-report.md),
+ * updated for the Base44-exact 5-step inspection wizard (Arrival/Findings/
+ * Measurements & Photos/Recommendations/Review) that replaced the flat
+ * single-page InspectionForm — see
+ * docs/ux/base44-exact-requests-site-visits-report.md.
  *
  * request-site-visit-workflow-bot already proves the full lifecycle at the
  * RPC/service-role level (schedule → start → save → complete, including the
  * `save_site_visit_inspection` authenticated-vs-service-role boundary) — not
- * duplicated here. This bot proves the InspectionForm UI itself: field
- * rendering per type, the autosave indicator, completing through the real
- * "Complete inspection" button, and — the one behavior no RPC-level test can
+ * duplicated here. This bot proves the InspectionWorkflow UI itself: step
+ * navigation, field rendering per type/step, the autosave indicator,
+ * completing through the real "Complete inspection" button (only reachable
+ * from the final Review step), and — the one behavior no RPC-level test can
  * prove — that the completed-inspection summary is read from PERSISTED data
  * and survives a hard page refresh, not just in-memory form state.
  */
@@ -131,28 +136,51 @@ test.describe('site visits + inspection redesign bot', () => {
       if (orgId) await admin.from('organizations').delete().eq('id', orgId);
     });
 
-    test('1. inspection route renders the default template fields with visible labels', async ({ page }) => {
+    test('1. inspection route renders as a 5-step wizard, starting on Arrival', async ({ page }) => {
       await login(page, owner);
       await page.goto(`/site-visits/${siteVisitId}/inspection`);
 
+      // Step rail shows all 5 Base44-exact steps.
+      await expect(page.getByRole('button', { name: /Arrival/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Findings/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Measurements & Photos/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Recommendations/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Review/ })).toBeVisible();
+
+      // Arrival step's real field is visible immediately; the Complete
+      // button is NOT — it only appears on the final Review step.
       await expect(page.getByLabel('Customer concerns')).toBeVisible();
-      await expect(page.getByLabel('Observed conditions')).toBeVisible();
-      await expect(page.getByLabel('Proposed scope')).toBeVisible();
-      await expect(page.getByRole('button', { name: /complete inspection/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /complete inspection/i })).toHaveCount(0);
     });
 
-    test('2. filling a required field triggers autosave, then completing persists the response', async ({ page }) => {
+    test('2. filling required fields across steps triggers autosave, then completing on Review persists the responses', async ({
+      page,
+    }) => {
       await login(page, owner);
       await page.goto(`/site-visits/${siteVisitId}/inspection`);
 
+      // Step 1 — Arrival.
       await page.getByLabel('Customer concerns').fill('Gutter leaking near garage.');
-      await page.getByLabel('Observed conditions').fill('Sagging gutter section, minor rust.');
-      await page.getByLabel('Proposed scope').fill('Replace 12ft gutter run.');
-
-      // Autosave is debounced (1200ms) — the indicator should reach "Saved"
-      // without the user clicking anything else.
       await expect(page.getByText(/^saved$/i)).toBeVisible({ timeout: 5_000 });
+      await page.getByRole('button', { name: /^Continue$/ }).click();
 
+      // Step 2 — Findings.
+      await expect(page.getByLabel('Observed conditions')).toBeVisible();
+      await page.getByLabel('Observed conditions').fill('Sagging gutter section, minor rust.');
+      await expect(page.getByText(/^saved$/i)).toBeVisible({ timeout: 5_000 });
+      await page.getByRole('button', { name: /^Continue$/ }).click();
+
+      // Step 3 — Measurements & Photos (no required fields — just advance).
+      await page.getByRole('button', { name: /^Continue$/ }).click();
+
+      // Step 4 — Recommendations.
+      await expect(page.getByLabel('Proposed scope')).toBeVisible();
+      await page.getByLabel('Proposed scope').fill('Replace 12ft gutter run.');
+      await expect(page.getByText(/^saved$/i)).toBeVisible({ timeout: 5_000 });
+      await page.getByRole('button', { name: /^Continue$/ }).click();
+
+      // Step 5 — Review: the real Complete inspection button only lives here.
+      await expect(page.getByText(/ready to complete/i)).toBeVisible();
       await page.getByRole('button', { name: /complete inspection/i }).click();
       await expect(page.getByText(/findings locked/i)).toBeVisible({ timeout: 10_000 });
 
