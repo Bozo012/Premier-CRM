@@ -146,14 +146,13 @@ function PageShell({
               Manage scheduled inspections and continue field workflows from real site-visit records.
             </p>
           </div>
-          <button
-            type="button"
-            disabled
-            title="Site visits are created from request triage in the current CRM flow."
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground opacity-60"
+          <Link
+            href="/requests"
+            title="Create site visits from request triage."
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground"
           >
             <Plus className="h-4 w-4" /> New visit
-          </button>
+          </Link>
         </div>
 
         <form action="/site-visits" className="relative">

@@ -22,16 +22,23 @@ import {
   generateFinalInvoiceFromWorking,
   getActiveOrgContext,
   getJobById,
+  logActivity,
   proposeChangeOrderRevision,
+  requestPendingUpload,
   scheduleJob,
   setDepositRequirement,
   waiveDepositRequirement,
   withdrawChangeOrderRevision,
+  type ActivityLogEventType,
   type ChangeOrderLineItemInput,
 } from '@premier/db';
 
 import { sendJobScheduledNotification } from '@/lib/customer-lifecycle-notifications';
+import { finalizeSiteVisitUpload } from '@/lib/site-visit-attachments';
 import { getServerSupabase } from '@/lib/supabase-server';
+
+const JOB_LOG_TYPES = ['job_note_general', 'job_note_material', 'job_note_safety'] as const;
+export type JobLogType = (typeof JOB_LOG_TYPES)[number];
 
 export type CreateDraftQuoteActionState = Result<{ quoteId: string }>;
 export type CreateInvoiceFromJobPageActionState = Result<{ invoiceId: string }>;
@@ -621,4 +628,114 @@ export async function withdrawChangeOrderAction(
 
   if (jobId) revalidatePath(`/jobs/${jobId}`);
   return ok({ revisionId: result.data.id });
+}
+
+export type AddJobLogActionState = Result<{ jobId: string }>;
+
+const JOB_LOG_TYPE_LABELS: Record<JobLogType, string> = {
+  job_note_general: 'General note',
+  job_note_material: 'Material note',
+  job_note_safety: 'Safety note',
+};
+
+export async function addJobLogAction(
+  _previousState: AddJobLogActionState | null,
+  formData: FormData
+): Promise<AddJobLogActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, userId, role } = access.data;
+
+  if (!hasCapability(role, 'canScheduleJobs')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit adding job logs.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  const logTypeInput = readString(formData, 'logType');
+  const message = readString(formData, 'message');
+
+  if (!jobId) return err(ErrorCode.VALIDATION_ERROR, 'Job ID is required.');
+  if (!message) return err(ErrorCode.VALIDATION_ERROR, 'Log message is required.');
+  if (message.length > 2000) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Log message must be 2000 characters or fewer.');
+  }
+
+  const logType = (JOB_LOG_TYPES as readonly string[]).includes(logTypeInput)
+    ? (logTypeInput as JobLogType)
+    : 'job_note_general';
+
+  const serviceClient = createServiceClient();
+  const jobResult = await getJobById(serviceClient, { jobId, orgId });
+  if (!jobResult.success) return jobResult;
+
+  await logActivity(serviceClient, {
+    orgId,
+    entityType: 'job',
+    entityId: jobId,
+    eventType: logType as ActivityLogEventType,
+    message: `${JOB_LOG_TYPE_LABELS[logType]}: ${message}`,
+    actorUserId: userId,
+  });
+
+  revalidatePath(`/jobs/${jobId}`);
+  return ok({ jobId });
+}
+
+export type RequestJobPhotoUploadActionState = Result<{
+  uploadId: string;
+  pendingPath: string;
+  signedUploadToken: string;
+}>;
+
+export async function requestJobPhotoUploadAction(input: {
+  jobId: string;
+  declaredMimeType: string;
+  declaredSizeBytes: number;
+}): Promise<RequestJobPhotoUploadActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, userId, role } = access.data;
+
+  if (!hasCapability(role, 'canScheduleJobs')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit adding job photos.');
+  }
+
+  const supabase = await getServerSupabase();
+  return requestPendingUpload(supabase, {
+    orgId,
+    entityType: 'job',
+    entityId: input.jobId,
+    actorUserId: userId,
+    declaredMimeType: input.declaredMimeType,
+    declaredSizeBytes: input.declaredSizeBytes,
+  });
+}
+
+export type FinalizeJobPhotoUploadActionState = Result<{ vaultItemId: string; storagePath: string }>;
+
+export async function finalizeJobPhotoUploadAction(
+  uploadId: string,
+  jobId: string
+): Promise<FinalizeJobPhotoUploadActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId } = access.data;
+
+  const supabase = await getServerSupabase();
+  const { data: pendingOrgCheck, error: pendingOrgCheckError } = await supabase
+    .from('pending_uploads')
+    .select('id')
+    .eq('id', uploadId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (pendingOrgCheckError) return err(ErrorCode.DB_ERROR, pendingOrgCheckError.message);
+  if (!pendingOrgCheck) return err(ErrorCode.NOT_FOUND, 'Pending upload not found.');
+
+  const serviceClient = createServiceClient();
+  const result = await finalizeSiteVisitUpload(serviceClient, uploadId);
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath('/site-photos');
+  return result;
 }

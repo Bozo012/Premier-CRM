@@ -19,8 +19,22 @@ import type { TodayActionItem, TodaySiteVisit } from '@premier/db';
 
 export function sortActionItems(items: TodayActionItem[]): TodayActionItem[] {
   return [...items].sort((a, b) => {
-    const aTime = a.kind === 'pricing_review_requested' ? a.submittedAt : a.kind === 'create_quote' ? a.approvedAt : a.createdAt;
-    const bTime = b.kind === 'pricing_review_requested' ? b.submittedAt : b.kind === 'create_quote' ? b.approvedAt : b.createdAt;
+    const aTime =
+      a.kind === 'new_request'
+        ? a.submittedAt
+        : a.kind === 'pricing_review_requested'
+          ? a.submittedAt
+          : a.kind === 'create_quote'
+            ? a.approvedAt
+            : a.createdAt;
+    const bTime =
+      b.kind === 'new_request'
+        ? b.submittedAt
+        : b.kind === 'pricing_review_requested'
+          ? b.submittedAt
+          : b.kind === 'create_quote'
+            ? b.approvedAt
+            : b.createdAt;
     return new Date(aTime).getTime() - new Date(bTime).getTime();
   });
 }

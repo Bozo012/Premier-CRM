@@ -72,18 +72,47 @@ export async function ensureCustomerAccount(args: {
     customerId = createdCustomer.id;
   }
 
-  const { error: accountError } = await serviceClient.from('customer_accounts').upsert(
-    {
-      org_id: PREMIER_ORG_ID,
-      customer_id: customerId,
-      auth_user_id: args.authUserId,
-      email,
-      status: 'active',
-      invited_at: new Date().toISOString(),
-      accepted_at: new Date().toISOString(),
-    },
-    { onConflict: 'auth_user_id' }
-  );
+  const accountPayload = {
+    org_id: PREMIER_ORG_ID,
+    customer_id: customerId,
+    auth_user_id: args.authUserId,
+    email,
+    status: 'active' as const,
+    invited_at: new Date().toISOString(),
+    accepted_at: new Date().toISOString(),
+  };
+
+  const { data: accountByEmail, error: accountByEmailError } = await serviceClient
+    .from('customer_accounts')
+    .select('id')
+    .eq('org_id', PREMIER_ORG_ID)
+    .eq('email', email)
+    .maybeSingle();
+
+  if (accountByEmailError) {
+    console.error('Customer portal account email lookup failed', accountByEmailError);
+    return { success: false, code: 'ACCOUNT_LINK_FAILED' };
+  }
+
+  const { data: accountByCustomer, error: accountByCustomerError } = accountByEmail
+    ? { data: null, error: null }
+    : await serviceClient
+        .from('customer_accounts')
+        .select('id')
+        .eq('org_id', PREMIER_ORG_ID)
+        .eq('customer_id', customerId)
+        .maybeSingle();
+
+  if (accountByCustomerError) {
+    console.error('Customer portal account customer lookup failed', accountByCustomerError);
+    return { success: false, code: 'ACCOUNT_LINK_FAILED' };
+  }
+
+  const existingAccountId = accountByEmail?.id ?? accountByCustomer?.id ?? null;
+
+  const { error: accountError } = existingAccountId
+    ? await serviceClient.from('customer_accounts').update(accountPayload).eq('id', existingAccountId)
+    : await serviceClient.from('customer_accounts').upsert(accountPayload, { onConflict: 'auth_user_id' });
 
   if (accountError) {
     console.error('Customer portal account link failed', accountError);

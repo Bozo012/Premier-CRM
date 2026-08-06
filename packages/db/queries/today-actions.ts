@@ -39,7 +39,17 @@ export interface SendQuoteTask {
   createdAt: string;
 }
 
-export type TodayActionItem = PricingReviewTask | CreateQuoteTask | SendQuoteTask;
+export interface NewRequestTask {
+  kind: 'new_request';
+  requestId: string;
+  requestNumber: string;
+  title: string;
+  contactName: string | null;
+  priority: string | null;
+  submittedAt: string;
+}
+
+export type TodayActionItem = NewRequestTask | PricingReviewTask | CreateQuoteTask | SendQuoteTask;
 
 export interface QuoteActivityItem {
   id: string;
@@ -54,6 +64,30 @@ function resolveDisplayName(row: { first_name: string | null; last_name: string 
   if (row.company_name?.trim()) return row.company_name.trim();
   const name = [row.first_name, row.last_name].filter(Boolean).join(' ').trim();
   return name || null;
+}
+
+async function getNewRequestTasks(client: DbClient, orgId: string): Promise<Result<NewRequestTask[]>> {
+  const { data, error } = await client
+    .from('service_requests')
+    .select('id, request_number, service_title, contact_name, priority, submitted_at')
+    .eq('org_id', orgId)
+    .eq('status', 'new')
+    .order('submitted_at', { ascending: true })
+    .limit(10);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  const tasks: NewRequestTask[] = (data ?? []).map((row) => ({
+    kind: 'new_request',
+    requestId: row.id,
+    requestNumber: row.request_number,
+    title: row.service_title?.trim() || 'New service request',
+    contactName: row.contact_name?.trim() || null,
+    priority: row.priority,
+    submittedAt: row.submitted_at,
+  }));
+
+  return ok(tasks);
 }
 
 /**
@@ -340,6 +374,12 @@ export async function getTodayActionItems(
 ): Promise<Result<TodayActionItem[]>> {
   const { orgId, role } = args;
   const items: TodayActionItem[] = [];
+
+  if (hasCapability(role, 'canTriageRequests')) {
+    const result = await getNewRequestTasks(client, orgId);
+    if (!result.success) return result;
+    items.push(...result.data);
+  }
 
   if (hasCapability(role, 'canApproveEstimatePricing')) {
     const result = await getPricingReviewTasks(client, orgId);
