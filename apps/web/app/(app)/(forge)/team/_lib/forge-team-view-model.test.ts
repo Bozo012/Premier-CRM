@@ -76,6 +76,18 @@ describe('toTeamListViewModel', () => {
     expect(searched.members[0]?.name).toBe('Alpha Owner');
   });
 
+  it('canInvite defaults to false and only becomes true when explicitly passed', () => {
+    // Regression: the ported TeamList component always rendered its
+    // "Invite member" button (it's permission-free by design); this flag
+    // is what page.tsx uses to actually gate it. Defaulting to false keeps
+    // the error-state call sites (which don't pass canInvite) fail-closed.
+    const defaulted = toTeamListViewModel({ members: [], searchQuery: '', activeFilter: 'all' });
+    expect(defaulted.canInvite).toBe(false);
+
+    const forManager = toTeamListViewModel({ members: [], searchQuery: '', activeFilter: 'all', canInvite: true });
+    expect(forManager.canInvite).toBe(true);
+  });
+
   it('builds filter counts including "all"', () => {
     const members = [
       buildTeamMemberView({ activeAssignments: 0, availability: undefined, email: null, member: makeMember({ id: 'm1' }), profile: { full_name: 'A', phone: null } }),
