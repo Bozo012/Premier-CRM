@@ -41,7 +41,12 @@ export const login = {
 
 export const customers = {
   heading: (page: Page) => page.getByRole('heading', { name: 'Customers' }),
-  newCustomerLink: (page: Page) => page.getByRole('link', { name: 'New customer' }),
+  // Base44-exact rebuild (rebuild/base44-exact-ui): the customers list is now
+  // apps/web/app/(app)/customers/_components/customers-list.tsx, ported from
+  // Base44's CustomersList.tsx — the create entry point is a <button> labeled
+  // "Add customer" (navigates client-side to /customers/new), not an <a>
+  // labeled "New customer" as the pre-rebuild page had.
+  newCustomerLink: (page: Page) => page.getByRole('button', { name: 'Add customer' }),
   searchInput: (page: Page) => page.getByPlaceholder(/search/i),
 };
 

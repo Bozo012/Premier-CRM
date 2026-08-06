@@ -55,17 +55,20 @@ describe('PWA manifest', () => {
 });
 
 describe('representative staff page titles', () => {
+  // Paths reflect the (legacy)/(forge) route-group split (Base44-exact
+  // rebuild, PR #125) — route groups don't affect the URL, only the file
+  // location these string-path checks read from.
   const cases: Array<[string, string]> = [
-    ['apps/web/app/(app)/today/page.tsx', 'Today'],
-    ['apps/web/app/(app)/customers/page.tsx', 'Customers'],
-    ['apps/web/app/(app)/properties/page.tsx', 'Properties'],
-    ['apps/web/app/(app)/requests/page.tsx', 'Requests'],
-    ['apps/web/app/(app)/site-visits/[siteVisitId]/page.tsx', 'Site Visits'],
-    ['apps/web/app/(app)/estimates/page.tsx', 'Estimates'],
-    ['apps/web/app/(app)/quotes/page.tsx', 'Quotes'],
-    ['apps/web/app/(app)/jobs/page.tsx', 'Jobs'],
-    ['apps/web/app/(app)/invoices/page.tsx', 'Invoices'],
-    ['apps/web/app/(app)/settings/website/page.tsx', 'Settings'],
+    ['apps/web/app/(app)/(legacy)/today/page.tsx', 'Today'],
+    ['apps/web/app/(app)/(forge)/customers/page.tsx', 'Customers'],
+    ['apps/web/app/(app)/(legacy)/properties/page.tsx', 'Properties'],
+    ['apps/web/app/(app)/(legacy)/requests/page.tsx', 'Requests'],
+    ['apps/web/app/(app)/(legacy)/site-visits/[siteVisitId]/page.tsx', 'Site Visits'],
+    ['apps/web/app/(app)/(legacy)/estimates/page.tsx', 'Estimates'],
+    ['apps/web/app/(app)/(legacy)/quotes/page.tsx', 'Quotes'],
+    ['apps/web/app/(app)/(legacy)/jobs/page.tsx', 'Jobs'],
+    ['apps/web/app/(app)/(legacy)/invoices/page.tsx', 'Invoices'],
+    ['apps/web/app/(app)/(legacy)/settings/website/page.tsx', 'Settings'],
   ];
 
   it.each(cases)('%s exports metadata.title = %s (combines with the root template into "Forge — %s")', (file, title) => {
@@ -100,7 +103,7 @@ describe('customer portal stays tenant-branded, not product-branded', () => {
 
 describe('active organization stays separate from product identity', () => {
   it('the org switcher renders tenant data (org.orgName), never a hardcoded brand string', () => {
-    const source = read('apps/web/app/(app)/today/_components/org-switcher.tsx');
+    const source = read('apps/web/app/(app)/(legacy)/today/_components/org-switcher.tsx');
     expect(source).toContain('{org.orgName}');
     expect(source).not.toMatch(/Forge|Foundry|Premier Property Maintenance/);
   });
