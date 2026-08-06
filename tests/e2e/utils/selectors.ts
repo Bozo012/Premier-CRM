@@ -240,18 +240,20 @@ export function isRedirectedToLogin(page: Page) {
   return url.pathname === '/login';
 }
 
-/** `/team` (apps/web/app/(app)/team/page.tsx) and its invite form/list. */
+/**
+ * `/team` (apps/web/app/(app)/(forge)/team/page.tsx) and its invite
+ * form/list. Base44-exact rebuild: the ported TeamList's own <h1>Team</h1>
+ * replaces the pre-rebuild page's "Team access" heading.
+ */
 export const team = {
-  // level: 1 — the page's own <h1> and the "not authorized" error card's
-  // CardTitle both render the exact text "Team access"; ARIA heading role
-  // doesn't distinguish by tag otherwise, so scope by heading level.
-  heading: (page: Page) => page.getByRole('heading', { name: 'Team access', level: 1 }),
+  heading: (page: Page) => page.getByRole('heading', { name: 'Team', level: 1 }),
   inviteFullNameInput: (page: Page) => page.locator('#invite-fullName'),
   inviteEmailInput: (page: Page) => page.locator('#invite-email'),
   inviteRoleSelect: (page: Page) => page.locator('#invite-role'),
   sendInviteButton: (page: Page) => page.getByRole('button', { name: /send invite/i }),
   pendingInvitesHeading: (page: Page) => page.getByRole('heading', { name: 'Pending invites' }),
   currentTeamHeading: (page: Page) => page.getByRole('heading', { name: 'Current team' }),
+  memberCard: (page: Page, name: string) => page.getByRole('button', { name: new RegExp(`Open team member ${escapeRegExp(name)}`) }),
   /**
    * Scopes to one pending-invite card via `data-testid` (added to
    * team/page.tsx specifically for this) — a plain text/role-based locator
