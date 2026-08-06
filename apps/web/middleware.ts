@@ -13,6 +13,32 @@ export function middleware(request: NextRequest) {
   return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
+// Scoped to exactly the (app) route-group's top-level segments — the only
+// routes ShellRouter (components/navigation/shell-router.tsx) reads
+// x-pathname for. Deliberately NOT a broad "everything except static
+// assets" matcher: /api/*, /portal/*, /login, /auth/*, /i/*, /invite/*,
+// /q/*, /forgot-password, /update-password, and the customer portal never
+// hit this middleware at all, so it cannot affect auth, redirects, or
+// session handling on any of them. Root "/" is excluded too — it's a plain
+// redirect to /today (app/page.tsx) that resolves before any shell renders.
+// Add a new entry here only when a new (app) top-level route segment is
+// added; sub-paths are covered automatically via the trailing `/:path*`.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icon-.*\\.png).*)'],
+  matcher: [
+    '/today/:path*',
+    '/customers/:path*',
+    '/jobs/:path*',
+    '/quotes/:path*',
+    '/invoices/:path*',
+    '/expenses/:path*',
+    '/properties/:path*',
+    '/requests/:path*',
+    '/services/:path*',
+    '/settings/:path*',
+    '/site-photos/:path*',
+    '/site-visits/:path*',
+    '/team/:path*',
+    '/calendar/:path*',
+    '/activity-logs/:path*',
+  ],
 };
