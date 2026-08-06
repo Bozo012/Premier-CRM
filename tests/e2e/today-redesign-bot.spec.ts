@@ -122,12 +122,12 @@ test.describe('today redesign bot', () => {
   test('owner sees the pending-review item; employee does not; viewer sees no actionable tasks at all', async ({ page }) => {
     await login(page, owner);
     await expect(page.getByText('Needs your attention')).toBeVisible();
-    await expect(page.getByText('Today redesign fixture estimate')).toBeVisible();
+    await expect(page.getByText('TodayRedesign Fixture')).toBeVisible();
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL('**/login');
 
     await login(page, employee);
-    await expect(page.getByText('Today redesign fixture estimate')).not.toBeVisible();
+    await expect(page.getByText('TodayRedesign Fixture')).not.toBeVisible();
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL('**/login');
 
@@ -140,7 +140,7 @@ test.describe('today redesign bot', () => {
   // -----------------------------------------------------------------
   test('cross-org owner sees no cross-tenant action items', async ({ page }) => {
     await login(page, otherOrgOwner);
-    await expect(page.getByText('Today redesign fixture estimate')).not.toBeVisible();
+    await expect(page.getByText('TodayRedesign Fixture')).not.toBeVisible();
   });
 
   // -----------------------------------------------------------------
@@ -148,7 +148,7 @@ test.describe('today redesign bot', () => {
   // -----------------------------------------------------------------
   test('action item navigates to the real estimate route', async ({ page }) => {
     await login(page, owner);
-    await page.getByRole('link', { name: 'Review estimate' }).click();
+    await page.getByRole('link', { name: 'Open estimate' }).click();
     await expect(page).toHaveURL(new RegExp(`/estimates/${estimateId}$`));
   });
 
@@ -157,7 +157,7 @@ test.describe('today redesign bot', () => {
   // -----------------------------------------------------------------
   test('action item disappears once pricing is approved, and the empty state returns', async ({ page }) => {
     await login(page, owner);
-    await expect(page.getByText('Today redesign fixture estimate')).toBeVisible();
+    await expect(page.getByText('TodayRedesign Fixture')).toBeVisible();
 
     const { error } = await admin
       .from('estimates')
@@ -166,7 +166,7 @@ test.describe('today redesign bot', () => {
     expect(error).toBeNull();
 
     await page.reload();
-    await expect(page.getByText('Today redesign fixture estimate')).not.toBeVisible();
+    await expect(page.getByText('TodayRedesign Fixture')).not.toBeVisible();
 
     await admin
       .from('estimates')
@@ -179,16 +179,20 @@ test.describe('today redesign bot', () => {
   // -----------------------------------------------------------------
   test('org switching updates org context and action-queue scope', async ({ page }) => {
     await login(page, multiOrgUser);
-    const switcher = page.getByLabel('Switch active organization');
+    // Two "Switch active organization" <select> elements exist in the DOM
+    // simultaneously (a desktop header variant and a mobile one) — only one
+    // is actually visible at a given viewport. `:visible` disambiguates
+    // instead of hitting a Playwright strict-mode violation.
+    const switcher = page.locator('select[aria-label="Switch active organization"]:visible');
     await expect(switcher).toHaveValue(orgId);
-    await expect(page.getByText('Today redesign fixture estimate')).toBeVisible();
+    await expect(page.getByText('TodayRedesign Fixture')).toBeVisible();
 
     await switcher.selectOption(otherOrgId);
     await page.waitForURL('**/today');
-    await expect(page.getByLabel('Switch active organization')).toHaveValue(otherOrgId);
-    await expect(page.getByText('Today redesign fixture estimate')).not.toBeVisible();
+    await expect(page.locator('select[aria-label="Switch active organization"]:visible')).toHaveValue(otherOrgId);
+    await expect(page.getByText('TodayRedesign Fixture')).not.toBeVisible();
 
-    await page.getByLabel('Switch active organization').selectOption(orgId);
+    await page.locator('select[aria-label="Switch active organization"]:visible').selectOption(orgId);
     await page.waitForURL('**/today');
   });
 
@@ -205,17 +209,27 @@ test.describe('today redesign bot', () => {
   // Quick actions — capability filtering
   // -----------------------------------------------------------------
   test('quick actions are filtered by capability: owner sees all four, viewer sees only capability-free actions', async ({ page }) => {
+    // Labels/action set here must match today/page.tsx's quickActions build
+    // exactly (Create request, Create customer always shown; Create
+    // estimate requires canCreateEstimates; Schedule work requires
+    // canCreateDirectWorkOrder — see packages/shared/permissions.ts).
+    // Scoped to the `aria-label="Quick actions"` region specifically — a
+    // second, separate "Create shortcuts" toolbar also renders links with
+    // the same labels, which makes the unscoped locator ambiguous
+    // (Playwright strict-mode violation).
     await login(page, owner);
-    await expect(page.getByRole('link', { name: 'New estimate' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'New invoice' })).toBeVisible();
+    const quickActions = page.getByLabel('Quick actions');
+    await expect(quickActions.getByRole('link', { name: 'Create estimate' })).toBeVisible();
+    await expect(quickActions.getByRole('link', { name: 'Schedule work' })).toBeVisible();
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL('**/login');
 
     await login(page, viewer);
-    await expect(page.getByRole('link', { name: 'New customer' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Review quotes' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'New estimate' })).not.toBeVisible();
-    await expect(page.getByRole('link', { name: 'New invoice' })).not.toBeVisible();
+    const viewerQuickActions = page.getByLabel('Quick actions');
+    await expect(viewerQuickActions.getByRole('link', { name: 'Create customer' })).toBeVisible();
+    await expect(viewerQuickActions.getByRole('link', { name: 'Create request' })).toBeVisible();
+    await expect(viewerQuickActions.getByRole('link', { name: 'Create estimate' })).not.toBeVisible();
+    await expect(viewerQuickActions.getByRole('link', { name: 'Schedule work' })).not.toBeVisible();
   });
 
   // -----------------------------------------------------------------
@@ -259,7 +273,7 @@ test.describe('today redesign bot', () => {
   // -----------------------------------------------------------------
   test('action-queue button is keyboard-reachable with an accessible name', async ({ page }) => {
     await login(page, owner);
-    const reviewButton = page.getByRole('link', { name: 'Review estimate' });
+    const reviewButton = page.getByRole('link', { name: 'Open estimate' });
     await reviewButton.focus();
     await expect(reviewButton).toBeFocused();
   });
