@@ -3,21 +3,23 @@
  * from the (app)/requests review page (Phases 3 & 4 of the 2026-07-31
  * workflow reliability audit).
  *
- * Both paths start from a real service_requests row (created via the public
- * intake API, same as customer-intake-bot) and are genuinely separate, not
- * two views of the same flow:
+ * Rewritten for Base44 UX Batch 8's triage consolidation
+ * (docs/ux/forge-base44-batch-8-requests-site-visits-inspection-report.md):
+ * the two legacy conversion buttons this bot used to click ("Start
+ * inspection flow" → createEstimateFromRequestAction, "Create work order"
+ * → createJobFromRequestAction) were removed from Request Detail because
+ * they were not safe, fully-equivalent substitutes for the authoritative
+ * `record_request_triage` RPC path (see the batch report's triage-equivalence
+ * findings) — TriagePanel is now the only visible trigger. This bot now
+ * drives TriagePanel's decision form instead, which exercises the SAME
+ * downstream outcomes (draft estimate / approved job with no quote/estimate
+ * backing) through the RPC that is now the sole production path, plus the
+ * RPC's own "already triaged" duplicate-prevention rule (previously proven
+ * via the legacy actions' getRequestConversionContext guard, now proven via
+ * record_request_triage's `triage_decision is not null` check).
  *
- *  - Inspection-first (createEstimateFromRequestAction): creates a DRAFT
- *    estimate linked back to the request via service_request_id, and flips
- *    the request to 'estimate_created'. No job or quote exists yet — a
- *    human still has to run the estimate → quote → accept → job pipeline.
- *  - Direct work-order (createJobFromRequestAction): creates an APPROVED
- *    job directly, no estimate/quote backing it at all (intentional
- *    "second door" per the code's own comments — skips pricing).
- *
- * Both share getRequestConversionContext()'s double-conversion guard
- * (request.estimate_id / request.job_id already set → rejected), tested
- * here via direct re-submission of the same action.
+ * Both paths still start from a real service_requests row (created via the
+ * public intake API, same as customer-intake-bot).
  */
 
 import { test, expect } from '@playwright/test';
@@ -54,8 +56,8 @@ function buildServiceRequestPayload(marker: string) {
 }
 
 test.describe('request conversion bot', () => {
-  test.describe('inspection-first conversion (Phase 3)', () => {
-    test('1. UI + DB: "Start inspection flow" creates a draft estimate linked to the request', async ({
+  test.describe('remote-estimate triage (Phase 3, via TriagePanel)', () => {
+    test('1. UI + DB: triaging "Remote estimate" creates a draft estimate linked to the request', async ({
       page,
       context,
       request,
@@ -74,23 +76,23 @@ test.describe('request conversion bot', () => {
       const session = createTestSession(page);
       await loginAsAdmin(session);
 
-      // A second tab loads the request page BEFORE conversion — its button
-      // still exists client-side even after the first tab converts the
-      // request, so submitting it proves the SERVER ACTION itself rejects a
-      // second conversion (getRequestConversionContext's estimate_id/job_id
-      // check), not just that the UI stopped offering the button.
+      // A second tab loads the request page BEFORE triage — its decision
+      // form still exists client-side even after the first tab triages the
+      // request, so submitting it proves the RPC itself rejects a second
+      // triage (record_request_triage's `triage_decision is not null`
+      // check), not just that the UI stopped offering the form.
       const staleTab = await context.newPage();
       await staleTab.goto(`/requests/${requestId}`);
-      await expect(staleTab.getByRole('button', { name: /start inspection flow/i })).toBeVisible();
+      await expect(staleTab.getByLabel(/^decision$/i)).toBeVisible();
 
       await page.goto(`/requests/${requestId}`);
-      await page.getByRole('button', { name: /start inspection flow/i }).click();
-      // The request page updates in place with a success state and an
-      // "Open estimate →" link — it does not auto-navigate there.
-      const openEstimateLink = page.getByRole('link', { name: /open estimate/i });
-      await expect(openEstimateLink).toBeVisible({ timeout: 10_000 });
-      const estimateHref = await openEstimateLink.getAttribute('href');
-      const estimateId = estimateHref!.split('/').pop()!;
+      await page.getByLabel(/^decision$/i).selectOption('remote_estimate');
+      await page.getByLabel(/^reason$/i).fill('Needs pricing before scheduling.');
+      await page.getByRole('button', { name: /record decision/i }).click();
+
+      // DecisionForm auto-navigates to the created record on success.
+      await page.waitForURL(/\/estimates\/[0-9a-f-]+$/i, { timeout: 10_000 });
+      const estimateId = page.url().split('/').pop()!;
 
       const client = createGuardedServiceClient();
       const { data: estimate } = await client
@@ -103,19 +105,22 @@ test.describe('request conversion bot', () => {
 
       const { data: serviceRequest } = await client
         .from('service_requests')
-        .select('status, estimate_id, job_id, converted_at')
+        .select('status, estimate_id, job_id, converted_at, triage_decision')
         .eq('id', requestId)
         .maybeSingle();
       expect(serviceRequest?.status).toBe('estimate_created');
       expect(serviceRequest?.estimate_id).toBe(estimateId);
       expect(serviceRequest?.job_id).toBeNull();
       expect(serviceRequest?.converted_at).toBeTruthy();
+      expect(serviceRequest?.triage_decision).toBe('remote_estimate');
 
-      // Double-conversion guard, server-side: the stale tab's button click
-      // hits createEstimateFromRequestAction again for a request that now
-      // has estimate_id set — must be rejected, not create a second estimate.
-      await staleTab.getByRole('button', { name: /start inspection flow/i }).click();
-      await expect(staleTab.getByText(/an estimate already exists/i)).toBeVisible({ timeout: 10_000 });
+      // Double-triage guard, server-side: the stale tab's form submission
+      // hits record_request_triage again for a request that's already been
+      // triaged — must be rejected, not create a second estimate.
+      await staleTab.getByLabel(/^decision$/i).selectOption('remote_estimate');
+      await staleTab.getByLabel(/^reason$/i).fill('Duplicate submission attempt.');
+      await staleTab.getByRole('button', { name: /record decision/i }).click();
+      await expect(staleTab.getByText(/already been triaged/i)).toBeVisible({ timeout: 10_000 });
 
       const { data: estimatesForRequest } = await client
         .from('estimates')
@@ -123,18 +128,19 @@ test.describe('request conversion bot', () => {
         .eq('service_request_id', requestId);
       expect(estimatesForRequest ?? []).toHaveLength(1);
 
-      // UI-level confirmation too: a fresh page load no longer offers either button.
+      // UI-level confirmation too: a fresh page load shows the recorded
+      // decision, not a re-openable decision form.
       await page.goto(`/requests/${requestId}`);
-      await expect(page.getByRole('button', { name: /start inspection flow/i })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /create work order/i })).toHaveCount(0);
+      await expect(page.getByText(/decision:\s*remote estimate/i)).toBeVisible();
+      await expect(page.getByLabel(/^decision$/i)).toHaveCount(0);
 
       await cleanupTestCustomerByMarker({ marker, email });
       await session.finish();
     });
   });
 
-  test.describe('direct work-order conversion (Phase 4)', () => {
-    test('2. UI + DB: "Create work order" creates an approved job with no estimate/quote backing', async ({
+  test.describe('direct work-order triage (Phase 4, via TriagePanel)', () => {
+    test('2. UI + DB: triaging "Direct work order" creates an approved job with no estimate/quote backing', async ({
       page,
       request,
     }) => {
@@ -153,42 +159,45 @@ test.describe('request conversion bot', () => {
       await loginAsAdmin(session);
 
       await page.goto(`/requests/${requestId}`);
-      await page.getByRole('button', { name: /create work order/i }).click();
-      // Same in-place success pattern as the estimate path — no auto-navigation.
-      const openJobLink = page.getByRole('link', { name: /open work order/i });
-      await expect(openJobLink).toBeVisible({ timeout: 10_000 });
-      const jobHref = await openJobLink.getAttribute('href');
-      const jobId = jobHref!.split('/').pop()!;
+      await page.getByLabel(/^decision$/i).selectOption('direct_work_order');
+      await page.getByLabel(/^reason$/i).fill('Emergency leak, authorized on the spot.');
+      await page.getByLabel(/authorization type/i).selectOption('internal');
+      await page.getByRole('button', { name: /record decision/i }).click();
+
+      await page.waitForURL(/\/jobs\/[0-9a-f-]+$/i, { timeout: 10_000 });
+      const jobId = page.url().split('/').pop()!;
 
       const client = createGuardedServiceClient();
       const { data: job } = await client
         .from('jobs')
-        .select('status, quoted_total')
+        .select('status, quoted_total, authorization_type')
         .eq('id', jobId)
         .maybeSingle();
       expect(job?.status).toBe('approved');
       // Intentional "second door" per the code's own comments: no pricing
       // exists yet for a directly-converted job.
       expect(job?.quoted_total).toBeNull();
+      expect(job?.authorization_type).toBe('internal');
 
       const { data: quotes } = await client.from('quotes').select('id').eq('job_id', jobId);
       expect(quotes ?? []).toHaveLength(0);
 
       const { data: serviceRequest } = await client
         .from('service_requests')
-        .select('status, job_id, estimate_id, converted_at')
+        .select('status, job_id, estimate_id, converted_at, triage_decision')
         .eq('id', requestId)
         .maybeSingle();
       expect(serviceRequest?.status).toBe('approved');
       expect(serviceRequest?.job_id).toBe(jobId);
       expect(serviceRequest?.estimate_id).toBeNull();
       expect(serviceRequest?.converted_at).toBeTruthy();
+      expect(serviceRequest?.triage_decision).toBe('direct_work_order');
 
-      // Double-conversion guard: both conversion buttons disappear once the
-      // request is converted via either path.
+      // Double-triage guard: the decision form disappears once the request
+      // has been triaged via either path.
       await page.goto(`/requests/${requestId}`);
-      await expect(page.getByRole('button', { name: /start inspection flow/i })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /create work order/i })).toHaveCount(0);
+      await expect(page.getByLabel(/^decision$/i)).toHaveCount(0);
+      await expect(page.getByText(/decision:\s*direct work order/i)).toBeVisible();
 
       await cleanupTestCustomerByMarker({ marker, email });
       await session.finish();

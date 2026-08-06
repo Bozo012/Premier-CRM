@@ -166,3 +166,37 @@ site `/request-service` form posts to Forge CRM `POST /api/v1/service-requests`
 via `VITE_CRM_API_URL`; Forge validates the website payload, applies CORS,
 honeypot, and rate-limit protections, creates or deduplicates the CRM
 customer/property records, links them, and inserts the `service_requests` row.
+
+## 2026-08-05 — Correction: the "Next Exact Step" section above is stale
+
+The "Next Exact Step" note earlier in this file (dated around the PR #110
+Today merge) says Estimates is "PR3" and still pending authorization. That
+framing is superseded and inaccurate as of this entry: the numbered
+PR2/PR3/PR4 scheme was replaced by a `Base44 UX Batch N` sequence, and
+batches 1 through 7 have since merged to `main` (finance, portal-contact,
+shell-nav-pages, expenses, team-availability, directories/board/mobile — see
+`docs/ux/forge-base44-batch-7-directories-board-mobile-report.md` and the
+batch reports it links back through). Estimates visual integration happened
+as part of that sequence, not as a separate "PR3." Kept here rather than
+edited in place so the historical narrative isn't silently rewritten —
+this note is the correction of record.
+
+## 2026-08-05 — Base44 integration coordination program + Batch 8
+
+A multi-worker program to finish reconciling the remaining Base44 UX
+reference (`Forge-Base44-UX`) with Forge was started. Full plan, route
+matrix, agent assignments, and decision log live in `docs/integration/`
+(`base44-master-plan.md` and siblings) — that directory, not this file, is
+now the authoritative live-status tracker for the multi-batch program;
+this file continues to record merged-to-`main` checkpoints only.
+
+Coordination baseline: branch `integration/base44-completion-manager`,
+commit `58b324b4fe31e409a9140d17d1fbafb5cf3cd7f0`, from `main@76bbad7c`
+(confirmed current at the time, matching the pre-approved Batch 8 plan's
+checkpoint exactly — no drift).
+
+Batch 8 (Requests + Site Visits + Inspection) implemented directly on
+`agent/forge-ux-batch-8-requests-site-visits-inspection`; see
+`docs/ux/forge-base44-batch-8-requests-site-visits-inspection-report.md`
+for the full record (triage-equivalence findings, files changed, test
+results, PR link). Not merged as of this entry.
