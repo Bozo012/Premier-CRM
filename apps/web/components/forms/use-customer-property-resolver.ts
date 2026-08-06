@@ -12,13 +12,13 @@ import {
   checkCustomerEmailAction,
   createCustomerAction,
   createPropertyForCustomerAction,
-} from '@/app/(app)/customers/actions';
+} from '@/app/(app)/(forge)/customers/actions';
 import {
   listPropertiesForCustomerAction,
   searchCustomersForPickerAction,
   type CustomerPickerItem,
   type PropertyPickerItem,
-} from '@/app/(app)/estimates/actions';
+} from '@/app/(app)/(legacy)/estimates/actions';
 
 export interface ResolvedCustomer {
   displayName: string;

@@ -6,9 +6,9 @@ import type { Customer360 } from '@premier/db';
 
 import type { DetailSection, DetailTone, RecordDetailModel } from '@/components/forge-shell/recordDetail.types';
 
-import { deriveCustomerStatus, resolveCustomerDisplayName } from './forge-customers-view-model';
+import { deriveCustomerPresentationStatus, resolveCustomerDisplayName } from './forge-customers-view-model';
 
-const STATUS_TONE: Record<ReturnType<typeof deriveCustomerStatus>, DetailTone> = {
+const STATUS_TONE: Record<ReturnType<typeof deriveCustomerPresentationStatus>, DetailTone> = {
   active: 'success',
   prospect: 'info',
   inactive: 'neutral',
@@ -16,7 +16,7 @@ const STATUS_TONE: Record<ReturnType<typeof deriveCustomerStatus>, DetailTone> =
 
 export function toCustomerDetailModel(data: Customer360): RecordDetailModel {
   const { customer, properties, recentJobs, openQuotes, unpaidInvoices, stats } = data;
-  const status = deriveCustomerStatus(customer);
+  const status = deriveCustomerPresentationStatus(customer);
   const outstandingTotal = unpaidInvoices.reduce((sum, invoice) => sum + (invoice.amount_due ?? 0), 0);
   const hasOverdueInvoice = unpaidInvoices.some((invoice) => (invoice.days_overdue ?? 0) > 0);
 

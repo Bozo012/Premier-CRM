@@ -6,7 +6,7 @@ import { LogOut, UserRound } from 'lucide-react';
 import { ThemeControl } from '@/components/theme/theme-control';
 import { Button } from '@/components/ui/button';
 
-import { signOutAction } from '@/app/(app)/today/actions';
+import { signOutAction } from '@/app/(app)/(legacy)/today/actions';
 
 export function AppAccountMenu({
   displayName,

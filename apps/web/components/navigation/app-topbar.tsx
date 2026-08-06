@@ -8,8 +8,8 @@ import { ThemeControl } from '@/components/theme/theme-control';
 import { Button } from '@/components/ui/button';
 import { getServerSupabase } from '@/lib/supabase-server';
 
-import { signOutAction } from '@/app/(app)/today/actions';
-import { OrgSwitcher } from '@/app/(app)/today/_components/org-switcher';
+import { signOutAction } from '@/app/(app)/(legacy)/today/actions';
+import { OrgSwitcher } from '@/app/(app)/(legacy)/today/_components/org-switcher';
 import { AppAccountMenu } from './app-account-menu';
 
 const createLinks = [

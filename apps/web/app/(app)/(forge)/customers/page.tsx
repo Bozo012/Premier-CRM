@@ -63,7 +63,7 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
 
   // Real server-side search (packages/db/queries/customers.ts:listCustomers
   // ilike's `display_name`) — not client-side filtering. `status` has no
-  // persisted column to push into the query (see deriveCustomerStatus's
+  // persisted column to push into the query (see deriveCustomerPresentationStatus's
   // doc comment in forge-customers-view-model.ts), so it stays a post-fetch
   // filter over this bounded page, same limitation the pre-existing page.tsx
   // already had.
