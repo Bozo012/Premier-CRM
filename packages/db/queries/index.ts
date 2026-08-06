@@ -1,4 +1,10 @@
 export {
+  getTeamMemberById,
+  type OrgMember,
+  type TeamMemberRecord,
+  type UserProfile,
+} from './team';
+export {
   addQuoteLineItem,
   createDraftQuote,
   getQuoteById,
