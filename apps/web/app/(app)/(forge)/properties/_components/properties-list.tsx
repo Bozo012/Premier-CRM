@@ -134,16 +134,16 @@ export function PropertiesList({ model, callbacks }: { model: PropertyListModel;
                     }}
                     className="cursor-pointer border-t border-border transition hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
-                    <td className="px-4 py-3">
+                    <td className="max-w-0 break-words px-4 py-3">
                       <span className="block text-sm font-bold text-card-foreground">{p.name}</span>
                       <span className="block text-xs text-muted-foreground">{p.address}</span>
                       {p.attentionLabel && (
-                        <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                        <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[hsl(var(--st-warning-fg))]">
                           <AlertTriangle className="h-3 w-3" aria-hidden="true" /> {p.attentionLabel}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="max-w-0 break-words px-4 py-3">
                       <PropertyCustomerLink property={p} onOpenCustomer={callbacks.onOpenCustomer} />
                     </td>
                     <td className="px-4 py-3 text-sm text-card-foreground">{p.typeLabel}</td>
