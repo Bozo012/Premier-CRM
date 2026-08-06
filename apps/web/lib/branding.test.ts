@@ -61,7 +61,7 @@ describe('representative staff page titles', () => {
   const cases: Array<[string, string]> = [
     ['apps/web/app/(app)/(legacy)/today/page.tsx', 'Today'],
     ['apps/web/app/(app)/(forge)/customers/page.tsx', 'Customers'],
-    ['apps/web/app/(app)/(legacy)/properties/page.tsx', 'Properties'],
+    ['apps/web/app/(app)/(forge)/properties/page.tsx', 'Properties'],
     ['apps/web/app/(app)/(legacy)/requests/page.tsx', 'Requests'],
     ['apps/web/app/(app)/(legacy)/site-visits/[siteVisitId]/page.tsx', 'Site Visits'],
     ['apps/web/app/(app)/(legacy)/estimates/page.tsx', 'Estimates'],

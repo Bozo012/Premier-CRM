@@ -36,17 +36,17 @@ const LEGACY_ROUTES = [
   'quotes',
   'invoices',
   'expenses',
-  'properties',
   'requests',
   'services',
   'settings',
   'site-photos',
   'site-visits',
-  'team',
   'calendar',
   'activity-logs',
   'estimates',
 ] as const;
+
+const FORGE_ROUTES = ['customers', 'properties', 'team'] as const;
 
 describe('(app) route-group split — no middleware, no duplicate/missing routes', () => {
   it('has no application middleware.ts anywhere under apps/web', () => {
@@ -64,10 +64,10 @@ describe('(app) route-group split — no middleware, no duplicate/missing routes
     expect(exists('(forge)', route)).toBe(false);
   });
 
-  it('customers lives under (forge)/ only, not bare or (legacy)/', () => {
-    expect(exists('(forge)', 'customers')).toBe(true);
-    expect(exists('customers')).toBe(false);
-    expect(exists('(legacy)', 'customers')).toBe(false);
+  it.each(FORGE_ROUTES)('%s lives under (forge)/ only, not bare or (legacy)/', (route) => {
+    expect(exists('(forge)', route)).toBe(true);
+    expect(exists(route)).toBe(false);
+    expect(exists('(legacy)', route)).toBe(false);
   });
 
   it('every legacy route still has a page.tsx (route resolves)', () => {
@@ -82,6 +82,16 @@ describe('(app) route-group split — no middleware, no duplicate/missing routes
     // /customers/new was never migrated to the new shell — it must still
     // exist, unmoved, so "Add customer" keeps working.
     expect(exists('(forge)', 'customers', 'new', 'page.tsx')).toBe(true);
+  });
+
+  it('properties list and detail routes still have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'properties', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'properties', '[propertyId]', 'page.tsx')).toBe(true);
+  });
+
+  it('team list and (new) detail routes have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'team', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'team', '[memberId]', 'page.tsx')).toBe(true);
   });
 
   it('per-route error/loading boundaries moved with their routes', () => {
@@ -128,5 +138,15 @@ describe('shell assignment — one shell per route-group, verified from source',
   it('customers page.tsx builds its own ForgeShell chrome (via CustomersShell)', () => {
     const source = readSource('(forge)', 'customers', 'page.tsx');
     expect(source).toContain('CustomersShell');
+  });
+
+  it('properties page.tsx builds its own ForgeShell chrome (via PropertiesShell)', () => {
+    const source = readSource('(forge)', 'properties', 'page.tsx');
+    expect(source).toContain('PropertiesShell');
+  });
+
+  it('team page.tsx builds its own ForgeShell chrome (via TeamShell)', () => {
+    const source = readSource('(forge)', 'team', 'page.tsx');
+    expect(source).toContain('TeamShell');
   });
 });
