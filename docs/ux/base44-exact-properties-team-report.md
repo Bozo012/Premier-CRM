@@ -125,32 +125,47 @@ Both detail routes confirmed to use the generic `RecordDetailView` kit in Base44
 - **Build (`pnpm --filter web build`):** succeeds. Confirmed in the route table: `/properties`, `/properties/[propertyId]`, `/team`, `/team/[memberId]` all present as dynamic (ƒ) routes; no middleware compiled.
 - **Lint:** `pnpm lint` has pre-existing errors (all in `scripts/*.mjs` Node scripts missing `no-undef` globals, and a couple of unrelated pre-existing e2e specs) — confirmed via `pnpm lint | grep -i "properties\|team"` that **none** of the flagged files are inside the new `(forge)/properties`/`(forge)/team` trees. The Next.js build's own integrated lint step (which does cover the new files) passed cleanly with only two pre-existing warnings in unrelated `quotes` files.
 
-## E2E status — executed in a follow-up verification pass
+## premier-crm-e2e migration sync
 
-The implementation pass had no `.env.test` in this worktree and honestly reported the specs as written-but-unrun. A follow-up verification pass copied `C:\dev\Premier-CRM\.env.test` into this worktree (confirmed gitignored here, confirmed non-production via `/api/e2e-health` → `premier-crm-e2e`, `slbnizoskumwhleeiccv`), started the dev server, and actually ran everything:
+`premier-crm-e2e`'s applied migrations stopped at `20260804000002`, missing two later ones present in the repo and already applied to **production** (`apnbpcauqrjvkoleisde`): `20260805075928_forge_expenses_foundation` and `20260805084201_team_availability_model`. Verified before applying anything:
 
-- **`properties-base44-shell-bot`**: found 2 real failures (horizontal overflow at tablet-landscape and desktop) — see "Implementation defect found and fixed" below. **Clean after the fix.**
-- **`team-base44-shell-bot`**: **3 failures, all one root cause**: `premier-crm-e2e`'s applied migrations stop at `20260804000002` — it is missing `20260805084201_team_availability_model` (and everything after), so the `team_member_availability` table does not exist on that project at all (confirmed via direct `information_schema.tables` query — zero rows). Every Team test that loads `/team` hits `"Could not find the table 'public.team_member_availability' in the schema cache"` and fails. This is a **pre-existing environment gap** (the e2e project is out of sync with the repo's migration set), not a defect in this slice's code — the query logic was extracted unchanged from the pre-existing `(legacy)/team/page.tsx`, which has the identical dependency and would fail identically against this same environment. No migration was applied to fix this (out of this task's authorized scope — flagged for separate action).
-- **`customers-base44-shell-bot`** (regression check): 14/14 passing, run in isolation.
-- **`today-redesign-bot`** (regression check): 13/13 passing, run in isolation.
+- Both confirmed present on `main` and already applied to production (`apnbpcauqrjvkoleisde`'s migration list includes both).
+- Both fully additive/non-destructive: new enums, a new `expenses` table, three new nullable columns on `invoice_line_items` (no backfill needed — existing rows just get `NULL`), a new `team_member_availability` table. No `DROP`, no rewrite of existing data.
+- All dependencies (`public.set_updated_at()`, `public.user_is_in_org()`, the `payment_method` enum, and every referenced table — `jobs`/`customers`/`properties`/`invoices`/`vault_items`/`invoice_line_items`/`org_members`/`organizations`) confirmed already present on `premier-crm-e2e` before applying.
+- Neither table existed yet on `premier-crm-e2e` (confirmed via direct schema query) — clean state, no partial-application risk.
 
-Both new spec files (`tests/e2e/properties-base44-shell-bot.spec.ts`, `tests/e2e/team-base44-shell-bot.spec.ts`) typecheck cleanly against `tests/e2e/tsconfig.json`. `tests/e2e/utils/selectors.ts`'s `team.heading` selector was corrected from a stale `"Team access"` heading name to the ported `TeamList`'s actual `<h1>Team</h1>`; a `memberCard` locator was added.
+Applied both, in order, via the Supabase MCP `apply_migration` tool against project `slbnizoskumwhleeiccv` (`premier-crm-e2e`) — the tool the repo's own `scripts/run-migrations.mjs` documents as the correct one for applying a single new migration to an existing database. No migration file content was altered. `production` was never touched.
 
-## Implementation defect found and fixed
+**Post-apply verification**: migration history now includes both (tracked under new version stamps reflecting apply time, since that's how this tool records them — names and schema content are exact matches to the checked-in files). `team_member_availability`: all 11 expected columns present, `relrowsecurity = true`, all 4 expected RLS policies present (`select_org_members`, `insert_self_or_admin`, `update_self_or_admin`, `delete_admin`), `authenticated` grants correct (SELECT/INSERT/UPDATE/DELETE). `expenses`: RLS enabled, all 7 expected indexes present.
 
-`properties-base44-shell-bot`'s overflow assertions failed at 1024×768 and 1440×900 (208px of horizontal overflow). Root cause: the desktop table's Property/Customer `<td>` cells had no word-breaking, so a long unbroken token forced the table wider than the viewport — accumulated E2E fixture names like `E2E_TEST_CONV_ESTIMATE_1785700637047_k0l7sn` are the worst case in this environment, but a genuinely long real address or business name with no spaces could trigger the same thing in production. Fixed with `max-w-0 break-words` on both cells; verified both previously-failing assertions now pass, plus a full clean re-run of the whole Properties bot. Also converted one literal `text-amber-700 dark:text-amber-400` to the existing `--st-warning-fg` token while in the file, matching the convention already established for Requests/Customers in prior slices.
+## E2E status — fully executed, Team included
 
-## Visual evidence — captured
+Ran against `premier-crm-e2e` (`.env.test` copied from the main checkout, confirmed gitignored, confirmed non-production via `/api/e2e-health`, deleted after use):
 
-12 real authenticated screenshots captured in the follow-up pass (`scripts/capture-properties-team-evidence.mjs`, viewport crops not fullPage, not committed): Properties list/detail at desktop light/dark + mobile light (6 files, all genuine — Properties has no dependency on the missing table), Team list/detail at desktop light/dark + mobile light (6 files — the **list** screenshots are genuine; the **detail** screenshots show the same "Team could not be loaded" error state as the list, since no member row exists to click through to a real detail view while the table is missing). Shared directly with the reviewer rather than committed (22MB+ of PNGs doesn't belong in git history, same reasoning as PR #125).
+- **`properties-base44-shell-bot`**: found 2 real failures (horizontal overflow at tablet-landscape and desktop) — see "Implementation defects found and fixed" below. **Clean after the fix**, re-verified in a combined re-run.
+- **`team-base44-shell-bot`**: after the migration sync, **12/13 passed immediately**; the 13th (`an employee account does not see invite-management actions that an owner/admin sees`) found a **second real defect** — see below. **13/13 clean after the fix.**
+- **`customers-base44-shell-bot`** (regression check): 14/14 passing.
+- **`today-redesign-bot`** (regression check, isolated): 13/13 passing.
+- Combined re-run of properties + team + customers together: 38/38 clean.
+
+Both new spec files typecheck cleanly against `tests/e2e/tsconfig.json`. `tests/e2e/utils/selectors.ts`'s `team.heading` selector was corrected from a stale `"Team access"` heading name to the ported `TeamList`'s actual `<h1>Team</h1>`; a `memberCard` locator was added.
+
+## Implementation defects found and fixed
+
+1. **Properties table overflow.** `properties-base44-shell-bot`'s overflow assertions failed at 1024×768 and 1440×900 (208px of horizontal overflow). Root cause: the desktop table's Property/Customer `<td>` cells had no word-breaking, so a long unbroken token forced the table wider than the viewport — accumulated E2E fixture names like `E2E_TEST_CONV_ESTIMATE_1785700637047_k0l7sn` are the worst case in this environment, but a genuinely long real address or business name with no spaces could trigger the same thing in production. Fixed with `max-w-0 break-words` on both cells. Also converted one literal `text-amber-700 dark:text-amber-400` to the existing `--st-warning-fg` token while in the file.
+
+2. **Team "Invite member" button not role-gated.** Once the schema was synced, `team-base44-shell-bot` found that an `employee`-role account (the persistent `TEST_STAFF` identity, confirmed via direct query to genuinely hold `role='employee'`, `status='active'`) could see the "Invite member" button, even though the `#invite-member` section it scrolls to was already correctly gated server-side (`role === 'owner' || 'admin'` in `page.tsx`). Root cause: the ported `TeamList` presentation component is intentionally permission-free (props-driven, no auth knowledge of its own) and always rendered the button — nothing upstream told it not to; only the target section, not the trigger, was gated. Fixed by adding `canInvite: boolean` to `TeamListViewModel`, threading it through `toTeamListViewModel()`, and wiring `page.tsx`'s existing `canManageTeam` value into it; `TeamList` now conditionally renders the button on `model.canInvite`. Added a focused regression test (`canInvite defaults to false and only becomes true when explicitly passed`) covering both the fail-closed default and the explicit-true case.
+
+## Visual evidence — captured, including real Team screens
+
+12 real authenticated screenshots (`scripts/capture-properties-team-evidence.mjs`, viewport crops not fullPage, not committed — shared directly with the reviewer). All 12 are now genuine working pages, including Team list and Team Member Detail, which were blocked by the missing table in the first verification pass and are now real after the migration sync and the `canInvite` fix.
 
 ## Known limitations
 
 1. Availability editing moved from the list page to the detail page (see "Actions wired vs. deferred").
 2. Properties list search/filter is server-side for text (`?q=`) but status/type remain post-fetch filters over the bounded 250-row page, matching the pre-existing legacy page's exact limitation — not a regression introduced here.
 3. Team Member Detail's "assigned"/"schedule" sections cover only `site_visits`/`site_visit_appointments`; no job-crew, completed-work, notes, or activity-history data exists to back the equivalent Base44 fixture sections (all explicitly omitted, not faked).
-4. Cross-org isolation for `getTeamMemberById` was verified by code-reading (matches the proven `getCustomer360`/`getPropertyMemory` pattern) but could not be exercised against a live second-org fixture in this pass either, since the Team route is fully blocked by the missing-table issue.
-5. **`premier-crm-e2e` is missing at least one migration** (`20260805084201_team_availability_model`, and possibly others after `20260804000002`) — this blocks not just this PR's Team E2E coverage but any future work touching team availability against this environment. Needs someone with migration-apply authorization to run `supabase db push` (or equivalent) against the e2e project specifically — not attempted here, out of this task's scope.
+4. Cross-org isolation for `getTeamMemberById` was verified by code-reading (matches the proven `getCustomer360`/`getPropertyMemory` pattern); not additionally exercised against a live second-org fixture in this pass — the existing `team-base44-shell-bot` suite doesn't include a cross-org case, and adding one was outside this fix's scope.
 
 ## Next recommended slice
 
@@ -163,6 +178,9 @@ Job crew assignment as a first-class model (a real `job_assignments`/`crew` tabl
 3. `ce61146` — feat(team): port exact Base44 Team list, add real Team Member Detail route
 4. `c6ff0eb` — test(e2e): add properties/team base44-shell bot specs (written, not executed)
 5. `b20c722` — docs(ux): add base44-exact-properties-team-report.md
-6. `def5337` — fix(properties): stop desktop table overflowing on long unbroken names (found by actually running the E2E bot in a follow-up pass)
+6. `def5337` — fix(properties): stop desktop table overflowing on long unbroken names
 7. `78c8002` — chore: add properties/team visual-evidence capture script
-8. (this commit) — docs(ux): update report with follow-up E2E execution, the overflow fix, and captured visual evidence
+8. `b90cb27` — docs(ux): update report with follow-up E2E execution results
+9. `bcb1766` — fix(team): gate the "Invite member" trigger button by role, not just its target section
+10. `f17d76f` — test(team): add regression coverage for canInvite gating
+11. (this commit) — docs(ux): final update after premier-crm-e2e migration sync and the invite-button fix
