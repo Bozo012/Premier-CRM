@@ -32,12 +32,15 @@ function makeCustomer360(overrides: Partial<Customer360> = {}): Customer360 {
 }
 
 describe('toCustomerDetailModel', () => {
-  it('derives an active status and no actions when nothing is wired', () => {
+  it('derives an active status, no primary action, and the real Add property secondary action', () => {
     const model = toCustomerDetailModel(makeCustomer360());
     expect(model.statusLabel).toBe('Active');
     expect(model.statusTone).toBe('success');
     expect(model.primaryAction).toBeNull();
-    expect(model.secondaryActions).toEqual([]);
+    // Add property is a real, pre-existing Forge capability
+    // (createPropertyForCustomerAction) restored via the Base44 contract's
+    // page-level secondaryActions slot — not a fabricated Base44 action.
+    expect(model.secondaryActions).toEqual([{ id: 'add-property', label: 'Add property', kind: 'secondary' }]);
     expect(model.identity).toBe('CUST-11111111');
   });
 

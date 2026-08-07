@@ -38,19 +38,21 @@ export async function createTestProperty(
   await propertiesCard.zipInput(page).fill(fixture.zip);
   await propertiesCard.submitButton(page).click();
 
-  // The card does `router.refresh()` on success rather than navigating — the
-  // new property shows up as a link in the same list once the toast fires.
-  const link = propertiesCard.propertyLink(page, fixture.addressLine1);
-  await expect(link).toBeVisible({ timeout: 10_000 });
-  const href = await link.getAttribute('href');
-  if (!href) {
-    throw new Error(`Property link for "${fixture.addressLine1}" has no href.`);
-  }
-  const id = href.split('/').pop()!;
+  // The dialog does `router.refresh()` on success rather than navigating —
+  // the new property shows up as a row in the same section once the toast
+  // fires. That row is a client-routed button (RecordDetailView's related-
+  // record rows have no real href), so extract the id by clicking through
+  // to /properties/{id} and reading the resulting URL.
+  const row = propertiesCard.propertyLink(page, fixture.addressLine1);
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await row.click();
+  await page.waitForURL(/\/properties\/[0-9a-f-]{36}$/, { timeout: 10_000 });
+  const url = page.url();
+  const id = url.split('/').pop()!;
 
   return {
     id,
-    url: href,
+    url: new URL(url).pathname,
     addressLine1: fixture.addressLine1,
     customerId: customer.id,
   };

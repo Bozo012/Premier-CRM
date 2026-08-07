@@ -85,7 +85,7 @@ export default async function CustomerDetailPage({ params }: CustomerDetailPageP
 
   return (
     <CustomersShell shellData={shellData} mobileNav={buildMobileNavConfig()}>
-      <CustomerDetailContainer model={model} />
+      <CustomerDetailContainer customerId={customerId} model={model} />
     </CustomersShell>
   );
 }

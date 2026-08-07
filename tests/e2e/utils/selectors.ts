@@ -125,14 +125,33 @@ export const today = {
  * below — no collisions.
  */
 export const propertiesCard = {
-  addPropertyToggle: (page: Page) => page.getByRole('button', { name: '+ Add property' }),
+  // Restored (see fix/customer-add-property) via Customer Detail's
+  // Base44-ported secondaryActions slot — plain "Add property", no "+"
+  // glyph, matching every other secondaryActions label's convention. The
+  // old bespoke PropertiesCard's "+ Add property" inline-toggle text no
+  // longer exists; that component was removed as dead code once its
+  // capability was restored through the real, still-current mechanism.
+  addPropertyToggle: (page: Page) => page.getByRole('button', { name: 'Add property', exact: true }),
   addressLine1Input: (page: Page) => page.locator('#new-property-addressLine1'),
   cityInput: (page: Page) => page.locator('#new-property-city'),
   stateInput: (page: Page) => page.locator('#new-property-state'),
   zipInput: (page: Page) => page.locator('#new-property-zip'),
-  submitButton: (page: Page) => page.getByRole('button', { name: 'Add property', exact: true }),
+  // Scoped to the dialog: the header's "Add property" trigger button stays
+  // mounted (just visually covered) behind the modal, and shares the exact
+  // same accessible name as the dialog's own submit button.
+  submitButton: (page: Page) => page.getByRole('dialog').getByRole('button', { name: 'Add property', exact: true }),
+  // Named propertyLink for historical reasons (the old PropertiesCard used
+  // a real <a href> here); Customer Detail's Base44-ported RecordDetailView
+  // renders related-record rows as client-routed <button>s (DetailSections.tsx's
+  // RelatedRow), not anchors — no href to read, so callers must navigate via
+  // .click() and read page.url() afterward.
+  // Scoped to the aria-label RecordDetailView's RelatedRow gives each row
+  // ("Open property {address}") — a plain name match against the address
+  // also matches the page-header contextChips pill linking to the same
+  // property (forge-customer-detail-view-model.ts's contextChips), which
+  // has an identical accessible name.
   propertyLink: (page: Page, addressLine1: string) =>
-    page.getByRole('link', { name: new RegExp(escapeRegExp(addressLine1)) }),
+    page.getByRole('button', { name: new RegExp(`Open property.*${escapeRegExp(addressLine1)}`) }),
 };
 
 /**

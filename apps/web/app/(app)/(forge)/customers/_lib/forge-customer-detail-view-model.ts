@@ -116,13 +116,21 @@ export function toCustomerDetailModel(data: Customer360): RecordDetailModel {
       { id: 'outstanding', label: 'Outstanding invoices', value: `${unpaidInvoices.length} · ${formatMoney(outstandingTotal)}`, tone: unpaidInvoices.length > 0 ? 'warning' : undefined },
     ],
     warnings: hasOverdueInvoice ? ['This customer has at least one overdue invoice.'] : undefined,
-    // No primary/secondary actions: Base44's customer-detail actions
-    // (edit-customer, archive-customer, send-message, open-portal-account,
-    // etc.) have no corresponding real Forge server action/route today.
-    // Fabricating them here would misrepresent what this PR ships —
-    // intentionally deferred, not wired. See the Customers route report.
+    // No primary action: Base44's customer-detail actions (edit-customer,
+    // archive-customer, send-message, open-portal-account, etc.) have no
+    // corresponding real Forge server action/route today. Fabricating them
+    // here would misrepresent what this PR ships — intentionally deferred,
+    // not wired. See the Customers route report.
+    //
+    // "Add property" is different: it's not a Base44-sourced action idea,
+    // it's a real, pre-existing Forge capability (createPropertyForCustomerAction,
+    // unchanged) that predates this route's Base44 port and was dropped when
+    // the old bespoke PropertiesCard's inline "+ Add property" control was
+    // replaced by this generic Base44 RecordDetailView model, which has no
+    // section-scoped action slot — only page-level secondaryActions, exactly
+    // like Base44's own contract. Restored here via that same mechanism.
     primaryAction: null,
-    secondaryActions: [],
+    secondaryActions: [{ id: 'add-property', label: 'Add property', kind: 'secondary' }],
     sections,
   };
 }
