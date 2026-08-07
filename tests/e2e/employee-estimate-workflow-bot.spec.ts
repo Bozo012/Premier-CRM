@@ -75,7 +75,12 @@ test.describe('employee estimate workflow bot', () => {
 
       await page.goto(routes.customers);
       await page.getByPlaceholder(/search/i).fill(customer.marker);
-      await expect(page.getByText(customer.marker, { exact: false })).toBeVisible({ timeout: 10_000 });
+      // :visible — the desktop table and mobile card layouts both render in
+      // the DOM simultaneously (toggled with responsive CSS classes, not
+      // removed), so a plain text match resolves to two elements.
+      await expect(page.getByText(customer.marker, { exact: false }).locator('visible=true').first()).toBeVisible({
+        timeout: 10_000,
+      });
 
       await page.goto(customer.url);
       await expect(page.getByRole('heading', { name: customer.marker })).toBeVisible();
@@ -201,8 +206,11 @@ test.describe('employee estimate workflow bot', () => {
       const customer = scenario.customer!;
 
       await page.goto(routes.customers);
-      const links = page.getByRole('link', { name: new RegExp(escapeRegExp(customer.marker)) });
-      await expect(links).toHaveCount(1);
+      // The desktop table's rows are plain onClick <tr> elements (no <a>
+      // href, customers-list.tsx), not links — but <tr> carries an implicit
+      // ARIA "row" role, which is what's actually queryable here.
+      const rows = page.getByRole('row', { name: new RegExp(escapeRegExp(customer.marker)) });
+      await expect(rows).toHaveCount(1);
     });
   });
 
