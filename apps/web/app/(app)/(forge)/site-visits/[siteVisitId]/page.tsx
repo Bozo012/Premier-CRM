@@ -19,6 +19,8 @@ import { GenerateEstimateButton } from '../_components/generate-estimate-button'
 import { LifecycleButtons } from '../_components/lifecycle-buttons';
 import { ScheduleForm } from '../_components/schedule-form';
 import { StartInspectionButton } from '../_components/start-inspection-button';
+import { SiteVisitsShell } from '../_components/site-visits-shell';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import {
   inspectionDetailProgress,
   siteVisitDetailActions,
@@ -50,17 +52,28 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
     redirect('/today');
   }
 
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
+
   const serviceClient = createServiceClient();
   const result = await getSiteVisitById(serviceClient, siteVisitId, orgContextResult.data.orgId);
 
   if (!result.success) {
     return (
-      <ForgePage className="max-w-3xl gap-5">
-        <ForgeBackLink href="/site-visits">Site Visits</ForgeBackLink>
-        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {result.error === 'NOT_FOUND' ? 'Site visit not found.' : `Failed to load site visit: ${result.error}`}
-        </p>
-      </ForgePage>
+      <SiteVisitsShell shellData={shellData} mobileNav={mobileNav}>
+        <ForgePage className="max-w-3xl gap-5">
+          <ForgeBackLink href="/site-visits">Site Visits</ForgeBackLink>
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {result.error === 'NOT_FOUND' ? 'Site visit not found.' : `Failed to load site visit: ${result.error}`}
+          </p>
+        </ForgePage>
+      </SiteVisitsShell>
     );
   }
 
@@ -70,6 +83,7 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
   const actions = siteVisitDetailActions(visit);
 
   return (
+    <SiteVisitsShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="max-w-3xl gap-5 md:gap-6">
       <ForgeBackLink href="/site-visits">Site Visits</ForgeBackLink>
 
@@ -172,6 +186,7 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
         />
       ) : null}
     </ForgePage>
+    </SiteVisitsShell>
   );
 }
 

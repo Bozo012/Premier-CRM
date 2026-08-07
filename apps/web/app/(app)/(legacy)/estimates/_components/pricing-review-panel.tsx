@@ -12,7 +12,7 @@ import {
   requestEstimatePricingReviewAction,
   returnEstimatePricingForChangesAction,
   createQuoteFromEstimateWorkflowAction,
-} from '../../site-visits/actions';
+} from '@/app/(app)/(forge)/site-visits/actions';
 
 interface PricingReviewPanelProps {
   estimateId: string;

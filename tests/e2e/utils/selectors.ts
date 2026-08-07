@@ -26,6 +26,8 @@ export const routes = {
   estimates: '/estimates',
   newEstimate: '/estimates/new',
   requests: '/requests',
+  newRequest: '/requests/new',
+  siteVisits: '/site-visits',
   services: '/services',
   settings: '/settings/website',
   team: '/team',

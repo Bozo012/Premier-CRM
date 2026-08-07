@@ -17,6 +17,8 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { MarkReviewedButton } from '../_components/mark-reviewed-button';
 import { TriagePanel } from '../_components/triage-panel';
+import { RequestsShell } from '../_components/requests-shell';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import { toForgeRequestDetailModel } from '../_lib/forge-request-view-model';
 
 interface RequestDetailPageProps {
@@ -45,16 +47,30 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   const { orgId, role } = orgContextResult.data;
   const canTriageRequests = hasCapability(role as OrgRole, 'canTriageRequests');
 
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
+
   const result = await getRequestById(supabase, { taskId, orgId });
 
   if (!result.success) {
-    return <ErrorPage>Failed to load request: {result.error}</ErrorPage>;
+    return (
+      <RequestsShell shellData={shellData} mobileNav={mobileNav}>
+        <ErrorPage>Failed to load request: {result.error}</ErrorPage>
+      </RequestsShell>
+    );
   }
 
   const request = result.data;
   const model = toForgeRequestDetailModel(request);
 
   return (
+    <RequestsShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="max-w-3xl gap-5 md:gap-6">
       <ForgeBackLink href="/requests">Requests</ForgeBackLink>
 
@@ -140,6 +156,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
 
       <ActionsCard request={request} canTriageRequests={canTriageRequests} />
     </ForgePage>
+    </RequestsShell>
   );
 }
 

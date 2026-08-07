@@ -1,123 +1,25 @@
 'use client';
 
-// Client component: mobile-first form with debounced autosave per field —
-// requires local input state and timers, can't be a server component.
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-
+// Client component: controlled inputs for every real inspection field type
+// (text/longtext/number/boolean/multiselect/photo_list/measurement_list/
+// quantity_list/material_list). Extracted unchanged from the pre-existing
+// flat inspection-form.tsx so the 5-step wizard (inspection-workflow.tsx)
+// and any other consumer render every field type identically — no
+// duplicated/diverging field-rendering logic.
 import type { InspectionFieldDefinition } from '@premier/shared';
 
-import { saveSiteVisitInspectionAction, completeSiteVisitWithValidationAction } from '../actions';
 import { PhotoUpload } from './photo-upload';
 
-interface InspectionFormProps {
-  siteVisitId: string;
-  fieldDefinitions: InspectionFieldDefinition[];
-  initialResponses: Record<string, unknown>;
-  readOnly: boolean;
-  returnToVisitOnComplete?: boolean;
-}
+export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-
-const AUTOSAVE_DELAY_MS = 1200;
-
-export function InspectionForm({
-  siteVisitId,
-  fieldDefinitions,
-  initialResponses,
-  readOnly,
-  returnToVisitOnComplete = false,
-}: InspectionFormProps) {
-  const router = useRouter();
-  const [responses, setResponses] = useState<Record<string, unknown>>(initialResponses);
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [isCompleting, setIsCompleting] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const sortedFields = [...fieldDefinitions].sort((a, b) => a.displayOrder - b.displayOrder);
-
-  const scheduleAutosave = (key: string, value: unknown) => {
-    if (readOnly) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      void (async () => {
-        setSaveState('saving');
-        const result = await saveSiteVisitInspectionAction(siteVisitId, fieldDefinitions, { [key]: value });
-        setSaveState(result.success ? 'saved' : 'error');
-        if (!result.success) toast.error(result.error ?? 'Autosave failed.');
-      })();
-    }, AUTOSAVE_DELAY_MS);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const updateField = (key: string, value: unknown) => {
-    setResponses((prev) => ({ ...prev, [key]: value }));
-    scheduleAutosave(key, value);
-  };
-
-  const handleComplete = async () => {
-    setIsCompleting(true);
-    const result = await completeSiteVisitWithValidationAction(siteVisitId, fieldDefinitions, responses);
-    setIsCompleting(false);
-    if (result.success) {
-      toast.success('Inspection completed.');
-      if (returnToVisitOnComplete) router.push(`/site-visits/${siteVisitId}`);
-      else router.refresh();
-    } else {
-      toast.error(result.error ?? 'Cannot complete: some required fields are missing.');
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {readOnly ? 'Findings locked (visit completed).' : <SaveIndicator state={saveState} />}
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {sortedFields.map((field) => (
-          <FieldEditor
-            key={field.key}
-            field={field}
-            value={responses[field.key]}
-            readOnly={readOnly}
-            siteVisitId={siteVisitId}
-            onChange={(value) => updateField(field.key, value)}
-          />
-        ))}
-      </div>
-
-      {!readOnly ? (
-        <button
-          type="button"
-          onClick={handleComplete}
-          disabled={isCompleting}
-          className="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50 sm:w-auto"
-        >
-          {isCompleting ? 'Completing…' : 'Complete inspection'}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function SaveIndicator({ state }: { state: SaveState }) {
+export function SaveIndicator({ state }: { state: SaveState }) {
   if (state === 'idle') return null;
   if (state === 'saving') return <span>Saving…</span>;
   if (state === 'saved') return <span className="text-[hsl(var(--st-success-fg))]">Saved</span>;
   return <span className="text-[hsl(var(--st-error-fg))]">Save failed</span>;
 }
 
-function FieldEditor({
+export function FieldEditor({
   field,
   value,
   readOnly,
@@ -130,8 +32,9 @@ function FieldEditor({
   siteVisitId: string;
   onChange: (value: unknown) => void;
 }) {
+  const inputId = `field-${field.key}`;
   const label = (
-    <label className="block text-sm font-medium text-foreground">
+    <label htmlFor={inputId} className="block text-sm font-medium text-foreground">
       {field.label}
       {field.required ? <span className="ml-0.5 text-red-500">*</span> : null}
     </label>
@@ -143,6 +46,7 @@ function FieldEditor({
         <div className="space-y-1">
           {label}
           <input
+            id={inputId}
             type="text"
             disabled={readOnly}
             value={(value as string) ?? ''}
@@ -156,6 +60,7 @@ function FieldEditor({
         <div className="space-y-1">
           {label}
           <textarea
+            id={inputId}
             disabled={readOnly}
             value={(value as string) ?? ''}
             onChange={(e) => onChange(e.target.value)}
@@ -169,6 +74,7 @@ function FieldEditor({
         <div className="space-y-1">
           {label}
           <input
+            id={inputId}
             type="number"
             disabled={readOnly}
             value={typeof value === 'number' ? value : ''}
@@ -236,9 +142,7 @@ function FieldEditor({
     case 'measurement_list':
     case 'quantity_list':
     case 'material_list':
-      return (
-        <ListFieldEditor field={field} value={value} readOnly={readOnly} onChange={onChange} />
-      );
+      return <ListFieldEditor field={field} value={value} readOnly={readOnly} onChange={onChange} />;
     default:
       return null;
   }
@@ -262,7 +166,7 @@ const COLUMN_META: Record<string, { label: string; placeholder: string; type: 't
   unit: { label: 'Unit', placeholder: 'e.g. ft', type: 'text', widthClass: 'sm:flex-1' },
 };
 
-function ListFieldEditor({
+export function ListFieldEditor({
   field,
   value,
   readOnly,
@@ -291,24 +195,27 @@ function ListFieldEditor({
     onChange(rows.filter((_, i) => i !== index));
   };
 
+  const listLabelId = `field-${field.key}-label`;
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-foreground">
+      <label id={listLabelId} className="block text-sm font-medium text-foreground">
         {field.label}
         {field.required ? <span className="ml-0.5 text-red-500">*</span> : null}
       </label>
-      <div className="space-y-3">
+      <div className="space-y-3" role="group" aria-labelledby={listLabelId}>
         {rows.map((row, i) => (
           <div key={i} className="space-y-2 rounded-md border bg-muted/20 p-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               {columns.map((col) => {
                 const meta = COLUMN_META[col] ?? { label: col, placeholder: col, type: 'text' as const, widthClass: 'sm:flex-1' };
+                const rowInputId = `field-${field.key}-${i}-${col}`;
                 return (
                   <div key={col} className={`min-w-0 ${meta.widthClass}`}>
-                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <label htmlFor={rowInputId} className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       {meta.label}
                     </label>
                     <input
+                      id={rowInputId}
                       type={meta.type}
                       inputMode={meta.type === 'number' ? 'decimal' : undefined}
                       placeholder={meta.placeholder}

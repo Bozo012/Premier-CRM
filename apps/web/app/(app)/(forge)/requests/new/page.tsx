@@ -6,6 +6,8 @@ import { getActiveOrgContext } from '@premier/db';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { NewRequestForm } from '../_components/new-request-form';
+import { RequestsShell } from '../_components/requests-shell';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 
 export default async function NewRequestPage() {
   const supabase = await getServerSupabase();
@@ -23,7 +25,17 @@ export default async function NewRequestPage() {
     redirect('/requests');
   }
 
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
+
   return (
+    <RequestsShell shellData={shellData} mobileNav={mobileNav}>
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 pb-24 pt-5 sm:px-6 md:px-8 md:pt-8">
       <Link
         href="/requests"
@@ -48,5 +60,6 @@ export default async function NewRequestPage() {
 
       <NewRequestForm />
     </main>
+    </RequestsShell>
   );
 }

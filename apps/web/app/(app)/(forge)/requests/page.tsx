@@ -10,7 +10,11 @@ import { OrgContextError } from '@/components/org-context-error';
 import { getRequestIntakePath, getRequestIntakePathLabel } from '@/lib/request-intake-flow';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import type { ForgeShellData, MobileNavConfig } from '@/components/forge-shell/types';
+
+import { buildForgeShellData, buildMobileNavConfig } from './_lib/forge-shell-context';
 import { toForgeRequestSummary, type ForgeRequestFilter } from './_lib/forge-request-view-model';
+import { RequestsShell } from './_components/requests-shell';
 
 export const metadata: Metadata = { title: 'Requests' };
 
@@ -52,11 +56,20 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   if (!orgContextResult.success) {
     return (
-      <PageShell show={show} query={query}>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await listRequests(supabase, {
     orgId: orgContextResult.data.orgId,
@@ -67,7 +80,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   if (!result.success) {
     return (
-      <PageShell show={show} query={query}>
+      <PageShell show={show} query={query} shellData={shellData} mobileNav={mobileNav}>
         <ErrorPanel>Failed to load requests: {result.error}</ErrorPanel>
       </PageShell>
     );
@@ -81,7 +94,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
   const displayed = filterRequests(baseRequests.map((request) => toForgeRequestSummary(request)), query);
 
   return (
-    <PageShell show={show} query={query}>
+    <PageShell show={show} query={query} shellData={shellData} mobileNav={mobileNav}>
       <p className="text-sm font-medium text-muted-foreground">
         {formatTotal(displayed.length, show)}
       </p>
@@ -146,12 +159,17 @@ function PageShell({
   children,
   show,
   query,
+  shellData,
+  mobileNav,
 }: {
   children: React.ReactNode;
   show: ForgeRequestFilter;
   query: string;
+  shellData: ForgeShellData;
+  mobileNav: MobileNavConfig;
 }) {
   return (
+    <RequestsShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="gap-5 md:gap-6">
       <header className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -203,6 +221,7 @@ function PageShell({
 
       {children}
     </ForgePage>
+    </RequestsShell>
   );
 }
 

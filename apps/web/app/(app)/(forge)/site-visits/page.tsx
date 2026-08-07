@@ -8,8 +8,11 @@ import { getActiveOrgContext, listSiteVisits } from '@premier/db';
 import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presentation';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
+import type { ForgeShellData, MobileNavConfig } from '@/components/forge-shell/types';
 
+import { buildForgeShellData, buildMobileNavConfig } from './_lib/forge-shell-context';
 import { toForgeSiteVisitSummary, type ForgeSiteVisitSummary } from './_lib/forge-site-visit-view-model';
+import { SiteVisitsShell } from './_components/site-visits-shell';
 
 export const metadata: Metadata = { title: 'Site Visits' };
 
@@ -46,11 +49,20 @@ export default async function SiteVisitsPage({ searchParams }: SiteVisitsPagePro
 
   if (!orgContextResult.success) {
     return (
-      <PageShell status={status} query={query} visits={[]}>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await listSiteVisits(supabase, {
     orgId: orgContextResult.data.orgId,
@@ -61,7 +73,7 @@ export default async function SiteVisitsPage({ searchParams }: SiteVisitsPagePro
 
   if (!result.success) {
     return (
-      <PageShell status={status} query={query} visits={[]}>
+      <PageShell status={status} query={query} visits={[]} shellData={shellData} mobileNav={mobileNav}>
         <ErrorPanel>Failed to load site visits: {result.error}</ErrorPanel>
       </PageShell>
     );
@@ -70,7 +82,13 @@ export default async function SiteVisitsPage({ searchParams }: SiteVisitsPagePro
   const visits = filterVisits(result.data.visits.map((visit) => toForgeSiteVisitSummary(visit)), query);
 
   return (
-    <PageShell status={status} query={query} visits={result.data.visits.map((visit) => toForgeSiteVisitSummary(visit))}>
+    <PageShell
+      status={status}
+      query={query}
+      visits={result.data.visits.map((visit) => toForgeSiteVisitSummary(visit))}
+      shellData={shellData}
+      mobileNav={mobileNav}
+    >
       <p className="text-sm font-medium text-muted-foreground">
         {visits.length} {visits.length === 1 ? 'site visit' : 'site visits'}
       </p>
@@ -130,13 +148,18 @@ function PageShell({
   status,
   query,
   visits,
+  shellData,
+  mobileNav,
 }: {
   children: React.ReactNode;
   status: StatusFilter;
   query: string;
   visits: ForgeSiteVisitSummary[];
+  shellData: ForgeShellData;
+  mobileNav: MobileNavConfig;
 }) {
   return (
+    <SiteVisitsShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="gap-5 md:gap-6">
       <header className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -191,6 +214,7 @@ function PageShell({
 
       {children}
     </ForgePage>
+    </SiteVisitsShell>
   );
 }
 
