@@ -10,7 +10,11 @@ import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presen
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import type { ForgeShellData, MobileNavConfig } from '@/components/forge-shell/types';
+
 import { NewQuoteDialog } from './_components/new-quote-dialog';
+import { QuotesShell } from './_components/quotes-shell';
+import { buildForgeShellData, buildMobileNavConfig } from './_lib/forge-shell-context';
 import { toForgeQuoteSummary, type ForgeQuoteSummary } from './_lib/forge-quote-view-model';
 
 export const metadata: Metadata = { title: 'Quotes' };
@@ -49,11 +53,20 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
 
   if (!orgContextResult.success) {
     return (
-      <PageShell search={search} status={status}>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await listQuotes(supabase, {
     limit: 100,
@@ -65,7 +78,7 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
 
   if (!result.success) {
     return (
-      <PageShell search={search} status={status}>
+      <PageShell search={search} status={status} shellData={shellData} mobileNav={mobileNav}>
         <ErrorPanel>Failed to load quotes: {result.error}</ErrorPanel>
       </PageShell>
     );
@@ -74,7 +87,7 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
   const quotes = result.data.quotes.map((quote) => toForgeQuoteSummary(quote));
 
   return (
-    <PageShell search={search} status={status} total={result.data.total}>
+    <PageShell search={search} status={status} total={result.data.total} shellData={shellData} mobileNav={mobileNav}>
       <p className="text-sm font-medium text-muted-foreground">
         {formatTotal(result.data.total, search, status)}
       </p>
@@ -100,13 +113,18 @@ function PageShell({
   search = '',
   status,
   total = 0,
+  shellData,
+  mobileNav,
 }: {
   children: React.ReactNode;
   search?: string;
   status?: QuoteStatus;
   total?: number;
+  shellData: ForgeShellData;
+  mobileNav: MobileNavConfig;
 }) {
   return (
+    <QuotesShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="max-w-6xl gap-5 md:gap-6">
       <header className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -168,6 +186,7 @@ function PageShell({
 
       {children}
     </ForgePage>
+    </QuotesShell>
   );
 }
 

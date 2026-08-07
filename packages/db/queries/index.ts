@@ -97,6 +97,7 @@ export {
   type JobListPropertySummary,
 } from './jobs';
 export {
+  getServiceItemById,
   listCatalogItemsForPicker,
   listServiceCatalogItems,
   listServiceCategories,
@@ -108,6 +109,7 @@ export {
   type ServiceCatalogPage,
   type ServiceCategory,
   type ServiceItem,
+  type ServiceItemDetail,
 } from './service-catalog';
 export {
   acceptOrgInvite,

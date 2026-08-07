@@ -15,12 +15,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import type { ForgeShellData, MobileNavConfig } from '@/components/forge-shell/types';
+
 import { ApproveJobButton } from '../_components/approve-job-button';
 import { CreateJobButton } from '../_components/create-job-button';
 import { LineItemEditor } from '../_components/line-item-editor';
 import { QuoteMetadataForm } from '../_components/quote-metadata-form';
+import { QuotesShell } from '../_components/quotes-shell';
 import { ResendQuoteEmailButton } from '../_components/resend-quote-email-button';
 import { SendQuoteButton } from '../_components/send-quote-button';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import { quoteStatusTone } from '../_lib/forge-quote-view-model';
 
 interface QuoteDetailPageProps {
@@ -48,12 +52,21 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
 
   if (!orgContextResult.success) {
     return (
-      <PageShell>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
   const { orgId } = orgContextResult.data;
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const serviceClient = createServiceClient();
 
@@ -71,7 +84,7 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
     }
 
     return (
-      <PageShell>
+      <PageShell shellData={shellData} mobileNav={mobileNav}>
         <ErrorPanel>Failed to load quote: {result.error}</ErrorPanel>
       </PageShell>
     );
@@ -83,7 +96,7 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
   const catalogItems = catalogResult.success ? catalogResult.data : [];
 
   return (
-    <PageShell>
+    <PageShell shellData={shellData} mobileNav={mobileNav}>
       <header className="space-y-4">
         <div className="space-y-2">
           {job ? (
@@ -380,8 +393,20 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
   );
 }
 
-function PageShell({ children }: { children: React.ReactNode }) {
-  return <ForgePage className="max-w-6xl gap-5 md:gap-6">{children}</ForgePage>;
+function PageShell({
+  children,
+  shellData,
+  mobileNav,
+}: {
+  children: React.ReactNode;
+  shellData: ForgeShellData;
+  mobileNav: MobileNavConfig;
+}) {
+  return (
+    <QuotesShell shellData={shellData} mobileNav={mobileNav}>
+      <ForgePage className="max-w-6xl gap-5 md:gap-6">{children}</ForgePage>
+    </QuotesShell>
+  );
 }
 
 function InfoCard({

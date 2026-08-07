@@ -10,8 +10,12 @@ import { OrgContextError } from '@/components/org-context-error';
 import { ForgeStatusPill } from '@/components/forge/presentation';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import type { ForgeShellData, MobileNavConfig } from '@/components/forge-shell/types';
+
 import { ServiceCategoryManager } from './_components/service-category-manager';
 import { ServiceItemManager } from './_components/service-item-manager';
+import { ServicesShell } from './_components/services-shell';
+import { buildForgeShellData, buildMobileNavConfig } from './_lib/forge-shell-context';
 
 export const metadata: Metadata = { title: 'Service Catalog' };
 
@@ -50,11 +54,20 @@ export default async function ServicesPage({ searchParams }: ServicesPageProps) 
 
   if (!orgContextResult.success) {
     return (
-      <PageShell categories={[]} items={[]} search={search} categoryId={categoryId} status={status}>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await listServiceCatalogItems(supabase, {
     activity: 'all',
@@ -65,7 +78,7 @@ export default async function ServicesPage({ searchParams }: ServicesPageProps) 
 
   if (!result.success) {
     return (
-      <PageShell categories={[]} items={[]} search={search} categoryId={categoryId} status={status}>
+      <PageShell categories={[]} items={[]} search={search} categoryId={categoryId} status={status} shellData={shellData} mobileNav={mobileNav}>
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">Failed to load services: {result.error}</p>
       </PageShell>
     );
@@ -75,7 +88,7 @@ export default async function ServicesPage({ searchParams }: ServicesPageProps) 
   const groupedItems = groupItemsByCategory(result.data.items);
 
   return (
-    <PageShell categories={result.data.categories} items={result.data.items} search={search} categoryId={categoryId} status={status}>
+    <PageShell categories={result.data.categories} items={result.data.items} search={search} categoryId={categoryId} status={status} shellData={shellData} mobileNav={mobileNav}>
       {visibleItems.length === 0 ? (
         <div className="grid min-h-[40vh] place-items-center rounded-xl border bg-card px-4 text-center">
           <div>
@@ -109,6 +122,8 @@ function PageShell({
   items,
   search,
   status,
+  shellData,
+  mobileNav,
 }: {
   categoryId?: string;
   categories: ServiceCatalogCategorySummary[];
@@ -116,8 +131,11 @@ function PageShell({
   items: ServiceCatalogItemSummary[];
   search?: string;
   status: CatalogStatus;
+  shellData: ForgeShellData;
+  mobileNav: MobileNavConfig;
 }) {
   return (
+    <ServicesShell shellData={shellData} mobileNav={mobileNav}>
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-6 sm:px-6 md:pb-10 lg:px-8">
       <header className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -170,6 +188,7 @@ function PageShell({
       </header>
       {children}
     </main>
+    </ServicesShell>
   );
 }
 
@@ -190,7 +209,10 @@ function CategoryLink({ active, href, label }: { active: boolean; href: string; 
 function ServiceCard({ itemSummary }: { itemSummary: ServiceCatalogItemSummary }) {
   const item = itemSummary.item;
   return (
-    <article className="rounded-xl border bg-card p-4 shadow-sm">
+    <Link
+      href={`/services/${item.id}`}
+      className="block rounded-xl border bg-card p-4 shadow-sm transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-bold text-card-foreground">{item.name}</h2>
@@ -208,7 +230,7 @@ function ServiceCard({ itemSummary }: { itemSummary: ServiceCatalogItemSummary }
       <p className="mt-3 text-sm font-bold text-primary">{formatPrimaryPrice(item.rate_confirmed ?? item.default_unit_price)}</p>
       <p className="mt-1 text-sm text-muted-foreground">{formatPriceRange(item.rate_low, item.rate_high)}</p>
       {item.description ? <p className="mt-2 text-sm text-card-foreground">{item.description}</p> : null}
-    </article>
+    </Link>
   );
 }
 

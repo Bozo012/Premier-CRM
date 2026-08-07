@@ -169,6 +169,67 @@ export async function listServiceCatalogItems(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Single service item detail — additive, org-scoped, no schema change.
+// Follows the exact precedent of packages/db/queries/team.ts's
+// getTeamMemberById: fetch by id, .eq('org_id', orgId) before returning,
+// NOT_FOUND on a cross-org or missing id, small follow-up lookup for the
+// category name (no FK embed needed since category_id is a plain column on
+// service_items already selected by `*`).
+// ---------------------------------------------------------------------------
+
+export interface ServiceItemDetail {
+  category: ServiceCatalogCategorySummary | null;
+  item: ServiceItem;
+}
+
+export async function getServiceItemById(
+  client: DbClient,
+  args: { serviceItemId: string; orgId: string }
+): Promise<Result<ServiceItemDetail>> {
+  const { data: item, error } = await client
+    .from('service_items')
+    .select('*')
+    .eq('id', args.serviceItemId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  if (!item) {
+    return err(ErrorCode.NOT_FOUND, `Service item ${args.serviceItemId} not found`);
+  }
+
+  let category: ServiceCatalogCategorySummary | null = null;
+
+  if (item.category_id) {
+    const { data: categoryRow, error: categoryError } = await client
+      .from('service_categories')
+      .select('id, name, parent_id, sort_order')
+      .eq('id', item.category_id)
+      .eq('org_id', args.orgId)
+      .maybeSingle();
+
+    if (categoryError) {
+      return err(ErrorCode.DB_ERROR, categoryError.message);
+    }
+
+    category = categoryRow
+      ? {
+          id: categoryRow.id,
+          itemCount: 0,
+          name: categoryRow.name,
+          parentId: categoryRow.parent_id,
+          sortOrder: categoryRow.sort_order,
+        }
+      : null;
+  }
+
+  return ok({ category, item });
+}
+
 export async function saveServiceCategory(
   client: DbClient,
   args: { input: ServiceCategoryInput; orgId: string }

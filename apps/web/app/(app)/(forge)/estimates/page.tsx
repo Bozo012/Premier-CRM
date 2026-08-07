@@ -9,6 +9,10 @@ import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presen
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import type { ForgeShellData, MobileNavConfig } from '@/components/forge-shell/types';
+
+import { EstimatesShell } from './_components/estimates-shell';
+import { buildForgeShellData, buildMobileNavConfig } from './_lib/forge-shell-context';
 import {
   toForgeEstimateSummary,
   type ForgeEstimateFilter,
@@ -52,11 +56,20 @@ export default async function EstimatesPage({ searchParams }: EstimatesPageProps
 
   if (!orgContextResult.success) {
     return (
-      <PageShell query={query} view={view}>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await listEstimates(supabase, {
     orgId: orgContextResult.data.orgId,
@@ -67,7 +80,7 @@ export default async function EstimatesPage({ searchParams }: EstimatesPageProps
 
   if (!result.success) {
     return (
-      <PageShell query={query} view={view}>
+      <PageShell query={query} view={view} shellData={shellData} mobileNav={mobileNav}>
         <ErrorPanel>Failed to load estimates: {result.error}</ErrorPanel>
       </PageShell>
     );
@@ -79,7 +92,7 @@ export default async function EstimatesPage({ searchParams }: EstimatesPageProps
   );
 
   return (
-    <PageShell query={query} total={result.data.total} view={view}>
+    <PageShell query={query} total={result.data.total} view={view} shellData={shellData} mobileNav={mobileNav}>
       <p className="text-sm font-medium text-muted-foreground">
         {formatTotal(summaries.length, view, query)}
       </p>
@@ -105,13 +118,18 @@ function PageShell({
   query,
   total = 0,
   view,
+  shellData,
+  mobileNav,
 }: {
   children: React.ReactNode;
   query: string;
   total?: number;
   view: ForgeEstimateFilter;
+  shellData: ForgeShellData;
+  mobileNav: MobileNavConfig;
 }) {
   return (
+    <EstimatesShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="max-w-6xl gap-5 md:gap-6">
       <header className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -166,6 +184,7 @@ function PageShell({
 
       {children}
     </ForgePage>
+    </EstimatesShell>
   );
 }
 
