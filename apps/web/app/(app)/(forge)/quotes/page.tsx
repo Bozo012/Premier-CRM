@@ -207,14 +207,14 @@ function QuotesTable({ quotes }: { quotes: ForgeQuoteSummary[] }) {
         <tbody className="divide-y">
           {quotes.map((quote) => (
             <tr key={quote.id} className="transition hover:bg-muted/30">
-              <td className="px-5 py-4">
+              <td className="max-w-0 break-words px-5 py-4">
                 <Link href={`/quotes/${quote.id}`} className="group flex items-center gap-2 font-bold text-foreground">
-                  <FileSignature className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <FileSignature className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="group-hover:underline">{quote.number}</span>
                 </Link>
                 <div className="mt-0.5 text-xs text-muted-foreground">{quote.originLabel}</div>
               </td>
-              <td className="px-5 py-4">
+              <td className="max-w-0 break-words px-5 py-4">
                 <div className="font-medium text-foreground">{quote.customerName}</div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{quote.propertyName}</div>
               </td>

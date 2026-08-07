@@ -119,8 +119,10 @@ test.describe('estimates base44 shell bot', () => {
         // Real, unchanged sections from packages/db/queries/estimates.ts's
         // getEstimateById/listEstimateLineItems/listQuotesForEstimate —
         // proves the ported detail page still surfaces the real state
-        // machine's entry points, not just that a page renders.
-        await expect(page.getByText('Quotes', { exact: true })).toBeVisible();
+        // machine's entry points, not just that a page renders. Scoped to
+        // the heading role — a plain getByText('Quotes') also matches the
+        // sidebar nav link of the same name.
+        await expect(page.getByRole('heading', { name: 'Quotes', exact: true })).toBeVisible();
 
         const errors = collectConsoleErrors(page);
         await assertNoHorizontalOverflow(page);

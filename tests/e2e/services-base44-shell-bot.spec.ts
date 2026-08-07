@@ -72,7 +72,10 @@ test.describe('services base44 shell bot', () => {
 
     test('status filter tabs update the URL', async ({ page }) => {
       await page.goto(routes.services);
-      await page.getByRole('link', { name: 'Active' }).click();
+      // href-scoped rather than role-name text: the "Active" tab's
+      // accessible name includes its count badge (e.g. "Active 31"), and a
+      // plain substring match against 'Active' also matches "Inactive".
+      await page.locator('a[href$="?status=active"], a[href*="?status=active&"]').first().click();
       await expect(page).toHaveURL(/[?&]status=active/);
     });
 

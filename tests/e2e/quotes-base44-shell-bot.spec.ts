@@ -74,7 +74,10 @@ test.describe('quotes base44 shell bot', () => {
 
     test('status filter tabs update the URL', async ({ page }) => {
       await page.goto(routes.quotes);
-      await page.getByRole('link', { name: 'Draft' }).click();
+      // Exact match: a non-exact 'Draft' also matches every "Draft quote"
+      // row link's accessible name (Playwright role-name matching is a
+      // case-insensitive substring match by default).
+      await page.getByRole('link', { name: 'Draft', exact: true }).click();
       await expect(page).toHaveURL(/[?&]status=draft/);
     });
 

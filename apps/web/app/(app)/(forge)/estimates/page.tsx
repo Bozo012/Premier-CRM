@@ -205,14 +205,14 @@ function EstimatesTable({ estimates }: { estimates: ForgeEstimateSummary[] }) {
         <tbody className="divide-y">
           {estimates.map((estimate) => (
             <tr key={estimate.id} className="transition hover:bg-muted/30">
-              <td className="px-5 py-4">
+              <td className="max-w-0 break-words px-5 py-4">
                 <Link href={`/estimates/${estimate.id}`} className="group flex items-center gap-2 font-bold text-foreground">
-                  <Calculator className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <Calculator className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="group-hover:underline">{estimate.number}</span>
                 </Link>
                 <div className="mt-0.5 text-xs text-muted-foreground">{estimate.title}</div>
               </td>
-              <td className="px-5 py-4">
+              <td className="max-w-0 break-words px-5 py-4">
                 <div className="font-medium text-foreground">{estimate.customerName}</div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{estimate.propertyName}</div>
               </td>
