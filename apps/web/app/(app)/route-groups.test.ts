@@ -33,18 +33,24 @@ function exists(...segments: string[]): boolean {
 const LEGACY_ROUTES = [
   'today',
   'jobs',
-  'quotes',
   'invoices',
   'expenses',
-  'services',
   'settings',
   'site-photos',
   'calendar',
   'activity-logs',
-  'estimates',
 ] as const;
 
-const FORGE_ROUTES = ['customers', 'properties', 'team', 'requests', 'site-visits'] as const;
+const FORGE_ROUTES = [
+  'customers',
+  'properties',
+  'team',
+  'requests',
+  'site-visits',
+  'estimates',
+  'quotes',
+  'services',
+] as const;
 
 describe('(app) route-group split — no middleware, no duplicate/missing routes', () => {
   it('has no application middleware.ts anywhere under apps/web', () => {
@@ -104,6 +110,23 @@ describe('(app) route-group split — no middleware, no duplicate/missing routes
     expect(exists('(forge)', 'site-visits', '[siteVisitId]', 'inspection', 'page.tsx')).toBe(true);
   });
 
+  it('estimates list/detail/new routes have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'estimates', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'estimates', '[estimateId]', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'estimates', 'new', 'page.tsx')).toBe(true);
+  });
+
+  it('quotes list/detail/new routes have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'quotes', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'quotes', '[quoteId]', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'quotes', 'new', 'page.tsx')).toBe(true);
+  });
+
+  it('services list/detail routes have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'services', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'services', '[serviceId]', 'page.tsx')).toBe(true);
+  });
+
   it('per-route error/loading boundaries moved with their routes', () => {
     expect(exists('(legacy)', 'invoices', 'error.tsx')).toBe(true);
     expect(exists('(legacy)', 'jobs', 'error.tsx')).toBe(true);
@@ -158,5 +181,20 @@ describe('shell assignment — one shell per route-group, verified from source',
   it('team page.tsx builds its own ForgeShell chrome (via TeamShell)', () => {
     const source = readSource('(forge)', 'team', 'page.tsx');
     expect(source).toContain('TeamShell');
+  });
+
+  it('estimates page.tsx builds its own ForgeShell chrome (via EstimatesShell)', () => {
+    const source = readSource('(forge)', 'estimates', 'page.tsx');
+    expect(source).toContain('EstimatesShell');
+  });
+
+  it('quotes page.tsx builds its own ForgeShell chrome (via QuotesShell)', () => {
+    const source = readSource('(forge)', 'quotes', 'page.tsx');
+    expect(source).toContain('QuotesShell');
+  });
+
+  it('services page.tsx builds its own ForgeShell chrome (via ServicesShell)', () => {
+    const source = readSource('(forge)', 'services', 'page.tsx');
+    expect(source).toContain('ServicesShell');
   });
 });

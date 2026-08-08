@@ -23,6 +23,7 @@ export const routes = {
   newJob: '/jobs/new',
   properties: '/properties',
   quotes: '/quotes',
+  newQuote: '/quotes/new',
   estimates: '/estimates',
   newEstimate: '/estimates/new',
   requests: '/requests',

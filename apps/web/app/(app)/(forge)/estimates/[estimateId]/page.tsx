@@ -16,8 +16,10 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { AdvanceStatusButton } from '../_components/advance-status-button';
 import { CreateQuoteButton } from '../_components/create-quote-button';
+import { EstimatesShell } from '../_components/estimates-shell';
 import { LineItemsSection } from '../_components/line-items-section';
 import { PricingReviewPanel } from '../_components/pricing-review-panel';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import { estimateStatusTone } from '../_lib/forge-estimate-view-model';
 
 interface EstimateDetailPageProps {
@@ -47,6 +49,15 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
   const canApprovePricing = hasCapability(role as OrgRole, 'canApproveEstimatePricing');
   const canEditEstimate = hasCapability(role as OrgRole, 'canEditEstimate');
 
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
+
   const [result, quotesResult, lineItemsResult] = await Promise.all([
     getEstimateById(supabase, { estimateId, orgId }),
     listQuotesForEstimate(serviceClient, { estimateId, orgId }),
@@ -55,14 +66,16 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
 
   if (!result.success) {
     return (
-      <ForgePage className="max-w-6xl gap-5 md:gap-6">
-        <BackLink />
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {result.error === 'NOT_FOUND'
-            ? 'Estimate not found.'
-            : `Failed to load estimate: ${result.error}`}
-        </p>
-      </ForgePage>
+      <EstimatesShell shellData={shellData} mobileNav={mobileNav}>
+        <ForgePage className="max-w-6xl gap-5 md:gap-6">
+          <BackLink />
+          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {result.error === 'NOT_FOUND'
+              ? 'Estimate not found.'
+              : `Failed to load estimate: ${result.error}`}
+          </p>
+        </ForgePage>
+      </EstimatesShell>
     );
   }
 
@@ -75,6 +88,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
     : null;
 
   return (
+    <EstimatesShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="max-w-6xl gap-5 md:gap-6">
       <BackLink />
 
@@ -249,6 +263,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
         )}
       </section>
     </ForgePage>
+    </EstimatesShell>
   );
 }
 

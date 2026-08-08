@@ -5,6 +5,8 @@ import { getActiveOrgContext } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { EstimatesShell } from '../_components/estimates-shell';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import { NewEstimateForm } from '../_components/new-estimate-form';
 
 export default async function NewEstimatePage() {
@@ -23,7 +25,17 @@ export default async function NewEstimatePage() {
     redirect('/estimates');
   }
 
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
+
   return (
+    <EstimatesShell shellData={shellData} mobileNav={mobileNav}>
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 md:gap-6 md:px-8 md:pt-8">
       <Link
         href="/estimates"
@@ -43,5 +55,6 @@ export default async function NewEstimatePage() {
 
       <NewEstimateForm />
     </main>
+    </EstimatesShell>
   );
 }
