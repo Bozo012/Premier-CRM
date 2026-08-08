@@ -793,7 +793,11 @@ export async function assignJobCrewMemberAction(
   if (!result.success) return result;
 
   revalidatePath(`/jobs/${jobId}`);
-  revalidatePath(`/team/${userId}`);
+  // No /team/[memberId] revalidation here: Team Member Detail's route
+  // param is org_members.id, not user_id — no presentation reads this
+  // yet (deliberately deferred, see design/job-crew-assignment-model),
+  // so there's nothing real to revalidate; resolving org_members.id
+  // from userId is a future-slice concern once that page exists.
   return result;
 }
 
@@ -823,7 +827,11 @@ export async function removeJobCrewMemberAction(
   if (!result.success) return result;
 
   revalidatePath(`/jobs/${jobId}`);
-  revalidatePath(`/team/${userId}`);
+  // No /team/[memberId] revalidation here: Team Member Detail's route
+  // param is org_members.id, not user_id — no presentation reads this
+  // yet (deliberately deferred, see design/job-crew-assignment-model),
+  // so there's nothing real to revalidate; resolving org_members.id
+  // from userId is a future-slice concern once that page exists.
   return result;
 }
 
@@ -853,6 +861,10 @@ export async function setJobLeadAction(
   if (!result.success) return result;
 
   revalidatePath(`/jobs/${jobId}`);
-  revalidatePath(`/team/${userId}`);
+  // No /team/[memberId] revalidation here: Team Member Detail's route
+  // param is org_members.id, not user_id — no presentation reads this
+  // yet (deliberately deferred, see design/job-crew-assignment-model),
+  // so there's nothing real to revalidate; resolving org_members.id
+  // from userId is a future-slice concern once that page exists.
   return result;
 }

@@ -24,15 +24,9 @@ import type { DbClient } from '../client';
  * the two methods used here rather than a bare `any` client, so everything
  * else in this file still gets full type safety.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface UntypedDbClient {
-  from(table: string): {
-    select(columns: string): {
-      eq(column: string, value: string): {
-        eq(column: string, value: string): { order(column: string, opts: { ascending: boolean }): Promise<{ data: unknown; error: { message: string } | null }> };
-        order(column: string, opts: { ascending: boolean }): Promise<{ data: unknown; error: { message: string } | null }>;
-      };
-    };
-  };
+  from(table: string): any;
   rpc(fn: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
@@ -70,37 +64,61 @@ export interface MemberJobAssignment {
   assignedAt: string;
 }
 
-/** Every crew member assigned to a job, most-recently-assigned first. */
+/**
+ * Every crew member assigned to a job, most-recently-assigned first
+ * (created_at desc, id asc as a tiebreaker for full determinism).
+ *
+ * Two-step fetch rather than a PostgREST embed: job_assignments.user_id
+ * references auth.users(id), not user_profiles — there is no direct FK
+ * from job_assignments to user_profiles for PostgREST to auto-embed
+ * through, so this follows getTeamMemberById's established two-query
+ * pattern (packages/db/queries/team.ts) instead.
+ */
 export async function listJobAssignments(
   client: DbClient,
   args: { orgId: string; jobId: string }
 ): Promise<Result<JobAssignment[]>> {
   const { data, error } = await untyped(client)
     .from('job_assignments')
-    .select('id, job_id, user_id, is_lead, created_at, user_profiles!job_assignments_user_id_fkey(full_name)')
+    .select('id, job_id, user_id, is_lead, created_at')
     .eq('org_id', args.orgId)
     .eq('job_id', args.jobId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: true });
 
   if (error) return err(ErrorCode.DB_ERROR, error.message);
 
-  const rows = (data ?? []) as unknown as Array<
-    JobAssignmentRow & { user_profiles: { full_name: string | null } | null }
-  >;
+  const rows = (data ?? []) as JobAssignmentRow[];
+  if (rows.length === 0) return ok([]);
+
+  const userIds = [...new Set(rows.map((row) => row.user_id))];
+  const { data: profiles, error: profilesError } = await client
+    .from('user_profiles')
+    .select('id, full_name')
+    .in('id', userIds);
+  if (profilesError) return err(ErrorCode.DB_ERROR, profilesError.message);
+
+  const nameByUserId = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
 
   return ok(
     rows.map((row) => ({
       id: row.id,
       jobId: row.job_id,
       userId: row.user_id,
-      displayName: row.user_profiles?.full_name ?? 'Unknown',
+      displayName: nameByUserId.get(row.user_id) ?? 'Unknown',
       isLead: row.is_lead,
       assignedAt: row.created_at,
     }))
   );
 }
 
-/** Every job a given team member is currently assigned to. Feeds Team Member Detail's "assigned jobs" section. */
+/**
+ * Every job a given team member is currently assigned to, most-recently-
+ * assigned first (created_at desc, id asc as a tiebreaker). Feeds Team
+ * Member Detail's "assigned jobs" section. The `jobs!...` embed is valid
+ * here (unlike listJobAssignments' user_profiles case) — job_assignments
+ * has a real, direct FK to jobs(id).
+ */
 export async function listMemberJobAssignments(
   client: DbClient,
   args: { orgId: string; userId: string }
@@ -110,7 +128,8 @@ export async function listMemberJobAssignments(
     .select('id, job_id, is_lead, created_at, jobs!job_assignments_job_id_fkey(title, status, job_number)')
     .eq('org_id', args.orgId)
     .eq('user_id', args.userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: true });
 
   if (error) return err(ErrorCode.DB_ERROR, error.message);
 

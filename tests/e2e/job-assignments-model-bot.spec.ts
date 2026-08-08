@@ -23,6 +23,7 @@
 import { test, expect } from '@playwright/test';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@premier/db';
+import { listJobAssignments, listMemberJobAssignments } from '@premier/db';
 import { hasApiTestCredentials } from './utils/auth';
 
 const canRun = () => hasApiTestCredentials() && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -56,15 +57,21 @@ test.describe('job assignments model bot', () => {
     let owner: Fixture;
     let employee: Fixture;
     let subcontractor: Fixture;
+    let viewer: Fixture;
     let org2Owner: Fixture;
     let customerId: string;
     let propertyId: string;
     let jobId: string;
+    let org2JobId: string;
     let crewUserId1: string; // employee.userId, reused as the person being assigned
     let crewUserId2: string; // subcontractor.userId
     const org2Id = crypto.randomUUID();
 
-    async function makeStaffFixture(rolePrefix: string, role: 'owner' | 'admin' | 'employee' | 'subcontractor', orgId: string): Promise<Fixture> {
+    async function makeStaffFixture(
+      rolePrefix: string,
+      role: 'owner' | 'admin' | 'employee' | 'subcontractor' | 'viewer',
+      orgId: string
+    ): Promise<Fixture> {
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
       const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
       const email = `e2e-jam-${rolePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -117,9 +124,36 @@ test.describe('job assignments model bot', () => {
       if (jobErr || !job) throw new Error(`Failed to create fixture job: ${jobErr?.message}`);
       jobId = job.id;
 
+      // A minimal org2 customer/property/job, needed for the "cross-org job
+      // rejected" test — an org1 caller must be blocked from acting on a
+      // job that genuinely belongs to a different org, not just from an
+      // org2 caller acting on an org1 job (test 3, the reverse direction).
+      const { data: org2Customer, error: org2CustErr } = await admin
+        .from('customers')
+        .insert({ org_id: org2Id, type: 'residential', first_name: 'E2E_JAM_ORG2', last_name: 'Fixture', source: 'manual_staff_entry' })
+        .select('id')
+        .single();
+      if (org2CustErr || !org2Customer) throw new Error(`Failed to create org2 fixture customer: ${org2CustErr?.message}`);
+
+      const { data: org2Property, error: org2PropErr } = await admin
+        .from('properties')
+        .insert({ org_id: org2Id, address_line_1: '1 E2E JAM ORG2 Test Way', city: 'Florence', state: 'KY', zip: '41042' })
+        .select('id')
+        .single();
+      if (org2PropErr || !org2Property) throw new Error(`Failed to create org2 fixture property: ${org2PropErr?.message}`);
+
+      const { data: org2Job, error: org2JobErr } = await admin
+        .from('jobs')
+        .insert({ org_id: org2Id, customer_id: org2Customer.id, property_id: org2Property.id, title: 'E2E_JAM_ORG2 fixture job' })
+        .select('id')
+        .single();
+      if (org2JobErr || !org2Job) throw new Error(`Failed to create org2 fixture job: ${org2JobErr?.message}`);
+      org2JobId = org2Job.id;
+
       owner = await makeStaffFixture('owner', 'owner', ORG1);
       employee = await makeStaffFixture('employee', 'employee', ORG1);
       subcontractor = await makeStaffFixture('subcontractor', 'subcontractor', ORG1);
+      viewer = await makeStaffFixture('viewer', 'viewer', ORG1);
       org2Owner = await makeStaffFixture('org2owner', 'owner', org2Id);
       crewUserId1 = employee.userId;
       crewUserId2 = subcontractor.userId;
@@ -128,10 +162,14 @@ test.describe('job assignments model bot', () => {
     test.afterAll(async () => {
       if (!canRun()) return;
       await jobAssignments(admin).delete().eq('job_id', jobId);
+      await jobAssignments(admin).delete().eq('job_id', org2JobId);
       await admin.from('jobs').delete().eq('id', jobId);
+      await admin.from('jobs').delete().in('org_id', [org2Id]);
       await admin.from('properties').delete().eq('id', propertyId);
+      await admin.from('properties').delete().eq('org_id', org2Id);
       await admin.from('customers').delete().eq('id', customerId);
-      for (const fixture of [owner, employee, subcontractor, org2Owner]) {
+      await admin.from('customers').delete().eq('org_id', org2Id);
+      for (const fixture of [owner, employee, subcontractor, viewer, org2Owner]) {
         if (fixture) await admin.auth.admin.deleteUser(fixture.userId).catch(() => {});
       }
       await admin.from('organizations').delete().eq('id', org2Id);
@@ -194,6 +232,47 @@ test.describe('job assignments model bot', () => {
       expect(error).not.toBeNull();
     });
 
+    test('3b. cross-org TARGET member rejected — an org1 owner cannot assign a person who is not an org1 member', async () => {
+      // Distinct from test 3 (org2 caller acting on an org1 job): here the
+      // caller is legitimately authorized (org1 owner, canScheduleJobs),
+      // but the target person has no org1 membership row at all.
+      const { error } = await callRpc(owner.client, 'assign_member_to_job', {
+        p_job_id: jobId,
+        p_user_id: org2Owner.userId,
+        p_is_lead: false,
+      });
+      expect(error).not.toBeNull();
+    });
+
+    test('3c. cross-org JOB rejected — an org1 owner cannot act on a job belonging to a different org', async () => {
+      // Distinct from both above: caller is a real, active org1 owner, but
+      // the job itself belongs to org2. assign_member_to_job derives its
+      // authorization org from the job row (v_job.org_id), never from the
+      // caller's own org, so get_actor_org_role(org2) for an org1-only user
+      // resolves to null and the capability check fails.
+      const { error } = await callRpc(owner.client, 'assign_member_to_job', {
+        p_job_id: org2JobId,
+        p_user_id: crewUserId1,
+        p_is_lead: false,
+      });
+      expect(error).not.toBeNull();
+    });
+
+    test('3d. viewer cannot assign crew — the one role in the capability matrix without canScheduleJobs', async () => {
+      const { error } = await callRpc(viewer.client, 'assign_member_to_job', {
+        p_job_id: jobId,
+        p_user_id: crewUserId1,
+        p_is_lead: false,
+      });
+      expect(error).not.toBeNull();
+    });
+
+    test('3e. RLS org-scoping is real, not just application-level filtering — org2 owner reading job_assignments with no org filter sees zero org1 rows', async () => {
+      const { data, error } = await jobAssignments(org2Owner.client).select('id');
+      expect(error).toBeNull();
+      expect(data?.length ?? 0).toBe(0);
+    });
+
     test('4. duplicate assignment is prevented', async () => {
       const { error } = await callRpc(owner.client, 'assign_member_to_job', {
         p_job_id: jobId,
@@ -229,6 +308,41 @@ test.describe('job assignments model bot', () => {
       ({ data: leads } = await jobAssignments(admin).select('user_id').eq('job_id', jobId).eq('is_lead', true));
       expect(leads?.length).toBe(1);
       expect(leads?.[0]?.user_id).toBe(crewUserId2);
+
+      const { data: leadActivity } = await admin
+        .from('activity_log')
+        .select('event_type')
+        .eq('entity_type', 'job')
+        .eq('entity_id', jobId)
+        .eq('event_type', 'job_crew_lead_set');
+      expect(leadActivity?.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test('6b. concurrent set_job_lead calls for two different people never leave two leads (DB invariant, not app-level luck)', async () => {
+      // crewUserId2 is lead going into this test (from test 6). Fire two
+      // concurrent lead-set calls for two different already-assigned
+      // people; regardless of which one "wins" the race, the partial
+      // unique index (job_assignments_one_lead_per_job) guarantees the
+      // database can never end up with two is_lead=true rows for this job
+      // — either both calls succeed and serialize correctly, or one fails
+      // with a constraint violation. Either outcome is acceptable; two
+      // leads is not.
+      const [r1, r2] = await Promise.all([
+        callRpc(owner.client, 'set_job_lead', { p_job_id: jobId, p_user_id: crewUserId1 }),
+        callRpc(owner.client, 'set_job_lead', { p_job_id: jobId, p_user_id: crewUserId2 }),
+      ]);
+      // At least one must succeed (both may, per the READ COMMITTED
+      // re-evaluation reasoning documented in the design doc).
+      expect(r1.error === null || r2.error === null).toBe(true);
+
+      const { data: leads } = await jobAssignments(admin).select('user_id').eq('job_id', jobId).eq('is_lead', true);
+      expect(leads?.length).toBe(1);
+
+      // Deterministically restore lead = crewUserId2 so later tests (which
+      // assume that state) aren't sensitive to which of the two concurrent
+      // calls above happened to win the race.
+      const { error: resetErr } = await callRpc(owner.client, 'set_job_lead', { p_job_id: jobId, p_user_id: crewUserId2 });
+      expect(resetErr).toBeNull();
     });
 
     test('7. set_job_lead rejects a user who is not yet assigned to the job', async () => {
@@ -245,6 +359,14 @@ test.describe('job assignments model bot', () => {
 
       const { data: leads } = await jobAssignments(admin).select('user_id').eq('job_id', jobId).eq('is_lead', true);
       expect(leads?.length).toBe(0);
+
+      const { data: removalActivity } = await admin
+        .from('activity_log')
+        .select('event_type')
+        .eq('entity_type', 'job')
+        .eq('entity_id', jobId)
+        .eq('event_type', 'job_crew_removed');
+      expect(removalActivity?.length).toBeGreaterThan(0);
     });
 
     test('9. unassigning someone not on the job fails cleanly', async () => {
@@ -269,6 +391,41 @@ test.describe('job assignments model bot', () => {
 
       const { data: after } = await jobAssignments(admin).select('id').eq('job_id', tempJobId);
       expect(after?.length).toBe(0);
+    });
+
+    test('11a. listJobAssignments/listMemberJobAssignments query-layer projections are correct and org-scoped', async () => {
+      // Rebuild a clean, known state: only crewUserId1 assigned, not lead.
+      await jobAssignments(admin).delete().eq('job_id', jobId);
+      await callRpc(owner.client, 'assign_member_to_job', { p_job_id: jobId, p_user_id: crewUserId1, p_is_lead: false });
+
+      const jobResult = await listJobAssignments(admin, { orgId: ORG1, jobId });
+      expect(jobResult.success).toBe(true);
+      if (jobResult.success) {
+        expect(jobResult.data.length).toBe(1);
+        const assignment = jobResult.data[0]!;
+        expect(assignment.userId).toBe(crewUserId1);
+        expect(assignment.isLead).toBe(false);
+        // Real display name resolved via the two-step user_profiles join,
+        // not the placeholder fallback — proves the fix for the invalid
+        // PostgREST embed (job_assignments has no direct FK to
+        // user_profiles) actually works end to end.
+        expect(assignment.displayName).not.toBe('Unknown');
+      }
+
+      // Wrong org — must return an empty, not an error or a leak.
+      const wrongOrgResult = await listJobAssignments(admin, { orgId: org2Id, jobId });
+      expect(wrongOrgResult.success).toBe(true);
+      if (wrongOrgResult.success) expect(wrongOrgResult.data.length).toBe(0);
+
+      const memberResult = await listMemberJobAssignments(admin, { orgId: ORG1, userId: crewUserId1 });
+      expect(memberResult.success).toBe(true);
+      if (memberResult.success) {
+        expect(memberResult.data.some((a) => a.jobId === jobId)).toBe(true);
+      }
+
+      const memberWrongOrgResult = await listMemberJobAssignments(admin, { orgId: org2Id, userId: crewUserId1 });
+      expect(memberWrongOrgResult.success).toBe(true);
+      if (memberWrongOrgResult.success) expect(memberWrongOrgResult.data.length).toBe(0);
     });
 
     test('11. removing a member from org_members cascades to their job assignments (FK ON DELETE CASCADE)', async () => {
