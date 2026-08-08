@@ -13,6 +13,7 @@ import {
   type Result,
 } from '@premier/shared';
 import {
+  assignMemberToJob,
   createChangeOrderDraft,
   createDepositInvoice,
   createDraftInvoiceFromJob,
@@ -22,15 +23,19 @@ import {
   generateFinalInvoiceFromWorking,
   getActiveOrgContext,
   getJobById,
+  listJobAssignments,
   logActivity,
   proposeChangeOrderRevision,
+  removeMemberFromJob,
   requestPendingUpload,
   scheduleJob,
   setDepositRequirement,
+  setJobLead,
   waiveDepositRequirement,
   withdrawChangeOrderRevision,
   type ActivityLogEventType,
   type ChangeOrderLineItemInput,
+  type JobAssignment,
 } from '@premier/db';
 
 import { sendJobScheduledNotification } from '@/lib/customer-lifecycle-notifications';
@@ -737,5 +742,117 @@ export async function finalizeJobPhotoUploadAction(
 
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath('/site-photos');
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Job crew assignment (design/job-crew-assignment-model). Mutations call the
+// assign_member_to_job/remove_member_from_job/set_job_lead RPCs via the
+// caller's own RLS-scoped session client (not the service client) — those
+// RPCs derive the actor from auth.uid() internally, matching the site-visit
+// lifecycle RPCs' pattern, not scheduleJob's service-role + explicit
+// actorUserId pattern. Capability checks here are a UX mirror only; each
+// RPC independently re-verifies canScheduleJobs server-side.
+// ---------------------------------------------------------------------------
+
+export type ListJobAssignmentsActionState = Result<JobAssignment[]>;
+
+export async function listJobAssignmentsAction(jobId: string): Promise<ListJobAssignmentsActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId } = access.data;
+
+  const supabase = await getServerSupabase();
+  return listJobAssignments(supabase, { orgId, jobId });
+}
+
+export type AssignJobCrewMemberActionState = Result<{ assignmentId: string }>;
+
+export async function assignJobCrewMemberAction(
+  _previousState: AssignJobCrewMemberActionState | null,
+  formData: FormData
+): Promise<AssignJobCrewMemberActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canScheduleJobs')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit assigning crew to jobs.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  const userId = readString(formData, 'userId');
+  const isLead = readString(formData, 'isLead') === 'true';
+
+  if (!jobId || !userId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Job ID and team member are required.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await assignMemberToJob(supabase, { jobId, userId, isLead });
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/team/${userId}`);
+  return result;
+}
+
+export type RemoveJobCrewMemberActionState = Result<null>;
+
+export async function removeJobCrewMemberAction(
+  _previousState: RemoveJobCrewMemberActionState | null,
+  formData: FormData
+): Promise<RemoveJobCrewMemberActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canScheduleJobs')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit removing crew from jobs.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  const userId = readString(formData, 'userId');
+
+  if (!jobId || !userId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Job ID and team member are required.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await removeMemberFromJob(supabase, { jobId, userId });
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/team/${userId}`);
+  return result;
+}
+
+export type SetJobLeadActionState = Result<null>;
+
+export async function setJobLeadAction(
+  _previousState: SetJobLeadActionState | null,
+  formData: FormData
+): Promise<SetJobLeadActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canScheduleJobs')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit setting the lead technician.');
+  }
+
+  const jobId = readString(formData, 'jobId');
+  const userId = readString(formData, 'userId');
+
+  if (!jobId || !userId) {
+    return err(ErrorCode.VALIDATION_ERROR, 'Job ID and team member are required.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await setJobLead(supabase, { jobId, userId });
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/team/${userId}`);
   return result;
 }

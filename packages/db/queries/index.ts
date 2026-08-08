@@ -132,6 +132,15 @@ export {
 } from './team-availability';
 export { getActiveOrgContext, type ActiveOrgContext, type AvailableOrgMembership, type OrgMemberRole } from './org-context';
 export {
+  assignMemberToJob,
+  listJobAssignments,
+  listMemberJobAssignments,
+  removeMemberFromJob,
+  setJobLead,
+  type JobAssignment,
+  type MemberJobAssignment,
+} from './job-assignments';
+export {
   createCustomer,
   findCustomerByEmail,
   getCustomer360,
