@@ -15,7 +15,7 @@
 // packages/db/queries/today-actions.ts's getTodayQuoteActivity(), alongside
 // getTodayActionItems(), which is where a workflow decision belongs. This
 // file only sorts, labels, and groups what Layer 1 already decided.
-import type { TodayActionItem, TodaySiteVisit } from '@premier/db';
+import type { BoardJob, BoardSiteVisit, TodayActionItem, TodaySiteVisit } from '@premier/db';
 
 export function sortActionItems(items: TodayActionItem[]): TodayActionItem[] {
   return [...items].sort((a, b) => {
@@ -55,28 +55,16 @@ export interface ScheduleEntry {
 
 export type KanbanStage = 'scheduled' | 'in_progress' | 'on_hold' | 'completed';
 
-export interface TodayBoardJob {
-  id: string;
-  priority: 'low' | 'normal' | 'high' | 'emergency';
-  scheduled_start: string | null;
-  status: string;
-  title: string;
-  customers:
-    | {
-        company_name: string | null;
-        display_name: string | null;
-        first_name: string | null;
-        last_name: string | null;
-      }
-    | null;
-    properties:
-      | {
-        address_line_1: string;
-        city: string;
-        state: string;
-      }
-      | null;
-}
+/**
+ * How far into the future a still-'scheduled' job/site visit stays on the
+ * operational board before it's considered too far out to be current work.
+ * No existing repository decision on this exact question was found (see
+ * docs/implementation/today-kanban-board-semantics.md) — 7 days is the
+ * documented default, not a rediscovered pre-existing constant. In_progress
+ * and on_hold records are never subject to this cut (regardless of how
+ * long ago they started); it only bounds the 'scheduled' bucket.
+ */
+export const BOARD_SCHEDULED_HORIZON_DAYS = 7;
 
 export interface KanbanCardModel {
   assignment?: string;
@@ -119,30 +107,58 @@ export function buildTodaySchedule(
   return [...jobEntries, ...visitEntries].sort((a, b) => a.timeLabel.localeCompare(b.timeLabel));
 }
 
-export function buildKanbanCards(jobs: TodayBoardJob[], siteVisits: TodaySiteVisit[]): KanbanCardModel[] {
-  const jobCards: KanbanCardModel[] = jobs.map((job) => ({
-    customer: resolveCustomerName(job.customers),
-    flag: job.priority === 'emergency' ? 'Emergency' : job.priority === 'high' ? 'High priority' : undefined,
-    href: `/jobs/${job.id}`,
-    id: `job-${job.id}`,
-    priority: job.priority === 'emergency' ? 'high' : job.priority,
-    property: resolvePropertyName(job.properties),
-    stage: normalizeJobStage(job.status),
-    timeLabel: job.scheduled_start ? formatScheduledTime(job.scheduled_start) : undefined,
-    title: job.title,
-  }));
+/**
+ * Operational board — real lifecycle stage per record, not a hard-coded
+ * assumption, and NOT limited to today's scheduled_start (that's what
+ * buildTodaySchedule/getTodaySiteVisits are for). jobs/siteVisits are
+ * expected to already come from getBoardJobs()/getBoardSiteVisits(), which
+ * fetch every currently-relevant record (any in_progress/on_hold
+ * regardless of date, any completed within a bounded recent window) —
+ * this function's only remaining job is applying the 'scheduled' bucket's
+ * future-horizon cut and mapping each record's real status to a
+ * KanbanStage. `now` is a parameter (not `new Date()` inline) so the
+ * horizon cut is deterministically unit-testable.
+ */
+export function buildKanbanCards(jobs: BoardJob[], siteVisits: BoardSiteVisit[], now: Date = new Date()): KanbanCardModel[] {
+  const horizonEnd = new Date(now);
+  horizonEnd.setDate(horizonEnd.getDate() + BOARD_SCHEDULED_HORIZON_DAYS);
 
-  const visitCards: KanbanCardModel[] = siteVisits.map((visit) => ({
-    assignment: 'Site visit',
-    customer: visit.contactName ?? 'Customer',
-    href: `/site-visits/${visit.siteVisitId}`,
-    id: `visit-${visit.siteVisitId}`,
-    priority: 'normal',
-    property: visit.propertyAddress ?? 'Property',
-    stage: 'scheduled',
-    timeLabel: visit.scheduledStart ? formatScheduledTime(visit.scheduledStart) : undefined,
-    title: visit.contactName ? `${visit.contactName} visit` : 'Site visit',
-  }));
+  const jobCards: KanbanCardModel[] = jobs
+    .filter((job) => job.status !== 'scheduled' || withinScheduledHorizon(job.scheduledStart, horizonEnd))
+    .map((job) => ({
+      customer: resolveCustomerName(job.customers),
+      flag: job.priority === 'emergency' ? 'Emergency' : job.priority === 'high' ? 'High priority' : undefined,
+      href: `/jobs/${job.id}`,
+      id: `job-${job.id}`,
+      priority: job.priority === 'emergency' ? 'high' : job.priority,
+      property: resolvePropertyName(job.properties),
+      stage: job.status,
+      timeLabel: job.scheduledStart ? formatScheduledTime(job.scheduledStart) : undefined,
+      title: job.title,
+    }));
+
+  const visitCards: KanbanCardModel[] = siteVisits
+    .filter((visit) => visit.status !== 'scheduled' || withinScheduledHorizon(visit.scheduledStart, horizonEnd))
+    .map((visit) => ({
+      assignment: 'Site visit',
+      customer: visit.contactName ?? 'Customer',
+      href: `/site-visits/${visit.siteVisitId}`,
+      id: `visit-${visit.siteVisitId}`,
+      priority: 'normal',
+      property: visit.propertyAddress ?? 'Property',
+      stage: visit.status,
+      // Completed cards show when the work finished, not the original
+      // (now-superseded) scheduled time.
+      timeLabel:
+        visit.status === 'completed'
+          ? visit.completedAt
+            ? formatScheduledTime(visit.completedAt)
+            : undefined
+          : visit.scheduledStart
+            ? formatScheduledTime(visit.scheduledStart)
+            : undefined,
+      title: visit.serviceTitle,
+    }));
 
   return [...jobCards, ...visitCards].sort((left, right) => {
     const leftTime = left.timeLabel ?? '99:99';
@@ -151,14 +167,15 @@ export function buildKanbanCards(jobs: TodayBoardJob[], siteVisits: TodaySiteVis
   });
 }
 
-function normalizeJobStage(status: string): KanbanStage {
-  if (status === 'in_progress') return 'in_progress';
-  if (status === 'on_hold') return 'on_hold';
-  if (status === 'completed' || status === 'invoiced' || status === 'paid') return 'completed';
-  return 'scheduled';
+/** No scheduled_start at all still counts as "within horizon" — absence of a
+ * date isn't evidence it's far away, and hiding it would just make it
+ * silently vanish, the exact defect class this fix addresses. */
+function withinScheduledHorizon(scheduledStart: string | null, horizonEnd: Date): boolean {
+  if (!scheduledStart) return true;
+  return new Date(scheduledStart).getTime() < horizonEnd.getTime();
 }
 
-function resolveCustomerName(customer: TodayBoardJob['customers']): string {
+function resolveCustomerName(customer: BoardJob['customers']): string {
   if (!customer) return 'Customer';
   if (customer.display_name) return customer.display_name;
   if (customer.company_name) return customer.company_name;
@@ -166,7 +183,7 @@ function resolveCustomerName(customer: TodayBoardJob['customers']): string {
   return fullName || 'Customer';
 }
 
-function resolvePropertyName(property: TodayBoardJob['properties']): string {
+function resolvePropertyName(property: BoardJob['properties']): string {
   if (!property) return 'Property';
   return `${property.address_line_1}, ${property.city}, ${property.state}`;
 }

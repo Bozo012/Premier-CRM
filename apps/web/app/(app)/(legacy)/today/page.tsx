@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 // ── LAYER 1: existing Forge domain/data/action code, reused unchanged ──────
 import {
   getActiveOrgContext,
+  getBoardJobs,
+  getBoardSiteVisits,
   getTodayActionItems,
   getTodayQuoteActivity,
   getTodaySiteVisits,
@@ -17,7 +19,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { signOutAction } from './actions';
 
 // ── LAYER 2: adapter / view-model (Forge V1.1 Today redesign, see ./_lib/view-model.ts) ──
-import { buildKanbanCards, buildSnapshotItems, buildTodaySchedule, sortActionItems, type TodayBoardJob } from './_lib/view-model';
+import { buildKanbanCards, buildSnapshotItems, buildTodaySchedule, sortActionItems } from './_lib/view-model';
 
 // ── LAYER 3: presentation-only components ───────────────────────────────
 import { Button } from '@/components/ui/button';
@@ -30,16 +32,6 @@ import { TodayBoard } from './_components/today-board';
 import { TodayViewToggle } from './_components/today-view-toggle';
 
 export const metadata: Metadata = { title: 'Today' };
-
-interface TodayJob {
-  customers: TodayBoardJob['customers'];
-  id: string;
-  priority: TodayBoardJob['priority'];
-  properties: TodayBoardJob['properties'];
-  scheduled_start: string | null;
-  status: string;
-  title: string;
-}
 
 interface TodayPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -97,22 +89,37 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const recentActivitySince = new Date();
   recentActivitySince.setDate(recentActivitySince.getDate() - 14);
 
-  const [requestsResult, todayJobsResult, actionItemsResult, quoteActivityResult, siteVisitsResult, invoicesNeedingActionResult] =
-    await Promise.all([
-      supabase.from('service_requests').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', 'new'),
-      supabase
-        .from('jobs')
-        .select('id, title, scheduled_start, status, priority, customers(display_name, company_name, first_name, last_name), properties(address_line_1, city, state)')
-        .eq('org_id', orgId)
-        .gte('scheduled_start', startOfDay.toISOString())
-        .lt('scheduled_start', endOfDay.toISOString())
-        .order('scheduled_start', { ascending: true })
-        .limit(10),
-      getTodayActionItems(supabase, { orgId, role: role as OrgRole }),
-      getTodayQuoteActivity(supabase, { orgId, since: recentActivitySince }),
-      getTodaySiteVisits(supabase, { orgId, startOfDay, endOfDay }),
-      getTodayInvoicesNeedingActionCount(supabase, orgId),
-    ]);
+  const [
+    requestsResult,
+    todayJobsResult,
+    actionItemsResult,
+    quoteActivityResult,
+    siteVisitsResult,
+    invoicesNeedingActionResult,
+    boardJobsResult,
+    boardSiteVisitsResult,
+  ] = await Promise.all([
+    supabase.from('service_requests').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', 'new'),
+    // Strictly today's schedule — feeds buildTodaySchedule only. Deliberately
+    // NOT reused for the board (see getBoardJobs/getBoardSiteVisits below):
+    // an in-progress job started yesterday or an on-hold job with no
+    // scheduled_start today must not disappear from operational work just
+    // because it isn't part of today's schedule.
+    supabase
+      .from('jobs')
+      .select('id, title, scheduled_start')
+      .eq('org_id', orgId)
+      .gte('scheduled_start', startOfDay.toISOString())
+      .lt('scheduled_start', endOfDay.toISOString())
+      .order('scheduled_start', { ascending: true })
+      .limit(10),
+    getTodayActionItems(supabase, { orgId, role: role as OrgRole }),
+    getTodayQuoteActivity(supabase, { orgId, since: recentActivitySince }),
+    getTodaySiteVisits(supabase, { orgId, startOfDay, endOfDay }),
+    getTodayInvoicesNeedingActionCount(supabase, orgId),
+    getBoardJobs(supabase, { orgId, completedSince: startOfDay }),
+    getBoardSiteVisits(supabase, { orgId, completedSince: startOfDay }),
+  ]);
 
   // Expected-failure state (Layer 3's ErrorState), never the raw driver
   // message — mirrors the pre-existing OrgContextError sanitization
@@ -129,12 +136,14 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const quoteActivity = quoteActivityResult.success ? quoteActivityResult.data : [];
   const siteVisits = siteVisitsResult.success ? siteVisitsResult.data : [];
   const invoicesNeedingActionCount = invoicesNeedingActionResult.success ? invoicesNeedingActionResult.data : 0;
-  const todayJobs = (todayJobsResult.data as TodayJob[] | null) ?? [];
+  const todayJobs = todayJobsResult.data ?? [];
+  const boardJobs = boardJobsResult.success ? boardJobsResult.data : [];
+  const boardSiteVisits = boardSiteVisitsResult.success ? boardSiteVisitsResult.data : [];
 
   // ── adapter calls (Layer 2) ───────────────────────────────────────────
   const sortedActionItems = sortActionItems(actionItems);
   const schedule = buildTodaySchedule(todayJobs, siteVisits);
-  const boardCards = buildKanbanCards(todayJobs, siteVisits);
+  const boardCards = buildKanbanCards(boardJobs, boardSiteVisits);
   const snapshotItems = buildSnapshotItems({
     newRequestCount: requestsResult.count ?? 0,
     todayScheduleCount: schedule.length,
