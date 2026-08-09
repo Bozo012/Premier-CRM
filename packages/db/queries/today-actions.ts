@@ -343,6 +343,94 @@ export async function getTodaySiteVisits(
   return ok(visits);
 }
 
+export interface BoardSiteVisit {
+  siteVisitId: string;
+  /** Real lifecycle stage — see site_visit_status enum. Never fabricated;
+   * awaiting_scheduling/cancelled are excluded before this type is built. */
+  status: 'scheduled' | 'in_progress' | 'completed';
+  serviceTitle: string;
+  contactName: string | null;
+  propertyAddress: string | null;
+  /** From the visit's currently-active ('scheduled'-status) appointment.
+   * Null once completed — complete_site_visit() flips that appointment's
+   * own status to 'completed' too, so it's no longer the "active" one this
+   * query joins against; completedAt is the meaningful time for that case. */
+  scheduledStart: string | null;
+  completedAt: string | null;
+}
+
+/**
+ * Operational-board site visits — deliberately NOT date-scoped to "today"
+ * the way getTodaySiteVisits() is (see that function's own doc comment:
+ * it exists for the Today schedule, a different, correctly date-scoped
+ * concept). This is the query that fixes the "in-progress inspection
+ * disappears from the Kanban because its appointment isn't today" defect:
+ * it fetches every currently-relevant site visit by REAL lifecycle status
+ * (site_visits.status, not appointment.status, which stays 'scheduled'
+ * throughout an entire in-progress inspection and can't distinguish "not
+ * started" from "in progress" at all), regardless of scheduled_start date,
+ * bounded only by completedSince for the 'completed' bucket so finished
+ * work doesn't accumulate forever. The board-horizon cut for the
+ * 'scheduled' bucket (e.g. "next 7 days") is applied by the view-model
+ * layer, not here — this returns every non-cancelled,
+ * non-awaiting-scheduling visit so that decision stays a pure, testable,
+ * presentation-adjacent concern rather than baked into the query.
+ */
+export async function getBoardSiteVisits(
+  client: DbClient,
+  args: { orgId: string; completedSince: Date }
+): Promise<Result<BoardSiteVisit[]>> {
+  const { orgId, completedSince } = args;
+
+  const { data, error } = await client
+    .from('site_visits')
+    .select(
+      `
+      id, status, completed_at,
+      service_requests ( service_title, contact_name, property_address_line_1, property_city )
+    `
+    )
+    .eq('org_id', orgId)
+    .or(`status.in.(scheduled,in_progress),and(status.eq.completed,completed_at.gte.${completedSince.toISOString()})`);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  const rows = data ?? [];
+  const visitIds = rows.map((row) => row.id);
+
+  // Active appointment per visit, for scheduled_start display — same
+  // two-query shape listSiteVisits() already uses (packages/db/queries/
+  // site-visits.ts): a completed visit's appointment row has moved to
+  // status='completed' too, so it won't appear here, which is correct —
+  // completedAt is what the board shows for those cards instead.
+  const { data: appointments, error: appointmentError } = visitIds.length
+    ? await client.from('site_visit_appointments').select('site_visit_id, scheduled_start').in('site_visit_id', visitIds).eq('status', 'scheduled')
+    : { data: [], error: null };
+  if (appointmentError) return err(ErrorCode.DB_ERROR, appointmentError.message);
+
+  const scheduledStartByVisitId = new Map((appointments ?? []).map((a) => [a.site_visit_id, a.scheduled_start]));
+
+  const visits: BoardSiteVisit[] = rows
+    .filter((row): row is typeof row & { status: 'scheduled' | 'in_progress' | 'completed' } =>
+      row.status === 'scheduled' || row.status === 'in_progress' || row.status === 'completed'
+    )
+    .map((row) => {
+      const request = Array.isArray(row.service_requests) ? row.service_requests[0] : row.service_requests;
+      const address = request ? [request.property_address_line_1, request.property_city].filter(Boolean).join(', ') : null;
+      return {
+        siteVisitId: row.id,
+        status: row.status,
+        serviceTitle: request?.service_title ?? 'Site visit',
+        contactName: request?.contact_name ?? null,
+        propertyAddress: address || null,
+        scheduledStart: scheduledStartByVisitId.get(row.id) ?? null,
+        completedAt: row.completed_at,
+      };
+    });
+
+  return ok(visits);
+}
+
 /**
  * Count of invoices still requiring payment action (Forge V1.1 Today
  * redesign — Kevin decision: Today's snapshot may show operational counts
@@ -400,4 +488,62 @@ export async function getTodayActionItems(
   }
 
   return ok(items);
+}
+
+export interface BoardJob {
+  id: string;
+  title: string;
+  status: 'scheduled' | 'in_progress' | 'on_hold' | 'completed';
+  priority: 'low' | 'normal' | 'high' | 'emergency';
+  scheduledStart: string | null;
+  /** Proxy for "when did this reach its current state" for the completed
+   * bucket's recency window — jobs has a closed_at column but it is dead
+   * (not set by any application code, confirmed by repository-wide grep),
+   * so updated_at is the honest choice, not a fabricated field. */
+  updatedAt: string;
+  customers: { company_name: string | null; display_name: string | null; first_name: string | null; last_name: string | null } | null;
+  properties: { address_line_1: string; city: string; state: string } | null;
+}
+
+/**
+ * Operational-board jobs — the Jobs-side equivalent of getBoardSiteVisits(),
+ * fixing the identical defect: TodayPage's inline jobs query was scoped to
+ * scheduled_start falling today, so an in-progress job started yesterday or
+ * an on-hold job with no scheduled_start today would silently disappear
+ * from the board. Bounded only by completedSince for the 'completed'
+ * bucket; the 'scheduled' bucket's horizon (e.g. next 7 days) is a
+ * view-model concern, matching getBoardSiteVisits()'s split.
+ */
+export async function getBoardJobs(
+  client: DbClient,
+  args: { orgId: string; completedSince: Date }
+): Promise<Result<BoardJob[]>> {
+  const { orgId, completedSince } = args;
+
+  const { data, error } = await client
+    .from('jobs')
+    .select(
+      'id, title, scheduled_start, status, priority, updated_at, customers(display_name, company_name, first_name, last_name), properties(address_line_1, city, state)'
+    )
+    .eq('org_id', orgId)
+    .or(`status.in.(scheduled,in_progress,on_hold),and(status.eq.completed,updated_at.gte.${completedSince.toISOString()})`);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  const jobs: BoardJob[] = (data ?? [])
+    .filter((row): row is typeof row & { status: 'scheduled' | 'in_progress' | 'on_hold' | 'completed' } =>
+      row.status === 'scheduled' || row.status === 'in_progress' || row.status === 'on_hold' || row.status === 'completed'
+    )
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      priority: row.priority,
+      scheduledStart: row.scheduled_start,
+      updatedAt: row.updated_at,
+      customers: Array.isArray(row.customers) ? (row.customers[0] ?? null) : row.customers,
+      properties: Array.isArray(row.properties) ? (row.properties[0] ?? null) : row.properties,
+    }));
+
+  return ok(jobs);
 }

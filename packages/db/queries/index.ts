@@ -291,10 +291,14 @@ export {
   listSiteVisits,
 } from './site-visits';
 export {
+  getBoardJobs,
+  getBoardSiteVisits,
   getTodayActionItems,
   getTodayQuoteActivity,
   getTodaySiteVisits,
   getTodayInvoicesNeedingActionCount,
+  type BoardJob,
+  type BoardSiteVisit,
   type TodayActionItem,
   type PricingReviewTask,
   type CreateQuoteTask,
