@@ -24,8 +24,8 @@ import type { DbClient } from '../client';
  * the two methods used here rather than a bare `any` client, so everything
  * else in this file still gets full type safety.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface UntypedDbClient {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   from(table: string): any;
   rpc(fn: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
 }
