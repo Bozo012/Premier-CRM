@@ -132,10 +132,41 @@ Team Member Detail / Job Detail **UI projection** testing is deliberately deferr
 - `npx tsc --noEmit -p tests/e2e/tsconfig.json` — the new spec produces zero errors.
 - Migration SQL was read back in full and cross-checked line-by-line against the two precedents it's modeled on (`team_member_availability`'s composite FK, `site_visit_appointments`'s partial unique index, `site_visit_lifecycle_rpcs.sql`'s RPC/auth pattern) — not executed against any database.
 
-## Exact blockers to proceeding further
+## Migration applied — `premier-crm-e2e` only
 
-None for this pass's own scope (audit/design/query-action-layer). To actually use this in production:
+Applied via the Supabase MCP `apply_migration` tool, targeting `slbnizoskumwhleeiccv` (`premier-crm-e2e`) — confirmed by name/ref before applying, distinct from `apnbpcauqrjvkoleisde`/`premier-crm-prod`, never touched. Pre-apply migration-history diff (repo vs. live) confirmed `job_assignments_model` was the *only* gap — every other migration name matched exactly, in order. Production was never touched, never applied to.
 
-1. **Migration application** — needs the same audit-then-apply protocol this program has used for every prior migration gap (confirm target project, confirm non-destructive, apply via the Supabase MCP `apply_migration` tool, scoped to `premier-crm-e2e` first, `pnpm db:types` regenerated, casts removed, then a separate authorized step for production).
-2. **Live E2E execution** — `job-assignments-model-bot.spec.ts` needs a live `premier-crm-e2e` with the migration applied.
-3. **Presentation** — a genuinely separate, future slice (Team Member Detail's assigned-jobs section, Job Detail's crew display, Calendar/route-planning UI) — no blocker, just explicitly out of this pass's scope.
+**Live schema verification, post-apply:**
+- All 8 columns present with correct types/nullability/defaults.
+- All 7 constraints present, including the composite `(org_id, user_id) → org_members(org_id, user_id)` FK and the `(job_id, user_id)` uniqueness constraint.
+- All 5 indexes present, including the partial `job_assignments_one_lead_per_job` unique index.
+- RLS enabled; exactly one policy (`job_assignments_select_org_members`, SELECT-only, org-scoped); `authenticated` has table-level SELECT only — no INSERT/UPDATE/DELETE grant or policy exists at all.
+- All 3 RPCs confirmed `SECURITY DEFINER` with `search_path=public`.
+- Migration history on `premier-crm-e2e` now includes `job_assignments_model`, matching the repository.
+- Security advisors: zero findings for `job_assignments` or its RPCs.
+- Performance advisors: one INFO-level finding — `job_assignments_assigned_by_fkey` has no covering index. `assigned_by` is a write-only audit field, never filtered/joined on in any query here — consistent with similar unindexed audit-trail columns elsewhere in this codebase (e.g. `created_by`/`cancelled_by` on other tables). Not fixed; noted as an accepted, informational tradeoff.
+- **Security note, confirmed non-issue**: `has_function_privilege` shows `anon` can technically invoke all three RPCs (no `REVOKE ... FROM PUBLIC` was issued before granting to `authenticated`). Verified this is the established, already-production pattern for this exact class of RPC — `schedule_site_visit`/`start_site_visit` (site_visit_lifecycle_rpcs.sql, already audited and live) show the identical `anon: true` result. The real authorization boundary for all of these is the internal `get_actor_org_role()`/`auth.uid()` check, not the grant — an unauthenticated `anon` caller has `auth.uid()` return null, so `get_actor_org_role` returns null and every RPC raises immediately. Only the stricter, service-role-only class of RPC (`save_site_visit_inspection`) explicitly revokes from `PUBLIC`/`authenticated` first; `job_assignments`'s RPCs are the "any authenticated org member" class, matching `schedule_site_visit` exactly, not the stricter class.
+
+## Live E2E — executed against `premier-crm-e2e`
+
+`tests/e2e/job-assignments-model-bot.spec.ts`: **17/17 passing**, live, including the concurrency test (`Promise.all` racing two `set_job_lead` calls, confirming the partial unique index — not application luck — prevents two leads), both cross-org variants (caller's org vs. target's org vs. the job's own org), the RLS-only org-scoping proof, and direct exercise of `listJobAssignments`/`listMemberJobAssignments` (which also re-proves the embed-bug fix from the Phase 1 audit works against the real, live schema, not just a compile-time check).
+
+**Regression gates, all green, live:**
+- `pnpm test`: 331 passing (unchanged from pre-migration — no new unit tests needed for this backend-only pass beyond what Phase 1 already added).
+- `pnpm typecheck` / `pnpm --filter web build`: clean.
+- ESLint on every changed file: clean.
+- `team-base44-shell-bot`: 13/13
+- `today-redesign-bot`: 13/13
+- `request-site-visit-workflow-bot` (business-critical triage/lifecycle): 20/20
+- `estimates-lifecycle-bot`: 1/1
+- Zero test-data residue confirmed via direct SQL query after every run.
+
+## Known follow-ups (not blockers)
+
+1. **`pnpm db:types` not yet re-run.** The query layer's hand-written `JobAssignmentRow`/`UntypedDbClient` type-escape (documented inline in `job-assignments.ts` and the E2E spec) still works correctly against the now-live schema, but is intentionally temporary debt — a natural first step of whichever future PR builds the Jobs/Calendar presentation layer, since regenerating types now (in a backend-only PR) would touch the large generated `packages/db/types.ts` file for no immediate benefit.
+2. **Presentation** — Team Member Detail's assigned-jobs section, Job Detail's crew display, Calendar/route-planning UI — a genuinely separate, future slice, deliberately out of scope for this pass per instruction.
+3. The one INFO-level performance advisory noted above (`assigned_by` unindexed FK) — accepted, not fixed.
+
+## Backend readiness verdict
+
+**READY FOR JOBS/CALENDAR INTEGRATION.** The full authoritative model — schema, RLS, RPCs, query/action layer — is live on `premier-crm-e2e`, independently audited twice (initial design pass + a second, more rigorous pass that found and fixed two real defects before anything was applied), and proven correct end to end by 17 live E2E tests covering the full authorization/concurrency/cascade matrix. A future Jobs/Calendar presentation slice can build directly on `listJobAssignments`/`listMemberJobAssignments`/`assignMemberToJob`/`removeMemberFromJob`/`setJobLead` with no further backend work required.
