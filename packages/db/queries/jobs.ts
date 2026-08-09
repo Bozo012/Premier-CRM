@@ -346,6 +346,83 @@ export async function listJobs(
   });
 }
 
+export interface JobsInRangeItem {
+  category: JobListCategorySummary | null;
+  customer: JobListCustomerSummary | null;
+  job: Pick<
+    Job,
+    | 'id'
+    | 'title'
+    | 'job_number'
+    | 'status'
+    | 'priority'
+    | 'scheduled_start'
+    | 'scheduled_end'
+  >;
+  property: JobListPropertySummary | null;
+}
+
+/**
+ * Jobs whose scheduled_start falls in [start, end) — Calendar's real data
+ * source (Base44-exact Jobs/Calendar port). Deliberately NOT limited to any
+ * particular status: Calendar shows whatever is actually scheduled,
+ * matching the pre-existing (legacy)/calendar/page.tsx's own inline query
+ * (org-scoped `jobs` select filtered by `scheduled_start`), just extracted
+ * here as a reusable, testable query and given real customer/property/
+ * category joins (the inline version had none). This is a query-layer
+ * *addition*, not a new events table — no `calendar_events` concept exists
+ * in the schema (verified: `grep -r calendar_event supabase/migrations`
+ * returns nothing) and none is introduced here.
+ */
+export async function listJobsScheduledInRange(
+  client: DbClient,
+  args: { orgId: string; start: Date; end: Date }
+): Promise<Result<JobsInRangeItem[]>> {
+  const { data, error } = await client
+    .from('jobs')
+    .select('id, title, job_number, status, priority, scheduled_start, scheduled_end, customer_id, property_id, category_id')
+    .eq('org_id', args.orgId)
+    .gte('scheduled_start', args.start.toISOString())
+    .lt('scheduled_start', args.end.toISOString())
+    .order('scheduled_start', { ascending: true });
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  const jobs = data ?? [];
+  if (jobs.length === 0) return ok([]);
+
+  const customerIds = Array.from(new Set(jobs.map((job) => job.customer_id)));
+  const propertyIds = Array.from(new Set(jobs.map((job) => job.property_id)));
+  const categoryIds = Array.from(
+    new Set(jobs.map((job) => job.category_id).filter((id): id is string => Boolean(id)))
+  );
+
+  const [customersResult, propertiesResult, categoriesResult] = await Promise.all([
+    client.from('customers').select('id, display_name, company_name, first_name, last_name').eq('org_id', args.orgId).in('id', customerIds),
+    client.from('properties').select('id, address_line_1, address_line_2, city, state, zip').eq('org_id', args.orgId).in('id', propertyIds),
+    categoryIds.length > 0
+      ? client.from('service_categories').select('id, name').eq('org_id', args.orgId).in('id', categoryIds)
+      : Promise.resolve({ data: [] as ServiceCategoryRow[], error: null }),
+  ]);
+
+  if (customersResult.error) return err(ErrorCode.DB_ERROR, customersResult.error.message);
+  if (propertiesResult.error) return err(ErrorCode.DB_ERROR, propertiesResult.error.message);
+  if (categoriesResult.error) return err(ErrorCode.DB_ERROR, categoriesResult.error.message);
+
+  const customersById = new Map((customersResult.data ?? []).map((c) => [c.id, c as CustomerRow]));
+  const propertiesById = new Map((propertiesResult.data ?? []).map((p) => [p.id, p as PropertyRow]));
+  const categoriesById = new Map((categoriesResult.data ?? []).map((c) => [c.id, c as ServiceCategoryRow]));
+
+  return ok(
+    jobs.map((job) => ({
+      category: toCategorySummary(job.category_id ? categoriesById.get(job.category_id) : null),
+      customer: toCustomerSummary(customersById.get(job.customer_id)),
+      job,
+      property: toPropertySummary(propertiesById.get(job.property_id)),
+    }))
+  );
+}
+
 export async function getJobById(
   client: DbClient,
   args: { jobId: string; orgId: string }

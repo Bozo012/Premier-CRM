@@ -1,5 +1,7 @@
 export {
   getTeamMemberById,
+  listActiveTeamMembers,
+  type AssignableTeamMember,
   type OrgMember,
   type TeamMemberRecord,
   type UserProfile,
@@ -84,6 +86,7 @@ export {
 export {
   getJobById,
   listJobs,
+  listJobsScheduledInRange,
   type Job,
   type JobDetail,
   type JobDetailCategorySummary,
@@ -95,6 +98,7 @@ export {
   type JobListItem,
   type JobListPage,
   type JobListPropertySummary,
+  type JobsInRangeItem,
 } from './jobs';
 export {
   getServiceItemById,
@@ -134,10 +138,12 @@ export { getActiveOrgContext, type ActiveOrgContext, type AvailableOrgMembership
 export {
   assignMemberToJob,
   listJobAssignments,
+  listJobLeadsForJobs,
   listMemberJobAssignments,
   removeMemberFromJob,
   setJobLead,
   type JobAssignment,
+  type JobLeadRow,
   type MemberJobAssignment,
 } from './job-assignments';
 export {

@@ -150,6 +150,54 @@ export async function listMemberJobAssignments(
   );
 }
 
+export interface JobLeadRow {
+  jobId: string;
+  userId: string;
+  displayName: string;
+}
+
+/**
+ * Real per-job lead technician for a batch of jobs — backs the Jobs list
+ * page's "Lead technician" column and Calendar's per-event technician,
+ * matching listJobAssignments' two-step fetch pattern (no direct FK from
+ * job_assignments to user_profiles for PostgREST to embed through). Uses
+ * the same untyped() escape as the rest of this file (see the file-level
+ * TEMPORARY TYPING NOTE) so callers never need their own `.from('job_
+ * assignments')` cast.
+ */
+export async function listJobLeadsForJobs(
+  client: DbClient,
+  args: { orgId: string; jobIds: string[] }
+): Promise<Result<JobLeadRow[]>> {
+  if (args.jobIds.length === 0) return ok([]);
+
+  const { data, error } = await untyped(client)
+    .from('job_assignments')
+    .select('job_id, user_id')
+    .eq('org_id', args.orgId)
+    .eq('is_lead', true)
+    .in('job_id', args.jobIds);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  const rows = (data ?? []) as Array<{ job_id: string; user_id: string }>;
+  if (rows.length === 0) return ok([]);
+
+  const userIds = [...new Set(rows.map((row) => row.user_id))];
+  const { data: profiles, error: profilesError } = await client.from('user_profiles').select('id, full_name').in('id', userIds);
+  if (profilesError) return err(ErrorCode.DB_ERROR, profilesError.message);
+
+  const nameByUserId = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+
+  return ok(
+    rows.map((row) => ({
+      jobId: row.job_id,
+      userId: row.user_id,
+      displayName: nameByUserId.get(row.user_id) ?? 'Unknown',
+    }))
+  );
+}
+
 /**
  * Assigns a team member to a job, optionally as lead. All authorization
  * (canScheduleJobs), org-membership, and duplicate-assignment checks are

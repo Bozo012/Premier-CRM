@@ -64,3 +64,72 @@ export async function getTeamMemberById(
     availability: (availabilityResult.data as TeamAvailability | null) ?? null,
   });
 }
+
+export interface AssignableTeamMember {
+  userId: string;
+  displayName: string;
+  role: string;
+  availabilityStatus: Database['public']['Enums']['team_availability_status'] | null;
+}
+
+/**
+ * Active org members eligible for job-crew assignment — the same
+ * org_members (status='active') + user_profiles + team_member_availability
+ * shape the Team list page already queries inline
+ * (apps/web/app/(app)/(forge)/team/page.tsx), extracted here as a reusable
+ * query so the Job Detail crew-assignment picker (design/
+ * job-crew-assignment-model's UI slice) doesn't hand-roll a second copy of
+ * the same three-table join. Real data only — no fabricated "availability"
+ * default beyond the same resolveDisplayedTeamAvailability the Team page
+ * itself uses, which callers can apply to `availabilityStatus` alongside a
+ * real assignment count if they have one.
+ */
+export async function listActiveTeamMembers(
+  client: DbClient,
+  args: { orgId: string }
+): Promise<Result<AssignableTeamMember[]>> {
+  const { data: members, error: membersError } = await client
+    .from('org_members')
+    .select('user_id, role')
+    .eq('org_id', args.orgId)
+    .eq('status', 'active')
+    .order('joined_at', { ascending: false });
+
+  if (membersError) {
+    return err(ErrorCode.DB_ERROR, membersError.message);
+  }
+
+  const rows = members ?? [];
+  if (rows.length === 0) return ok([]);
+
+  const userIds = rows.map((row) => row.user_id);
+
+  const [profilesResult, availabilityResult] = await Promise.all([
+    client.from('user_profiles').select('id, full_name').in('id', userIds),
+    client.from('team_member_availability').select('user_id, availability_status').eq('org_id', args.orgId).in('user_id', userIds),
+  ]);
+
+  if (profilesResult.error) {
+    return err(ErrorCode.DB_ERROR, profilesResult.error.message);
+  }
+  if (availabilityResult.error) {
+    return err(ErrorCode.DB_ERROR, availabilityResult.error.message);
+  }
+
+  const nameByUserId = new Map((profilesResult.data ?? []).map((p) => [p.id, p.full_name]));
+  const availabilityByUserId = new Map(
+    (availabilityResult.data as Pick<TeamAvailability, 'user_id' | 'availability_status'>[] | null ?? []).map((a) => [
+      a.user_id,
+      a.availability_status,
+    ])
+  );
+
+  return ok(
+    rows.map((row) => ({
+      userId: row.user_id,
+      displayName: nameByUserId.get(row.user_id) ?? 'Unknown',
+      role: row.role,
+      availabilityStatus: availabilityByUserId.get(row.user_id) ?? null,
+    }))
+  );
+}
