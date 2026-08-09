@@ -17,25 +17,31 @@ import { useCustomerPropertyResolver } from './use-customer-property-resolver';
 
 export type CreateFromCustomerActionState = Result<{ id: string }>;
 
-interface CustomerPropertyWorkFormProps {
+interface CustomerPropertyWorkFormProps<TState extends Result<{ id: string }>> {
   /** e.g. "/quotes" — the created record's id is appended for the redirect. */
   redirectBasePath: string;
-  submitAction: (
-    prevState: CreateFromCustomerActionState | null,
-    formData: FormData
-  ) => Promise<CreateFromCustomerActionState>;
+  submitAction: (prevState: TState | null, formData: FormData) => Promise<TState>;
   submitIdleLabel: string;
   submitPendingLabel: string;
   successMessage: string;
+  /**
+   * Optional extra form fields rendered after "Work details" and before
+   * submit, e.g. Job creation's real "Schedule and crew" fields
+   * (createJobWithScheduleAction reads scheduledStart/scheduledEnd/
+   * crewUserId[]/leadUserId from the same FormData this form submits).
+   * Undefined for every other caller — a purely additive slot.
+   */
+  extraFields?: React.ReactNode;
 }
 
-export function CustomerPropertyWorkForm({
+export function CustomerPropertyWorkForm<TState extends Result<{ id: string }> = CreateFromCustomerActionState>({
   redirectBasePath,
   submitAction,
   submitIdleLabel,
   submitPendingLabel,
   successMessage,
-}: CustomerPropertyWorkFormProps) {
+  extraFields,
+}: CustomerPropertyWorkFormProps<TState>) {
   const router = useRouter();
   const resolver = useCustomerPropertyResolver();
   const [isSubmitting, startSubmit] = useTransition();
@@ -101,6 +107,8 @@ export function CustomerPropertyWorkForm({
           </div>
         </section>
       ) : null}
+
+      {resolver.resolvedCustomer && resolver.selectedPropertyId ? extraFields : null}
 
       {submitError ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
