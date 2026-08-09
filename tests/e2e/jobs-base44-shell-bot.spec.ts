@@ -115,16 +115,16 @@ test.describe('jobs base44 shell bot', () => {
         await page.goto(routes.jobs);
         await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
 
-        const firstRow = page.locator('tbody tr, [class*="rounded-xl"] >> text=JOB-').first();
+        const firstRow = page.locator('tbody tr').or(page.locator('[class*="rounded-xl"]').filter({ hasText: /JOB-|No job number/ })).first();
         const hasJobs = (await firstRow.count()) > 0;
         test.skip(!hasJobs, 'Org has no jobs yet — nothing to open.');
 
         await firstRow.click();
         await expect(page).toHaveURL(new RegExp(`${routes.jobs}/[0-9a-f-]{36}$`));
 
-        await expect(page.getByRole('heading', { name: 'Crew' })).toBeVisible();
-        await expect(page.getByRole('heading', { name: 'Job logs' })).toBeVisible();
-        await expect(page.getByRole('heading', { name: 'Job photos' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Crew', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Job logs', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Job photos', exact: true })).toBeVisible();
 
         const errors = collectConsoleErrors(page);
         await assertNoHorizontalOverflow(page);
@@ -140,13 +140,14 @@ test.describe('jobs base44 shell bot', () => {
 
       test('crew "Assign" control is present for a scheduling-capable role', async ({ page }) => {
         await page.goto(routes.jobs);
-        const firstRow = page.locator('tbody tr, [class*="rounded-xl"] >> text=JOB-').first();
+        await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
+        const firstRow = page.locator('tbody tr').or(page.locator('[class*="rounded-xl"]').filter({ hasText: /JOB-|No job number/ })).first();
         const hasJobs = (await firstRow.count()) > 0;
         test.skip(!hasJobs, 'Org has no jobs yet — nothing to open.');
 
         await firstRow.click();
         await expect(page).toHaveURL(new RegExp(`${routes.jobs}/[0-9a-f-]{36}$`));
-        await expect(page.getByRole('heading', { name: 'Crew' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Crew', exact: true })).toBeVisible();
 
         // Admin test account should hold canScheduleJobs — the Assign
         // control mutating crew must be visible; a non-scheduling role

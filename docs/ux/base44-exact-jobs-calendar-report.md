@@ -134,17 +134,23 @@ No changes to `packages/shared/permissions.ts` or any existing action's authoriz
 
 ## Testing
 
-**Unit (`pnpm test`)**: 44 test files (was 41), 373 tests passing (was 335), 6 skipped — all green. New: `jobs/_lib/forge-jobs-view-model.test.ts` (progress-source decision, origin derivation, row projection, missing-optional-data, filter counting), `jobs/_lib/forge-job-detail-view-model.test.ts` (progress-source decision, crew/lead projection, source-relationship resolution, missing-optional-data, internal-visibility tagging), `calendar/_lib/forge-calendar-view-model.test.ts` (week/month date math, job/site-visit projection, missing-optional-data, chronological ordering).
+**Unit (`pnpm test`)**: re-run live during independent verification — 44 test files, 379 tests passing, all green. New: `jobs/_lib/forge-jobs-view-model.test.ts` (progress-source decision, origin derivation, row projection, missing-optional-data, filter counting), `jobs/_lib/forge-job-detail-view-model.test.ts` (progress-source decision, crew/lead projection, source-relationship resolution, missing-optional-data, internal-visibility tagging), `calendar/_lib/forge-calendar-view-model.test.ts` (week/month date math, job/site-visit projection, missing-optional-data, chronological ordering).
 
-**Typecheck (`pnpm typecheck`)**: clean across all 5 packages with a `typecheck` script (`apps/web`, `packages/ai`, `packages/automation`, `packages/db`, `packages/shared`).
+**Typecheck (`pnpm typecheck`)**: re-run live — clean across all 5 packages with a `typecheck` script (`apps/web`, `packages/ai`, `packages/automation`, `packages/db`, `packages/shared`).
 
 **Build (`pnpm --filter web build`)**: succeeds. Route list confirms `/jobs`, `/jobs/[jobId]`, `/jobs/new`, `/calendar` all present exactly once, all server-rendered (`ƒ`), no middleware in the build output.
 
-**E2E — written and typechecked, NOT executed live.** No `.env.test` exists in this worktree and none was created, per the task's explicit instruction — the implementing agent does not have live-environment access; that verification is this program's separate live-verification pass, matching every prior slice's pattern. `npx tsc --noEmit -p tests/e2e/tsconfig.json` was run: the two new spec files (`jobs-base44-shell-bot.spec.ts`, `calendar-base44-shell-bot.spec.ts`) and the `selectors.ts` edit introduce zero new type errors; the errors that command reports all live in pre-existing, untouched spec files (confirmed via `git status` — none of those files appear in this branch's diff) and are baseline noise predating this slice, not something introduced here.
+**E2E — executed live against `premier-crm-e2e` (`slbnizoskumwhleeiccv`), confirmed via `/api/e2e-health` before any test ran.** During independent verification, 4 real defects were found and fixed (1 product bug, 3 test-only bugs — see below), then all 22 tests in the two new specs (`jobs-base44-shell-bot.spec.ts`, `calendar-base44-shell-bot.spec.ts`) passed live, plus the 5 `today-kanban-board-semantics-bot.spec.ts` regression tests re-ran clean to confirm no cross-slice regression. Test-data residue check: the two new specs create no fixture data (navigation/assertion only — the "New job" test stops at the form, never submits), so no cleanup/residue risk.
+
+Defects found and fixed during independent verification:
+1. **Real product defect** — Jobs list desktop table horizontal overflow (481px at tablet-landscape 1024×768, 81px at desktop 1440×900). Root cause: the Job/Customer `<td>` cells had no word-break constraint and fixture data contains long unbroken tokens (e.g. `E2E_TEST_CUSTOMER_CRUD_1785726916701_ogazlg`) — the same recurring bug class as the Properties table (PR #126) and the Estimates/Quotes tables. Fixed with `max-w-0 break-words` on both cells in `jobs-list.tsx`.
+2. Broken combined Playwright locator (`'tbody tr, [class*="rounded-xl"] >> text=JOB-'` resolved to 0 matches — Playwright's `>>` combinator chains across an entire comma-separated selector list, not per-branch). Fixed with `.or()`.
+3. Strict-mode heading collision: non-exact `getByRole('heading', { name: 'Crew' })` matched both `RecordDetailView`'s "Schedule, crew & access" section heading and the Crew card's own heading — fixed with `exact: true` on 4 assertions.
+4. A missing render-wait before a `.count()` check caused the crew "Assign" control test to skip even in isolation — fixed by adding the same heading-visibility wait the adjacent test already had.
 
 ## Visual evidence
 
-Not captured by this pass — no live environment/`.env.test` access, per the task's explicit instruction. This is the independent verification pass's responsibility, matching every prior slice's pattern.
+Captured live during independent verification via a reproducible, uncommitted script (`scripts/capture-jobs-calendar-evidence.mjs`, not part of this branch) against the running dev server pointed at `premier-crm-e2e`. 9 viewport-cropped screenshots taken and visually confirmed correct: jobs list (desktop/mobile), job detail (desktop/mobile — confirms Progress/Schedule-crew-access/Crew/Job logs/Job photos sections all render with real data), job creation (desktop/mobile — confirms the honest source-option copy, including the "No recurring-service backend exists yet" gap note actually rendering in the UI), Calendar Week and Month views (desktop — confirm real job/site-visit events plotted with the Job/Site visit legend), and Calendar mobile. Shared directly with the requester; not committed to the branch.
 
 ## Known limitations / follow-ups
 

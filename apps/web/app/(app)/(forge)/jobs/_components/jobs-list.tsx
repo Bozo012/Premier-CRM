@@ -119,14 +119,14 @@ export function JobsList({
               <tbody className="divide-y divide-border">
                 {jobs.map((job) => (
                   <tr key={job.id} className="cursor-pointer transition hover:bg-muted/30" onClick={() => callbacks.onOpenJob(job.id)}>
-                    <td className="px-5 py-4">
+                    <td className="max-w-0 break-words px-5 py-4">
                       <div className="flex items-center gap-2 font-bold text-card-foreground">
-                        <Briefcase className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                        {job.number}
+                        <Briefcase className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        <span className="truncate">{job.number}</span>
                       </div>
-                      <div className="mt-0.5 max-w-xs truncate text-xs text-muted-foreground">{job.title}</div>
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground">{job.title}</div>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="max-w-0 break-words px-5 py-4">
                       <div className="font-medium text-card-foreground">{job.customerName}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">{job.propertyName}</div>
                     </td>
