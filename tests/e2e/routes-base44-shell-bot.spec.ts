@@ -87,11 +87,21 @@ test.describe('routes base44 shell bot', () => {
 
     test('summary tiles render real counts (never fabricated mileage/drive-time)', async ({ page }) => {
       await page.goto(routes.routePlanning);
-      await expect(page.getByText('Scheduled stops')).toBeVisible();
-      await expect(page.getByText('Jobs', { exact: true })).toBeVisible();
-      await expect(page.getByText('Site visits')).toBeVisible();
-      await expect(page.getByText('Unassigned')).toBeVisible();
-      await expect(page.getByText('Missing location')).toBeVisible();
+      // Scoped to <main> — "Jobs" alone also matches the sidebar/mobile nav
+      // link, a strict-mode collision (same recurring bug class as every
+      // prior slice's shell-chrome-vs-page-content label overlaps).
+      // Scoped to the SummaryTile label's own element shape
+      // (`div.text-[11px]`) — "Jobs"/"Unassigned" etc. alone also match the
+      // sidebar nav link / crew-filter <option>, and mobile + desktop
+      // summary-tile layouts both render in the DOM simultaneously
+      // (CSS-hidden per breakpoint, not conditionally unmounted), so
+      // .first() is needed even after scoping.
+      const summaryTileLabel = (text: string) => page.locator('div.text-\\[11px\\]', { hasText: text }).first();
+      await expect(summaryTileLabel('Scheduled stops')).toBeVisible();
+      await expect(summaryTileLabel('Jobs')).toBeVisible();
+      await expect(summaryTileLabel('Site visits')).toBeVisible();
+      await expect(summaryTileLabel('Unassigned')).toBeVisible();
+      await expect(summaryTileLabel('Missing location')).toBeVisible();
       // Never present anywhere on this page — no fake mileage/drive-time.
       await expect(page.getByText(/\d+(\.\d+)?\s*(mi|miles|min)\b.*drive/i)).toHaveCount(0);
     });

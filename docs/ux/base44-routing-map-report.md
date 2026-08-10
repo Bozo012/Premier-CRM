@@ -99,13 +99,22 @@ Three states, never a fabricated fourth: `geocoded` / `unavailable` / `missing-a
 
 ## Testing
 
-**Unit (`pnpm test`)**: before this slice, 391 tests passing across 47 test files (baseline, reconstructed by isolating this slice's 31 new tests from the 422 now passing). After: **48 passed / 1 skipped test files, 416 passed / 6 skipped tests (422 total), all green** — no regressions. New: `routes/_lib/forge-routes-view-model.test.ts` (job/site-visit projection, scheduled-time ordering, crew/lead/unassigned filtering, marker generation only for geocoded stops, honest summary counts, address-key deduping), `routes/_lib/map-provider/google/geocode.test.ts` (OK/ZERO_RESULTS/REQUEST_DENIED/OVER_QUERY_LIMIT/multi-result-first-wins), `routes/_lib/map-provider/google/directions.test.ts` (multi-leg summation, ZERO_RESULTS, empty-legs, REQUEST_DENIED), `lib/maps/external-maps-url.test.ts` (address URL, coordinate-preference, null-destination, no-gate-code-in-signature). `navigation-links.test.ts` updated for the new nav entry.
+**Unit (`pnpm test`)**: re-run live during independent verification — 416 passed / 6 skipped (422 total), 48 test files, all green, no regressions. New: `routes/_lib/forge-routes-view-model.test.ts` (job/site-visit projection, scheduled-time ordering, crew/lead/unassigned filtering, marker generation only for geocoded stops, honest summary counts, address-key deduping), `routes/_lib/map-provider/google/geocode.test.ts` (OK/ZERO_RESULTS/REQUEST_DENIED/OVER_QUERY_LIMIT/multi-result-first-wins), `routes/_lib/map-provider/google/directions.test.ts` (multi-leg summation, ZERO_RESULTS, empty-legs, REQUEST_DENIED), `lib/maps/external-maps-url.test.ts` (address URL, coordinate-preference, null-destination, no-gate-code-in-signature). `navigation-links.test.ts` updated for the new nav entry.
 
-**Typecheck (`pnpm typecheck`)**: clean across all 5 packages.
+**Typecheck (`pnpm typecheck`)**: re-run live — clean across all 5 packages.
 
-**Build (`pnpm --filter web build`)**: succeeds. `/routes` appears exactly once in the route output, server-rendered (`ƒ`).
+**Build (`pnpm --filter web build`)**: re-run live — succeeds. `/routes` appears exactly once in the route output, server-rendered (`ƒ`).
 
-**E2E (`tests/e2e/routes-base44-shell-bot.spec.ts`)**: written and typechecked (`npx tsc --noEmit -p tests/e2e/tsconfig.json` introduces **zero new errors** — confirmed by diffing against the pre-existing baseline via `git stash`, which showed the same 8 pre-existing files with pre-existing errors both with and without this spec present). **Not run live** — no `.env.test`/Supabase credentials exist in this worktree, per the standing convention for this program; that is the independent-verification pass's job. Covers: redirect-to-login, 4-viewport no-overflow, shell chrome presence, real (never fabricated) summary tile labels, the honest "Maps not configured" fallback, date-input URL update, crew-filter URL update, keyboard focus on the date input, mobile Route/Map segmented toggle, list-row selection (`aria-current`) state, conditional missing-location-badge assertions, and real `<Link>` click-through to Job/Site Visit detail.
+**E2E — executed live against `premier-crm-e2e` (`slbnizoskumwhleeiccv`), confirmed via `/api/e2e-health` before any test ran.** During independent verification, 1 of 16 tests initially failed, then a second and third variant of the same test failed after each fix — all three were the same recurring strict-mode-collision bug class from every prior slice, not a product defect:
+1. `getByText('Jobs', { exact: true })` (and the other summary-tile labels) matched both the tile and the sidebar nav link / mobile "More" sheet entry sharing the same text.
+2. After scoping to `<main>`, the same labels still matched twice, because the mobile and desktop summary-tile layouts both render in the DOM simultaneously (CSS-hidden per breakpoint, not conditionally unmounted) — same pattern as every prior slice's dual-layout markup.
+3. After adding `.first()`, "Unassigned" additionally matched the crew-filter `<option value="unassigned">` element before the visible tile.
+
+Fixed by scoping each assertion to the `SummaryTile` component's own actual element shape (`div.text-[11px]`) plus `.first()`. After the fix, **15 of 16 tests pass live, 1 honest skip** (list-row-selection sync — no scheduled stop existed for the current date at test time; the two other conditional tests, missing-location-badge and real-link click-through, both found real qualifying data and passed rather than skipping).
+
+**Regression** (`jobs-base44-shell-bot`, `calendar-base44-shell-bot`, `today-redesign-bot`, `today-kanban-board-semantics-bot`, `properties-base44-shell-bot`, `team-base44-shell-bot`, `job-assignments-model-bot`): 81 tests total, 80 passed on the first run; 1 failure (`jobs-base44-shell-bot`'s "New job" test, `net::ERR_ABORTED`) was the same known worker-concurrency navigation flake documented in every prior slice's verification pass — re-ran clean in isolation with `--workers=1`, confirming no real regression.
+
+**Visual evidence**: captured live (desktop 1440×900, tablet 768×1024, mobile Route view, mobile Map view) via the established viewport-crop capture workflow — confirmed correct: real nav placement ("Route Planning" between Calendar and Activity Logs), real date/crew filters, real summary tiles (all zero for a date with no scheduled work), the honest "Maps not configured" message naming the exact env var, "Nothing scheduled for this date," and a real "Unscheduled (55)" section showing real fixture jobs/requests with real `Location unavailable`/`Missing address`/`Unassigned` badges and working `Open job`/`Open site visit`/`Open in Maps` links. No overflow at any captured viewport. Shared directly with the requester, not committed.
 
 **What is NOT YET LIVE-VERIFIED** (needs a real `GOOGLE_MAPS_API_KEY`/`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, provisioned by the user later): actual Google map rendering, live geocoding against the real Geocoding API, live Directions API calls (also blocked on the UI-wiring gap above), real marker pixel placement, and marker-click ↔ list-row selection sync verified against an actual rendered map (the underlying `selectedId` state itself is provider-independent and is E2E-covered).
 
@@ -116,7 +125,7 @@ Three states, never a fabricated fourth: `geocoded` / `unavailable` / `missing-a
 3. "Route today" quick link from Today was not added (time-budget cut, task marked it a "consider," not a requirement).
 4. Ephemeral per-request geocoding has no caching layer — every page load re-geocodes the day's distinct addresses when a key exists. Acceptable at this codebase's current scale; the documented future persistence path (`properties.location`/`geocoded_at`) would remove this cost entirely for stable addresses.
 5. `route_stop_order` persisted reordering was intentionally not built — see the documented smallest-additive-model proposal above.
-6. E2E spec is typechecked only, not run live in this pass, per the standing verification split for this program.
+6. Live map/geocoding/directions behavior is unverified pending a real `GOOGLE_MAPS_API_KEY` — see the provisioning checklist above.
 
 ## Commits on this branch (in order)
 
@@ -124,3 +133,5 @@ Three states, never a fabricated fourth: `geocoded` / `unavailable` / `missing-a
 2. `cf36b4f` — `/routes` page, Google Maps provider boundary, view-model, presentation components, nav wiring.
 3. `3b87a29` — Shared `external-maps-url` lib + Property/Job/Site Visit "View on map"/"View location" link-outs, `.env.example` documentation.
 4. `8a99135` — `routes-base44-shell-bot.spec.ts` E2E spec + `routePlanning` selector.
+5. `b460676` — docs: this report.
+6. fix: E2E strict-mode locator collisions found during independent live verification, updated testing/visual-evidence results.
