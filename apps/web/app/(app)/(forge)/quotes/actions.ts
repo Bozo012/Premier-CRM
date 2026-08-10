@@ -64,6 +64,8 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   canEditEstimate: 'edit the estimate',
   canApproveEstimatePricing: 'approve estimate pricing',
   canCreateQuote: 'create a quote',
+  canCreateExpenses: 'create or edit expenses',
+  canApproveExpenses: 'approve or reject expenses',
   canSendQuote: 'send a quote',
 };
 

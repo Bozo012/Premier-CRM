@@ -29,7 +29,9 @@ export type Capability =
   | 'canEditEstimate'
   | 'canApproveEstimatePricing'
   | 'canCreateQuote'
-  | 'canSendQuote';
+  | 'canSendQuote'
+  | 'canCreateExpenses'
+  | 'canApproveExpenses';
 
 /**
  * Day-to-day estimate/invoice creation and sending is normal operations for
@@ -79,6 +81,15 @@ const CAPABILITIES: Record<Capability, readonly OrgRole[]> = {
   // authority. Subcontractors get neither.
   canCreateQuote: ['owner', 'admin', 'employee'],
   canSendQuote: ['owner', 'admin', 'employee'],
+
+  // Base44-exact-finance slice: expense create/submit and expense
+  // approve/reject/void previously reused canCreateInvoices/
+  // canRecordPayments/canVoidInvoices as stand-ins (there was no
+  // expense-specific capability at all). These give expenses their own
+  // named capabilities with the exact same role sets those stand-ins had,
+  // so this is a pure rename/clarification, not a permissions change.
+  canCreateExpenses: ['owner', 'admin', 'employee', 'subcontractor'],
+  canApproveExpenses: ['owner', 'admin'],
 };
 
 export function hasCapability(role: OrgRole, capability: Capability): boolean {
