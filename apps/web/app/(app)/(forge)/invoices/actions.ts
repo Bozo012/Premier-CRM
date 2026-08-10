@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 import {
   AddInvoiceLineItemInputSchema,
@@ -20,6 +21,7 @@ import {
   type Result,
 } from '@premier/shared';
 import {
+  addExpenseChargeToInvoice,
   addInvoiceLineItem,
   createDraftInvoiceFromJob,
   createDraftInvoiceFromQuote,
@@ -69,6 +71,8 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   canEditEstimate: 'edit the estimate',
   canApproveEstimatePricing: 'approve estimate pricing',
   canCreateQuote: 'create a quote',
+  canCreateExpenses: 'create or edit expenses',
+  canApproveExpenses: 'approve or reject expenses',
   canSendQuote: 'send a quote',
 };
 
@@ -356,6 +360,36 @@ export async function removeInvoiceLineItemAction(
 
   revalidatePath(`/invoices/${parsed.data.invoiceId}`);
   return ok({ lineItemId: parsed.data.lineItemId });
+}
+
+// ---------------------------------------------------------------------------
+// Expense → invoice line-item linkage. Uses the redirect-based plain-form
+// pattern (like expenses/actions.ts) rather than useFormState, since
+// eligible-expenses-section.tsx renders a plain per-row <form>, not a
+// client hook-driven one.
+// ---------------------------------------------------------------------------
+
+export async function addExpenseChargeToInvoiceAction(formData: FormData): Promise<never> {
+  const invoiceId = readString(formData, 'invoiceId');
+  const expenseId = readString(formData, 'expenseId');
+
+  const contextResult = await getInvoiceActionContext('canCreateInvoices');
+  if (!contextResult.success) {
+    redirect(`/invoices/${invoiceId}?error=${encodeURIComponent(contextResult.error)}`);
+  }
+  const { orgId } = contextResult.data;
+
+  const client = createServiceClient();
+  const result = await addExpenseChargeToInvoice(client, { invoiceId, expenseId, orgId });
+
+  if (!result.success) {
+    redirect(`/invoices/${invoiceId}?error=${encodeURIComponent(result.error)}`);
+  }
+
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath('/expenses');
+  revalidatePath(`/expenses/${expenseId}`);
+  redirect(`/invoices/${invoiceId}?message=${encodeURIComponent('Expense added to invoice.')}`);
 }
 
 // ---------------------------------------------------------------------------

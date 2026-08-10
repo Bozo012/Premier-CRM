@@ -10,7 +10,9 @@ import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presen
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { InvoicesShell } from './_components/invoices-shell';
 import { NewInvoiceDialog } from './_components/new-invoice-dialog';
+import { buildForgeShellData, buildMobileNavConfig } from './_lib/forge-shell-context';
 import {
   formatMoney,
   invoiceOutstandingTotal,
@@ -55,11 +57,20 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
 
   if (!orgContextResult.success) {
     return (
-      <PageShell search={search} status={status}>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await listInvoices(supabase, {
     limit: 100,
@@ -71,39 +82,43 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
 
   if (!result.success) {
     return (
-      <PageShell search={search} status={status}>
-        <ErrorPanel>Failed to load invoices: {result.error}</ErrorPanel>
-      </PageShell>
+      <InvoicesShell shellData={shellData} mobileNav={mobileNav}>
+        <PageShell search={search} status={status}>
+          <ErrorPanel>Failed to load invoices: {result.error}</ErrorPanel>
+        </PageShell>
+      </InvoicesShell>
     );
   }
 
   const invoices = result.data.invoices.map((invoice) => toForgeInvoiceSummary(invoice));
 
   return (
-    <PageShell
-      outstandingLabel={formatMoney(invoiceOutstandingTotal(result.data.invoices))}
-      paidLabel={formatMoney(invoicePaidTotal(result.data.invoices))}
-      search={search}
-      status={status}
-      total={result.data.total}
-    >
-      <p className="text-sm font-medium text-muted-foreground">
-        {formatTotal(result.data.total, search, status)}
-      </p>
+    <InvoicesShell shellData={shellData} mobileNav={mobileNav}>
+      <PageShell
+        outstandingLabel={formatMoney(invoiceOutstandingTotal(result.data.invoices))}
+        paidLabel={formatMoney(invoicePaidTotal(result.data.invoices))}
+        search={search}
+        status={status}
+        total={result.data.total}
+      >
+        <p className="text-sm font-medium text-muted-foreground">
+          {formatTotal(result.data.total, search, status)}
+        </p>
 
-      {invoices.length === 0 ? (
-        <EmptyState search={search} status={status} />
-      ) : (
-        <>
-          <InvoicesTable invoices={invoices} />
-          <div className="grid gap-3 lg:hidden">
-            {invoices.map((invoice) => (
-              <InvoiceCard key={invoice.id} invoice={invoice} />
-            ))}
-          </div>
-        </>
-      )}
-    </PageShell>
+        {invoices.length === 0 ? (
+          <EmptyState search={search} status={status} />
+        ) : (
+          <>
+            <InvoicesTable invoices={invoices} />
+            <div className="grid gap-3 lg:hidden">
+              {invoices.map((invoice) => (
+                <InvoiceCard key={invoice.id} invoice={invoice} />
+              ))}
+            </div>
+          </>
+        )}
+      </PageShell>
+    </InvoicesShell>
   );
 }
 
@@ -207,16 +222,16 @@ function InvoicesTable({ invoices }: { invoices: ForgeInvoiceSummary[] }) {
         <tbody className="divide-y">
           {invoices.map((invoice) => (
             <tr key={invoice.id} className="transition hover:bg-muted/30">
-              <td className="px-5 py-4">
+              <td className="max-w-0 break-words px-5 py-4">
                 <Link href={`/invoices/${invoice.id}`} className="group flex items-center gap-2 font-bold text-foreground">
-                  <Receipt className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  <span className="group-hover:underline">{invoice.number}</span>
+                  <Receipt className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className="truncate group-hover:underline">{invoice.number}</span>
                 </Link>
-                <div className="mt-0.5 text-xs text-muted-foreground">{invoice.originLabel}</div>
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">{invoice.originLabel}</div>
               </td>
-              <td className="px-5 py-4">
-                <div className="font-medium text-foreground">{invoice.customerName}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{invoice.propertyName}</div>
+              <td className="max-w-0 break-words px-5 py-4">
+                <div className="truncate font-medium text-foreground">{invoice.customerName}</div>
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">{invoice.propertyName}</div>
               </td>
               <td className="px-5 py-4">
                 <div className="font-bold text-foreground">{invoice.amountLabel}</div>

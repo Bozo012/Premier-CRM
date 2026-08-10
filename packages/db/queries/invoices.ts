@@ -16,6 +16,8 @@ import {
 import type { DbClient } from '../client';
 import type { Database } from '../types';
 
+import { isExpenseEligibleForInvoiceCharge } from './expenses';
+
 export type Invoice = Database['public']['Tables']['invoices']['Row'];
 export type InvoiceLineItem = Database['public']['Tables']['invoice_line_items']['Row'];
 export type Payment = Database['public']['Tables']['payments']['Row'];
@@ -253,6 +255,8 @@ export interface InvoiceListPage {
 // due date has passed, amount is still owed, and the invoice isn't in a
 // terminal/non-collectible state.
 const NON_OVERDUE_ELIGIBLE_STATUSES = new Set(['paid', 'void', 'refunded', 'draft']);
+
+const SOURCE_EXPENSE_UNIQUE_VIOLATION = '23505';
 
 export function computeIsOverdue(
   invoice: Pick<Invoice, 'due_date' | 'amount_due' | 'status'>
@@ -941,6 +945,112 @@ export async function recordPayment(
   });
 
   return ok(payment);
+}
+
+// ---------------------------------------------------------------------------
+// Expense → invoice line-item linkage (base44-exact-finance slice). Adds a
+// real invoice_line_items row snapshotting the expense's cost/customer
+// charge via source_expense_id/source_expense_cost_snapshot/
+// source_expense_customer_charge_snapshot (schema added by migration
+// 20260805075928), marks the expense invoiced, and recalculates totals via
+// the same trigger-backed path every other line-item mutation uses.
+//
+// Double-billing guard: invoice_line_items_source_expense_id_key (migration
+// 20260810060936) is the real, DB-enforced authority — a partial unique
+// index on source_expense_id WHERE NOT NULL. The pre-insert existingLink
+// check below is a friendly common-case pre-check only; it cannot itself
+// prevent a race between two concurrent requests, which is why the insert's
+// own unique_violation is still translated below rather than trusted to
+// never happen.
+// ---------------------------------------------------------------------------
+
+export async function addExpenseChargeToInvoice(
+  client: DbClient,
+  args: { invoiceId: string; expenseId: string; orgId: string }
+): Promise<Result<InvoiceLineItem>> {
+  const guard = await assertDraftInvoice(client, { invoiceId: args.invoiceId, orgId: args.orgId });
+  if (!guard.success) return guard;
+
+  const { data: invoice, error: invoiceError } = await client
+    .from('invoices')
+    .select('job_id')
+    .eq('id', args.invoiceId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+  if (invoiceError) return err(ErrorCode.DB_ERROR, invoiceError.message);
+  if (!invoice) return err(ErrorCode.NOT_FOUND, 'Invoice not found.');
+
+  const { data: expense, error: expenseError } = await client
+    .from('expenses')
+    .select('*')
+    .eq('id', args.expenseId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+  if (expenseError) return err(ErrorCode.DB_ERROR, expenseError.message);
+  if (!expense) return err(ErrorCode.NOT_FOUND, 'Expense not found.');
+
+  if (expense.job_id !== invoice.job_id) {
+    return err(ErrorCode.VALIDATION_ERROR, 'This expense is not linked to the invoice’s job.');
+  }
+  if (!isExpenseEligibleForInvoiceCharge(expense)) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      'This expense is not eligible to be added to an invoice — it must be ready to invoice with a billing treatment that allows a customer charge.'
+    );
+  }
+
+  const { data: existingLink, error: existingLinkError } = await client
+    .from('invoice_line_items')
+    .select('id')
+    .eq('source_expense_id', args.expenseId)
+    .maybeSingle();
+  if (existingLinkError) return err(ErrorCode.DB_ERROR, existingLinkError.message);
+  if (existingLink) {
+    return err(ErrorCode.VALIDATION_ERROR, 'This expense has already been added to an invoice.');
+  }
+
+  const chargeAmount = expense.customer_charge_amount ?? expense.total_cost ?? expense.amount + expense.tax;
+
+  const payload: InvoiceLineItemInsert = {
+    description: expense.vendor ? `Vendor: ${expense.vendor}` : null,
+    invoice_id: args.invoiceId,
+    name: expense.description,
+    quantity: 1,
+    source_expense_cost_snapshot: expense.total_cost ?? expense.amount + expense.tax,
+    source_expense_customer_charge_snapshot: chargeAmount,
+    source_expense_id: expense.id,
+    unit: 'expense',
+    unit_price: chargeAmount,
+  };
+
+  const { data: lineItem, error: insertError } = await client
+    .from('invoice_line_items')
+    .insert(payload)
+    .select('*')
+    .single();
+  if (insertError) {
+    // 23505 = unique_violation. The pre-insert existingLink check above
+    // handles the common case, but is a check-then-act race — two
+    // concurrent requests can both pass it before either insert commits.
+    // invoice_line_items_source_expense_id_key (migration 20260810060936)
+    // is the real, DB-enforced concurrency guarantee; translate its
+    // rejection into the same friendly message the pre-check already
+    // returns, not a raw DB exception.
+    if (insertError.code === SOURCE_EXPENSE_UNIQUE_VIOLATION) {
+      return err(ErrorCode.VALIDATION_ERROR, 'This expense has already been added to an invoice.');
+    }
+    return err(ErrorCode.DB_ERROR, insertError.message);
+  }
+
+  await client
+    .from('expenses')
+    .update({ invoice_id: args.invoiceId, status: 'invoiced' })
+    .eq('id', expense.id)
+    .eq('org_id', args.orgId);
+
+  await recalcInvoiceTotals(client, { invoiceId: args.invoiceId, orgId: args.orgId });
+
+  return ok(lineItem);
 }
 
 export async function listPaymentsForInvoice(

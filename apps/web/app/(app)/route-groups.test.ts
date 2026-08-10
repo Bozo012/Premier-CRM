@@ -32,8 +32,6 @@ function exists(...segments: string[]): boolean {
 
 const LEGACY_ROUTES = [
   'today',
-  'invoices',
-  'expenses',
   'settings',
   'site-photos',
   'activity-logs',
@@ -50,6 +48,8 @@ const FORGE_ROUTES = [
   'services',
   'jobs',
   'calendar',
+  'invoices',
+  'expenses',
 ] as const;
 
 describe('(app) route-group split — no middleware, no duplicate/missing routes', () => {
@@ -137,8 +137,19 @@ describe('(app) route-group split — no middleware, no duplicate/missing routes
     expect(exists('(forge)', 'calendar', 'page.tsx')).toBe(true);
   });
 
+  it('invoices list/detail routes have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'invoices', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'invoices', '[invoiceId]', 'page.tsx')).toBe(true);
+  });
+
+  it('expenses list/detail/new routes have page.tsx (route resolves)', () => {
+    expect(exists('(forge)', 'expenses', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'expenses', '[expenseId]', 'page.tsx')).toBe(true);
+    expect(exists('(forge)', 'expenses', 'new', 'page.tsx')).toBe(true);
+  });
+
   it('per-route error/loading boundaries moved with their routes', () => {
-    expect(exists('(legacy)', 'invoices', 'error.tsx')).toBe(true);
+    expect(exists('(forge)', 'invoices', 'error.tsx')).toBe(true);
     expect(exists('(forge)', 'jobs', 'error.tsx')).toBe(true);
     expect(exists('(forge)', 'customers', 'error.tsx')).toBe(true);
     expect(exists('(forge)', 'customers', 'loading.tsx')).toBe(true);
@@ -216,5 +227,15 @@ describe('shell assignment — one shell per route-group, verified from source',
   it('calendar page.tsx builds its own ForgeShell chrome (via CalendarShell)', () => {
     const source = readSource('(forge)', 'calendar', 'page.tsx');
     expect(source).toContain('CalendarShell');
+  });
+
+  it('invoices page.tsx builds its own ForgeShell chrome (via InvoicesShell)', () => {
+    const source = readSource('(forge)', 'invoices', 'page.tsx');
+    expect(source).toContain('InvoicesShell');
+  });
+
+  it('expenses page.tsx builds its own ForgeShell chrome (via ExpensesShell)', () => {
+    const source = readSource('(forge)', 'expenses', 'page.tsx');
+    expect(source).toContain('ExpensesShell');
   });
 });

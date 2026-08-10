@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { ExpensesShell } from './_components/expenses-shell';
+import { buildForgeShellData, buildMobileNavConfig } from './_lib/forge-shell-context';
 import {
   buildExpenseFilterHref,
   toForgeExpenseSummary,
@@ -42,11 +44,20 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   const orgContextResult = await getActiveOrgContext(supabase, user.id);
   if (!orgContextResult.success) {
     return (
-      <PageShell activeFilter={filter} filters={[]} search={search} summary={[]}>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await listExpenses(supabase, {
     filter,
@@ -58,39 +69,43 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
 
   if (!result.success) {
     return (
-      <PageShell activeFilter={filter} filters={[]} search={search} summary={[]}>
-        <ErrorPanel>Failed to load expenses: {result.error}</ErrorPanel>
-      </PageShell>
+      <ExpensesShell shellData={shellData} mobileNav={mobileNav}>
+        <PageShell activeFilter={filter} filters={[]} search={search} summary={[]}>
+          <ErrorPanel>Failed to load expenses: {result.error}</ErrorPanel>
+        </PageShell>
+      </ExpensesShell>
     );
   }
 
   const expenses = result.data.expenses.map((item) => toForgeExpenseSummary(item));
 
   return (
-    <PageShell
-      activeFilter={filter}
-      filters={result.data.filters}
-      search={search}
-      summary={toSummaryCards(result.data.summary)}
-      total={result.data.total}
-    >
-      <p className="text-sm font-medium text-muted-foreground">
-        {formatTotal(result.data.total, search, filter)}
-      </p>
+    <ExpensesShell shellData={shellData} mobileNav={mobileNav}>
+      <PageShell
+        activeFilter={filter}
+        filters={result.data.filters}
+        search={search}
+        summary={toSummaryCards(result.data.summary)}
+        total={result.data.total}
+      >
+        <p className="text-sm font-medium text-muted-foreground">
+          {formatTotal(result.data.total, search, filter)}
+        </p>
 
-      {expenses.length === 0 ? (
-        <EmptyState search={search} filter={filter} />
-      ) : (
-        <>
-          <ExpensesTable expenses={expenses} />
-          <div className="grid gap-3 lg:hidden">
-            {expenses.map((expense) => (
-              <ExpenseCard key={expense.id} expense={expense} />
-            ))}
-          </div>
-        </>
-      )}
-    </PageShell>
+        {expenses.length === 0 ? (
+          <EmptyState search={search} filter={filter} />
+        ) : (
+          <>
+            <ExpensesTable expenses={expenses} />
+            <div className="grid gap-3 lg:hidden">
+              {expenses.map((expense) => (
+                <ExpenseCard key={expense.id} expense={expense} />
+              ))}
+            </div>
+          </>
+        )}
+      </PageShell>
+    </ExpensesShell>
   );
 }
 
@@ -203,16 +218,16 @@ function ExpensesTable({ expenses }: { expenses: ForgeExpenseSummary[] }) {
         <tbody className="divide-y">
           {expenses.map((expense) => (
             <tr key={expense.id} className="transition hover:bg-muted/30">
-              <td className="px-5 py-4">
+              <td className="max-w-0 break-words px-5 py-4">
                 <Link href={`/expenses/${expense.id}`} className="group flex items-center gap-2 font-bold text-foreground">
                   {expense.hasReceipt ? (
-                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   ) : (
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" />
                   )}
-                  <span className="group-hover:underline">{expense.description}</span>
+                  <span className="truncate group-hover:underline">{expense.description}</span>
                 </Link>
-                <div className="mt-0.5 text-xs text-muted-foreground">
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">
                   {expense.propertyLabel} · {expense.dateLabel}
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -231,8 +246,8 @@ function ExpensesTable({ expenses }: { expenses: ForgeExpenseSummary[] }) {
                 ) : null}
               </td>
               <td className="px-5 py-4"><CategoryBadge label={expense.categoryLabel} /></td>
-              <td className="px-5 py-4 text-xs text-muted-foreground">{expense.jobLabel}</td>
-              <td className="px-5 py-4 text-xs font-medium text-foreground">{expense.vendor}</td>
+              <td className="max-w-0 truncate break-words px-5 py-4 text-xs text-muted-foreground">{expense.jobLabel}</td>
+              <td className="max-w-0 truncate break-words px-5 py-4 text-xs font-medium text-foreground">{expense.vendor}</td>
               <td className="px-5 py-4 font-bold text-foreground">{expense.amountLabel}</td>
               <td className="px-5 py-4"><ForgeStatusPill tone={expense.statusTone}>{expense.statusLabel}</ForgeStatusPill></td>
               <td className="px-5 py-4 text-right">

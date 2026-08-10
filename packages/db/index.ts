@@ -2,6 +2,7 @@ export { createBrowserClient, createServerClient, createServiceClient } from './
 export type { DbClient } from './client';
 export type { Database, Json } from './types';
 export {
+  addExpenseChargeToInvoice,
   addInvoiceLineItem,
   createDraftInvoiceFromJob,
   createDraftInvoiceFromQuote,
@@ -11,6 +12,7 @@ export {
   getInvoiceById,
   getInvoiceByToken,
   getJobInvoiceTotals,
+  listEligibleExpensesForJob,
   listInvoices,
   listInvoicesForJob,
   listPaymentsForInvoice,
@@ -25,6 +27,7 @@ export {
   voidExpense,
   voidInvoice,
   listExpenses,
+  type EligibleExpenseForJob,
   type Expense,
   type ExpenseDetail,
   type ExpenseFilterCount,

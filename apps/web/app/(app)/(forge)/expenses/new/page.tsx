@@ -9,7 +9,9 @@ import { Button } from '@/components/ui/button';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { ExpensesShell } from '../_components/expenses-shell';
 import { createExpenseAction } from '../actions';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import { getBillingTreatmentLabel, getCategoryLabel } from '../_lib/forge-expense-view-model';
 
 export const metadata: Metadata = { title: 'New expense' };
@@ -77,12 +79,20 @@ export default async function NewExpensePage({ searchParams }: NewExpensePagePro
   const orgContextResult = await getActiveOrgContext(supabase, user.id);
   if (!orgContextResult.success) {
     return (
-      <ForgePage className="max-w-4xl gap-5 md:gap-6">
-        <ForgeBackLink href="/expenses">Back to expenses</ForgeBackLink>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </ForgePage>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const jobsResult = await listJobs(supabase, {
     limit: 100,
@@ -92,6 +102,7 @@ export default async function NewExpensePage({ searchParams }: NewExpensePagePro
   });
 
   return (
+    <ExpensesShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="max-w-4xl gap-5 md:gap-6">
       <div className="flex items-center justify-between gap-3">
         <ForgeBackLink href="/expenses">Cancel</ForgeBackLink>
@@ -269,6 +280,7 @@ export default async function NewExpensePage({ searchParams }: NewExpensePagePro
         </form>
       )}
     </ForgePage>
+    </ExpensesShell>
   );
 }
 

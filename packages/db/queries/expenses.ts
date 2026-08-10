@@ -717,3 +717,83 @@ export async function voidExpense(
 
   return ok(data);
 }
+
+// ---------------------------------------------------------------------------
+// Eligible expenses for invoice line-item linkage (expense → invoice
+// billing gap closed in the base44-exact-finance slice).
+//
+// Eligibility is proof-based, not status-trusting: an expense is only
+// offered here when (a) its billing_treatment is one Forge has decided may
+// reach a customer charge, (b) its status is 'ready_to_invoice' (approved,
+// not yet linked), and (c) no invoice_line_items row already references it
+// via source_expense_id — checked directly against invoice_line_items
+// rather than relying solely on expenses.status/invoice_id staying in sync.
+// This anti-join is the app-layer double-billing guard: nothing in the
+// schema stops the same expense being inserted as a line item on two
+// invoices, so this query (and addExpenseChargeToInvoice's own guard below)
+// are the only things preventing it today. See the finance slice report's
+// gap table for why this is a documented mitigation, not a schema fix.
+// ---------------------------------------------------------------------------
+
+const CUSTOMER_CHARGE_ELIGIBLE_TREATMENTS = new Set<ExpenseBillingTreatment>([
+  'reimbursable_at_cost',
+  'billable_with_markup',
+  'customer_approved_pass_through',
+]);
+
+/**
+ * Pure eligibility check reused by both listEligibleExpensesForJob (the
+ * offered list) and invoices.ts's addExpenseChargeToInvoice (the mutation
+ * guard) — kept as one function so the two can't silently drift, and unit
+ * testable without a DB client.
+ */
+export function isExpenseEligibleForInvoiceCharge(
+  expense: Pick<Expense, 'billing_treatment' | 'status'>
+): boolean {
+  return (
+    expense.status === 'ready_to_invoice' &&
+    CUSTOMER_CHARGE_ELIGIBLE_TREATMENTS.has(expense.billing_treatment)
+  );
+}
+
+export interface EligibleExpenseForJob {
+  expense: Expense;
+}
+
+export async function listEligibleExpensesForJob(
+  client: DbClient,
+  args: { jobId: string; orgId: string }
+): Promise<Result<EligibleExpenseForJob[]>> {
+  const { data: linked, error: linkedError } = await client
+    .from('invoice_line_items')
+    .select('source_expense_id')
+    .not('source_expense_id', 'is', null);
+
+  if (linkedError) return err(ErrorCode.DB_ERROR, linkedError.message);
+
+  const linkedExpenseIds = new Set(
+    (linked ?? [])
+      .map((row) => row.source_expense_id)
+      .filter((id): id is string => Boolean(id))
+  );
+
+  const { data, error } = await client
+    .from('expenses')
+    .select('*')
+    .eq('org_id', args.orgId)
+    .eq('job_id', args.jobId)
+    .eq('status', 'ready_to_invoice')
+    .in('billing_treatment', Array.from(CUSTOMER_CHARGE_ELIGIBLE_TREATMENTS))
+    .order('purchase_date', { ascending: false });
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  // Re-check with the pure helper too (not just the SQL filter) so this
+  // list and addExpenseChargeToInvoice's own guard can never silently
+  // diverge if either query's filter clause is ever edited independently.
+  const eligible = (data ?? []).filter(
+    (expense) => isExpenseEligibleForInvoiceCharge(expense) && !linkedExpenseIds.has(expense.id)
+  );
+
+  return ok(eligible.map((expense) => ({ expense })));
+}

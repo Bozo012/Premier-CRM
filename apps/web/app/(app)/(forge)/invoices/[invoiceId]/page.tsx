@@ -1,7 +1,13 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
-import { getActiveOrgContext, getInvoiceById, type InvoiceLineItemSummary, type Payment } from '@premier/db';
+import {
+  getActiveOrgContext,
+  getInvoiceById,
+  listEligibleExpensesForJob,
+  type InvoiceLineItemSummary,
+  type Payment,
+} from '@premier/db';
 import { ErrorCode } from '@premier/shared';
 
 import { ForgeCard, ForgePage, ForgeStatusPill } from '@/components/forge/presentation';
@@ -9,19 +15,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { InvoicesShell } from '../_components/invoices-shell';
 import { InvoiceMetadataForm } from '../_components/invoice-metadata-form';
 import { LineItemEditor } from '../_components/line-item-editor';
 import { RecordPaymentForm } from '../_components/record-payment-form';
 import { SendInvoiceButton } from '../_components/send-invoice-button';
 import { VoidInvoiceButton } from '../_components/void-invoice-button';
+import { EligibleExpensesSection } from '../_components/eligible-expenses-section';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import { invoiceStatusTone } from '../_lib/forge-invoice-view-model';
+import { toEligibleExpenseOptions } from '../_lib/forge-invoice-eligible-expenses-view-model';
 
 interface InvoiceDetailPageProps {
   params: Promise<{ invoiceId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default async function InvoiceDetailPage({ params }: InvoiceDetailPageProps) {
+export default async function InvoiceDetailPage({ params, searchParams }: InvoiceDetailPageProps) {
   const { invoiceId } = await params;
+  const query = await searchParams;
+  const message = readStringParam(query.message);
+  const error = readStringParam(query.error);
 
   if (!isUuid(invoiceId)) {
     notFound();
@@ -41,12 +55,21 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
 
   if (!orgContextResult.success) {
     return (
-      <PageShell>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
   const { orgId } = orgContextResult.data;
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await getInvoiceById(supabase, {
     invoiceId,
@@ -59,9 +82,11 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
     }
 
     return (
-      <PageShell>
-        <ErrorPanel>Failed to load invoice: {result.error}</ErrorPanel>
-      </PageShell>
+      <InvoicesShell shellData={shellData} mobileNav={mobileNav}>
+        <PageShell>
+          <ErrorPanel>Failed to load invoice: {result.error}</ErrorPanel>
+        </PageShell>
+      </InvoicesShell>
     );
   }
 
@@ -74,7 +99,17 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
   // reach them in the first place, not just to satisfy the DB guard.
   const isWorking = invoice.kind === 'working';
 
+  // Eligible expenses to add as invoice line items — only offered on draft,
+  // non-working invoices. listEligibleExpensesForJob already excludes
+  // anything with a real invoice_line_items.source_expense_id match (not
+  // just expenses.status), so this list is proof-based, not status-trusting.
+  const eligibleExpenses =
+    isDraft && !isWorking
+      ? await listEligibleExpensesForJob(supabase, { jobId: job.id, orgId })
+      : null;
+
   return (
+    <InvoicesShell shellData={shellData} mobileNav={mobileNav}>
     <PageShell>
       <header className="space-y-4">
         <div className="space-y-2">
@@ -102,6 +137,9 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
           </p>
         </div>
       </header>
+
+      {message ? <SuccessPanel>{message}</SuccessPanel> : null}
+      {error ? <ErrorPanel>{error}</ErrorPanel> : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <InfoCard label="Total" value={formatMoney(invoice.total)} helper={`Subtotal ${formatMoney(invoice.subtotal)}`} />
@@ -291,7 +329,21 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
           <RecordPaymentForm invoiceId={invoice.id} amountDue={invoice.amount_due ?? 0} />
         </section>
       ) : null}
+
+      {eligibleExpenses ? (
+        <section>
+          {eligibleExpenses.success ? (
+            <EligibleExpensesSection
+              invoiceId={invoice.id}
+              expenses={toEligibleExpenseOptions(eligibleExpenses.data)}
+            />
+          ) : (
+            <ErrorPanel>Failed to load eligible expenses: {eligibleExpenses.error}</ErrorPanel>
+          )}
+        </section>
+      ) : null}
     </PageShell>
+    </InvoicesShell>
   );
 }
 
@@ -437,6 +489,14 @@ function ErrorPanel({ children }: { children: React.ReactNode }) {
   );
 }
 
+function SuccessPanel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+      {children}
+    </p>
+  );
+}
+
 
 function formatMoney(value: number | null) {
   if (value === null) return 'Not available';
@@ -485,6 +545,11 @@ function formatEnumLabel(value: string) {
     .split('_')
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(' ');
+}
+
+function readStringParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0]?.trim() ?? '';
+  return value?.trim() ?? '';
 }
 
 function isUuid(value: string) {

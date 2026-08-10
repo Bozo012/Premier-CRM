@@ -35,9 +35,11 @@ interface ExpenseActionContext {
 
 const CAPABILITY_LABELS: Record<Capability, string> = {
   canApproveEstimatePricing: 'approve estimate pricing',
+  canApproveExpenses: 'approve or reject expenses',
   canCreateDirectWorkOrder: 'create a direct work order',
   canCreateEstimates: 'create estimates',
-  canCreateInvoices: 'create or edit expenses',
+  canCreateExpenses: 'create or edit expenses',
+  canCreateInvoices: 'create or edit invoices',
   canCreateQuote: 'create a quote',
   canDeleteInvoices: 'delete invoices',
   canEditEstimate: 'edit the estimate',
@@ -46,7 +48,7 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   canManageDeposits: 'manage deposits',
   canManageInspectionTemplates: 'manage inspection templates',
   canProposeChangeOrders: 'propose change orders',
-  canRecordPayments: 'approve or reject expenses',
+  canRecordPayments: 'record payments',
   canScheduleJobs: 'schedule jobs',
   canSendEstimates: 'send estimates',
   canSendInvoices: 'send invoices',
@@ -99,7 +101,7 @@ function redirectWithError(path: string, message: string): never {
 }
 
 export async function createExpenseAction(formData: FormData): Promise<never> {
-  const contextResult = await getExpenseActionContext('canCreateInvoices');
+  const contextResult = await getExpenseActionContext('canCreateExpenses');
   if (!contextResult.success) redirectWithError('/expenses/new', contextResult.error);
 
   const rawInput = {
@@ -140,7 +142,7 @@ export async function createExpenseAction(formData: FormData): Promise<never> {
 }
 
 export async function submitExpenseAction(formData: FormData): Promise<never> {
-  const contextResult = await getExpenseActionContext('canCreateInvoices');
+  const contextResult = await getExpenseActionContext('canCreateExpenses');
   if (!contextResult.success) redirectWithError('/expenses', contextResult.error);
 
   const parsed = SubmitExpenseInputSchema.safeParse({
@@ -162,7 +164,7 @@ export async function submitExpenseAction(formData: FormData): Promise<never> {
 }
 
 export async function approveExpenseAction(formData: FormData): Promise<never> {
-  const contextResult = await getExpenseActionContext('canRecordPayments');
+  const contextResult = await getExpenseActionContext('canApproveExpenses');
   if (!contextResult.success) redirectWithError('/expenses', contextResult.error);
 
   const parsed = ApproveExpenseInputSchema.safeParse({
@@ -190,7 +192,7 @@ export async function approveExpenseAction(formData: FormData): Promise<never> {
 }
 
 export async function rejectExpenseAction(formData: FormData): Promise<never> {
-  const contextResult = await getExpenseActionContext('canRecordPayments');
+  const contextResult = await getExpenseActionContext('canApproveExpenses');
   if (!contextResult.success) redirectWithError('/expenses', contextResult.error);
 
   const parsed = RejectExpenseInputSchema.safeParse({
@@ -216,7 +218,7 @@ export async function rejectExpenseAction(formData: FormData): Promise<never> {
 }
 
 export async function voidExpenseAction(formData: FormData): Promise<never> {
-  const contextResult = await getExpenseActionContext('canVoidInvoices');
+  const contextResult = await getExpenseActionContext('canApproveExpenses');
   if (!contextResult.success) redirectWithError('/expenses', contextResult.error);
 
   const parsed = VoidExpenseInputSchema.safeParse({

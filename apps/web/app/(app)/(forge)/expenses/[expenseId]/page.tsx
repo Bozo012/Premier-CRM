@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { ExpensesShell } from '../_components/expenses-shell';
 import { approveExpenseAction, rejectExpenseAction, submitExpenseAction, voidExpenseAction } from '../actions';
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import {
   formatMoney,
   getBillingTreatmentLabel,
@@ -54,12 +56,20 @@ export default async function ExpenseDetailPage({ params, searchParams }: Expens
   const orgContextResult = await getActiveOrgContext(supabase, user.id);
   if (!orgContextResult.success) {
     return (
-      <ForgePage className="max-w-6xl gap-5 md:gap-6">
-        <ForgeBackLink href="/expenses">Back to expenses</ForgeBackLink>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </ForgePage>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await getExpenseById(supabase, {
     expenseId,
@@ -68,24 +78,27 @@ export default async function ExpenseDetailPage({ params, searchParams }: Expens
   if (!result.success) {
     if (result.code === ErrorCode.NOT_FOUND) notFound();
     return (
-      <ForgePage className="max-w-6xl gap-5 md:gap-6">
-        <ForgeBackLink href="/expenses">Back to expenses</ForgeBackLink>
-        <ErrorPanel>Failed to load expense: {result.error}</ErrorPanel>
-      </ForgePage>
+      <ExpensesShell shellData={shellData} mobileNav={mobileNav}>
+        <ForgePage className="max-w-6xl gap-5 md:gap-6">
+          <ForgeBackLink href="/expenses">Back to expenses</ForgeBackLink>
+          <ErrorPanel>Failed to load expense: {result.error}</ErrorPanel>
+        </ForgePage>
+      </ExpensesShell>
     );
   }
 
   const role = orgContextResult.data.role as OrgRole;
-  const canSubmit = hasCapability(role, 'canCreateInvoices') && result.data.expense.status === 'draft';
+  const canSubmit = hasCapability(role, 'canCreateExpenses') && result.data.expense.status === 'draft';
   const canReview =
-    hasCapability(role, 'canRecordPayments') &&
+    hasCapability(role, 'canApproveExpenses') &&
     ['submitted', 'needs_receipt', 'needs_review'].includes(result.data.expense.status);
   const canVoid =
-    hasCapability(role, 'canVoidInvoices') &&
+    hasCapability(role, 'canApproveExpenses') &&
     !['rejected', 'internal_only', 'invoiced', 'reimbursed', 'voided'].includes(result.data.expense.status);
   const model = toForgeExpenseDetail(result.data);
 
   return (
+    <ExpensesShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="max-w-6xl gap-5 md:gap-6">
       <ForgeBackLink href="/expenses">Back to expenses</ForgeBackLink>
 
@@ -262,7 +275,7 @@ export default async function ExpenseDetailPage({ params, searchParams }: Expens
               {result.data.invoice
                 ? `Linked to ${result.data.invoice.invoiceNumber}.`
                 : model.status === 'ready_to_invoice'
-                  ? 'Ready for a future invoice builder handoff.'
+                  ? 'Ready to invoice — add it from the "Eligible expenses" section on the job\'s draft invoice.'
                   : 'Not ready for invoicing.'}
             </p>
             {model.invoiceHref ? (
@@ -274,6 +287,7 @@ export default async function ExpenseDetailPage({ params, searchParams }: Expens
         </aside>
       </div>
     </ForgePage>
+    </ExpensesShell>
   );
 }
 
