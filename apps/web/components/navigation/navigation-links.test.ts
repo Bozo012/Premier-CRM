@@ -16,6 +16,7 @@ describe('forgeNavigationLinks', () => {
       'Jobs',
       'Invoices',
       'Calendar',
+      'Route Planning',
       'Activity Logs',
       'Site Photos',
       'Expenses',

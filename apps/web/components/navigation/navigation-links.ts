@@ -10,6 +10,7 @@ export const forgeNavigationLinks = [
   { href: '/jobs', label: 'Jobs' },
   { href: '/invoices', label: 'Invoices' },
   { href: '/calendar', label: 'Calendar' },
+  { href: '/routes', label: 'Route Planning' },
   { href: '/activity-logs', label: 'Activity Logs' },
   { href: '/site-photos', label: 'Site Photos' },
   { href: '/expenses', label: 'Expenses' },

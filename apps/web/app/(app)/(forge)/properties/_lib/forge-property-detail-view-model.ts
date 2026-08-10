@@ -181,7 +181,11 @@ export function toPropertyDetailModel(data: PropertyMemory): RecordDetailModel {
     // Intentionally not wired — see the gap report rather than a fake
     // success toast.
     primaryAction: null,
-    secondaryActions: [],
+    // Real, address-driven link-out (Phase 14 of the routing/map slice) —
+    // opens Google Maps' key-free universal search URL for this property's
+    // real address. The container resolves 'view-on-map' to that URL and
+    // opens it; this is not a fabricated/no-op action.
+    secondaryActions: [{ id: 'view-on-map', label: 'View on map' }],
     sections,
   };
 }

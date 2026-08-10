@@ -142,14 +142,26 @@ export { getActiveOrgContext, type ActiveOrgContext, type AvailableOrgMembership
 export {
   assignMemberToJob,
   listJobAssignments,
+  listJobAssignmentsForJobs,
   listJobLeadsForJobs,
   listMemberJobAssignments,
   removeMemberFromJob,
   setJobLead,
   type JobAssignment,
+  type JobCrewRow,
   type JobLeadRow,
   type MemberJobAssignment,
 } from './job-assignments';
+export {
+  listRouteJobsForDate,
+  listRouteSiteVisitsForDate,
+  listUnscheduledRouteJobs,
+  listUnscheduledRouteSiteVisits,
+  type RouteAddress,
+  type RouteJobCrewMember,
+  type RouteJobRow,
+  type RouteSiteVisitRow,
+} from './route-planning';
 export {
   createCustomer,
   findCustomerByEmail,

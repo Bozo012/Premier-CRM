@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrgContextError } from '@/components/org-context-error';
 import { Timeline } from '@/components/timeline';
 import { buildChangeOrderHistoryFeed } from '@/lib/change-order-history';
+import { buildOpenInMapsUrl } from '@/lib/maps/external-maps-url';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
@@ -231,6 +232,43 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         ) : null}
 
         <CrewSection jobId={job.id} assignments={crew} availableMembers={availableMembers} canManageCrew={canManageCrew} />
+
+        {/* Real, address-driven link-outs (routing/map slice, Phase 14) —
+            not an embedded map widget, just "View location" (Open in Maps,
+            key-free) and, when this job actually has a scheduled_start,
+            "Open today's route" pointed at that real date on /routes. */}
+        {result.data.property ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Location</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              {(() => {
+                const mapsUrl = buildOpenInMapsUrl({
+                  addressLine1: result.data.property.addressLine1,
+                  addressLine2: result.data.property.addressLine2,
+                  city: result.data.property.city,
+                  state: result.data.property.state,
+                  zip: result.data.property.zip,
+                });
+                return mapsUrl ? (
+                  <Button asChild variant="outline" className="rounded-xl font-bold">
+                    <a href={mapsUrl} target="_blank" rel="noreferrer noopener">
+                      View location
+                    </a>
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No address on file for this job&apos;s property.</p>
+                );
+              })()}
+              {job.scheduled_start ? (
+                <Button asChild variant="outline" className="rounded-xl font-bold">
+                  <Link href={`/routes?date=${job.scheduled_start.slice(0, 10)}`}>Open scheduled route</Link>
+                </Button>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
 
         <section className="flex gap-2 overflow-x-auto pb-1">
           <Button asChild variant="outline" className="shrink-0 rounded-xl font-bold">

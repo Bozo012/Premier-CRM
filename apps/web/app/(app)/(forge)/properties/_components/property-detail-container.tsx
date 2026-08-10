@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { RecordDetailView } from '@/components/forge-shell/RecordDetailView';
 import type { RecordDetailCallbacks, RecordDetailModel } from '@/components/forge-shell/recordDetail.types';
 
-export function PropertyDetailContainer({ model }: { model: RecordDetailModel }) {
+export function PropertyDetailContainer({ model, mapsUrl }: { model: RecordDetailModel; mapsUrl: string | null }) {
   const router = useRouter();
 
   const callbacks: RecordDetailCallbacks = {
@@ -13,8 +13,13 @@ export function PropertyDetailContainer({ model }: { model: RecordDetailModel })
     onOpenRelated: (item) => {
       if (item.route) router.push(item.route);
     },
-    // No wired actions yet — see forge-property-detail-view-model.ts.
-    onAction: () => {},
+    // Real, address-driven "View on map" link-out (routing/map slice,
+    // Phase 14) — opens the key-free Google Maps universal search URL for
+    // this property's real address in a new tab; a no-op only when the
+    // property truly has no usable address at all.
+    onAction: (actionId) => {
+      if (actionId === 'view-on-map' && mapsUrl) window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+    },
   };
 
   return <RecordDetailView state={{ model, isLoading: false, error: null }} callbacks={callbacks} />;

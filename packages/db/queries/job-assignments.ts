@@ -150,6 +150,53 @@ export async function listMemberJobAssignments(
   );
 }
 
+export interface JobCrewRow {
+  jobId: string;
+  userId: string;
+  displayName: string;
+  isLead: boolean;
+}
+
+/**
+ * Every crew member (not just the lead) for a batch of jobs — additive
+ * sibling to listJobLeadsForJobs, needed by Route Planning's crew filter
+ * (Phase 9: jobs filtered via the full job_assignments roster, not just the
+ * lead) and the route stop's full crew display. Same two-step fetch and
+ * untyped() escape as the rest of this file.
+ */
+export async function listJobAssignmentsForJobs(
+  client: DbClient,
+  args: { orgId: string; jobIds: string[] }
+): Promise<Result<JobCrewRow[]>> {
+  if (args.jobIds.length === 0) return ok([]);
+
+  const { data, error } = await untyped(client)
+    .from('job_assignments')
+    .select('job_id, user_id, is_lead')
+    .eq('org_id', args.orgId)
+    .in('job_id', args.jobIds);
+
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+
+  const rows = (data ?? []) as Array<{ job_id: string; user_id: string; is_lead: boolean }>;
+  if (rows.length === 0) return ok([]);
+
+  const userIds = [...new Set(rows.map((row) => row.user_id))];
+  const { data: profiles, error: profilesError } = await client.from('user_profiles').select('id, full_name').in('id', userIds);
+  if (profilesError) return err(ErrorCode.DB_ERROR, profilesError.message);
+
+  const nameByUserId = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+
+  return ok(
+    rows.map((row) => ({
+      jobId: row.job_id,
+      userId: row.user_id,
+      displayName: nameByUserId.get(row.user_id) ?? 'Unknown',
+      isLead: row.is_lead,
+    }))
+  );
+}
+
 export interface JobLeadRow {
   jobId: string;
   userId: string;

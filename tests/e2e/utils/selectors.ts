@@ -35,6 +35,7 @@ export const routes = {
   settings: '/settings/website',
   team: '/team',
   calendar: '/calendar',
+  routePlanning: '/routes',
 } as const;
 
 export const login = {
