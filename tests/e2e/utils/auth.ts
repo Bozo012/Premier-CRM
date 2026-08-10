@@ -147,3 +147,38 @@ export async function createUserApiClient(account: TestAccount): Promise<Supabas
 
   return client;
 }
+
+/**
+ * Real browser session for a customer_accounts-linked portal user.
+ *
+ * There is no in-portal sign-in FORM to drive — /portal/login always
+ * redirects (unauthenticated visitors to the real ppmnky.com marketing
+ * site, per the intentional ownership split; authenticated ones straight to
+ * /portal/dashboard). So, exactly like portal-auth-bot.spec.ts's real
+ * confirmation/recovery-link tests, this drives the actual Supabase
+ * callback a browser would land on — here via
+ * `supabase.auth.admin.generateLink({ type: 'magiclink' })`, which returns
+ * the real `action_link` Supabase would have emailed, for an
+ * already-existing user (created by the caller's own fixture via
+ * `admin.createUser`). Navigating to it exercises the real callback route
+ * (`lib/auth-callback.ts`) exactly as a live user would, not a synthetic
+ * cookie injection.
+ */
+export async function loginAsPortalCustomer(
+  page: Page,
+  serviceClient: SupabaseClient<Database>,
+  email: string
+): Promise<void> {
+  const { data, error } = await serviceClient.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo: `${process.env.BASE_URL ?? 'http://localhost:3000'}/portal/dashboard` },
+  });
+
+  if (error || !data?.properties?.action_link) {
+    throw new Error(`Could not generate a portal magic link for ${email}: ${error?.message ?? 'no action_link'}`);
+  }
+
+  await page.goto(data.properties.action_link);
+  await expect(page).toHaveURL(/\/portal\/dashboard/, { timeout: 10_000 });
+}

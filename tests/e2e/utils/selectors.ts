@@ -36,6 +36,14 @@ export const routes = {
   team: '/team',
   calendar: '/calendar',
   routePlanning: '/routes',
+  portalLogin: '/portal/login',
+  portalDashboard: '/portal/dashboard',
+  portalMessages: '/portal/messages',
+  portalRequests: '/portal/requests',
+  portalQuotes: '/portal/quotes',
+  portalInvoices: '/portal/invoices',
+  portalProperties: '/portal/properties',
+  portalAccount: '/portal/account',
 } as const;
 
 export const login = {
