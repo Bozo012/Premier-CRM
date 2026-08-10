@@ -147,3 +147,53 @@ export async function createUserApiClient(account: TestAccount): Promise<Supabas
 
   return client;
 }
+
+/**
+ * Real browser session for a customer_accounts-linked portal user.
+ *
+ * There is no in-portal sign-in FORM to drive — /portal/login always
+ * redirects (unauthenticated visitors to the real ppmnky.com marketing
+ * site, per the intentional ownership split; authenticated ones straight to
+ * /portal/dashboard).
+ *
+ * `type: 'magiclink'` (an earlier version of this helper) is NOT an auth
+ * method this app actually offers customers — Supabase's hosted auth
+ * server ignores the requested `redirectTo` for that link type in this
+ * project's configuration and falls back to the Site URL (the real
+ * ppmnky.com marketing site), landing the browser there with tokens in the
+ * URL fragment instead of at /portal/dashboard. Confirmed live: the two
+ * link types the app actually uses — 'signup' and 'recovery' — both honor
+ * `redirectTo` correctly (see portal-auth-bot.spec.ts).
+ *
+ * The real customer sign-in path is POST /portal/handoff/sign-in (see that
+ * route.ts) — a real signInWithPassword() + ensureCustomerAccount() call,
+ * gated on an allowed marketing-site Origin header. This drives that exact
+ * route for real, using Playwright's request context (which shares the
+ * browser's cookie jar with `page`), with the Origin the marketing site's
+ * local dev server would send in NODE_ENV=development
+ * (customer-portal-handoff.ts's DEV_ALLOWED_MARKETING_ORIGINS) — not a
+ * synthetic cookie injection, the real route handler runs end to end.
+ */
+export async function loginAsPortalCustomer(
+  page: Page,
+  serviceClient: SupabaseClient<Database>,
+  email: string,
+  password: string
+): Promise<void> {
+  const baseUrl = process.env.BASE_URL ?? 'http://localhost:3000';
+  const response = await page.request.post(`${baseUrl}/portal/handoff/sign-in`, {
+    form: { email, password },
+    headers: { origin: 'http://localhost:5173' },
+    maxRedirects: 0,
+  });
+
+  const location = response.headers()['location'];
+  if (response.status() !== 303 || !location || !location.includes('/portal/dashboard')) {
+    throw new Error(
+      `Portal handoff sign-in for ${email} did not redirect to /portal/dashboard (status ${response.status()}, location: ${location ?? 'none'}).`
+    );
+  }
+
+  await page.goto(`${baseUrl}/portal/dashboard`);
+  await expect(page).toHaveURL(/\/portal\/dashboard/, { timeout: 10_000 });
+}
