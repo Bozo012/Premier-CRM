@@ -256,6 +256,8 @@ export interface InvoiceListPage {
 // terminal/non-collectible state.
 const NON_OVERDUE_ELIGIBLE_STATUSES = new Set(['paid', 'void', 'refunded', 'draft']);
 
+const SOURCE_EXPENSE_UNIQUE_VIOLATION = '23505';
+
 export function computeIsOverdue(
   invoice: Pick<Invoice, 'due_date' | 'amount_due' | 'status'>
 ): boolean {
@@ -953,12 +955,13 @@ export async function recordPayment(
 // 20260805075928), marks the expense invoiced, and recalculates totals via
 // the same trigger-backed path every other line-item mutation uses.
 //
-// Double-billing guard: there is no DB unique constraint stopping the same
-// expense being linked to two invoices, so this function re-checks
-// invoice_line_items for an existing source_expense_id match immediately
-// before inserting (app-layer mitigation, not a schema fix — documented in
-// the finance slice report as a real, acknowledged gap rather than assumed
-// closed).
+// Double-billing guard: invoice_line_items_source_expense_id_key (migration
+// 20260810060936) is the real, DB-enforced authority — a partial unique
+// index on source_expense_id WHERE NOT NULL. The pre-insert existingLink
+// check below is a friendly common-case pre-check only; it cannot itself
+// prevent a race between two concurrent requests, which is why the insert's
+// own unique_violation is still translated below rather than trusted to
+// never happen.
 // ---------------------------------------------------------------------------
 
 export async function addExpenseChargeToInvoice(
@@ -1025,7 +1028,19 @@ export async function addExpenseChargeToInvoice(
     .insert(payload)
     .select('*')
     .single();
-  if (insertError) return err(ErrorCode.DB_ERROR, insertError.message);
+  if (insertError) {
+    // 23505 = unique_violation. The pre-insert existingLink check above
+    // handles the common case, but is a check-then-act race — two
+    // concurrent requests can both pass it before either insert commits.
+    // invoice_line_items_source_expense_id_key (migration 20260810060936)
+    // is the real, DB-enforced concurrency guarantee; translate its
+    // rejection into the same friendly message the pre-check already
+    // returns, not a raw DB exception.
+    if (insertError.code === SOURCE_EXPENSE_UNIQUE_VIOLATION) {
+      return err(ErrorCode.VALIDATION_ERROR, 'This expense has already been added to an invoice.');
+    }
+    return err(ErrorCode.DB_ERROR, insertError.message);
+  }
 
   await client
     .from('expenses')
