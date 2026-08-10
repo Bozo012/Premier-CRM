@@ -32,6 +32,7 @@ export {
   type QuoteTokenDetail,
 } from './quotes';
 export {
+  addExpenseChargeToInvoice,
   addInvoiceLineItem,
   createDraftInvoiceFromJob,
   createDraftInvoiceFromQuote,
@@ -67,11 +68,14 @@ export {
   deriveApprovedExpenseStatus,
   expenseMatchesFilter,
   getExpenseById,
+  isExpenseEligibleForInvoiceCharge,
+  listEligibleExpensesForJob,
   listExpenses,
   rejectExpense,
   submitExpense,
   updateExpense,
   voidExpense,
+  type EligibleExpenseForJob,
   type Expense,
   type ExpenseDetail,
   type ExpenseFilterCount,

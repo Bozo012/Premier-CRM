@@ -16,6 +16,8 @@ import {
 import type { DbClient } from '../client';
 import type { Database } from '../types';
 
+import { isExpenseEligibleForInvoiceCharge } from './expenses';
+
 export type Invoice = Database['public']['Tables']['invoices']['Row'];
 export type InvoiceLineItem = Database['public']['Tables']['invoice_line_items']['Row'];
 export type Payment = Database['public']['Tables']['payments']['Row'];
@@ -941,6 +943,99 @@ export async function recordPayment(
   });
 
   return ok(payment);
+}
+
+// ---------------------------------------------------------------------------
+// Expense → invoice line-item linkage (base44-exact-finance slice). Adds a
+// real invoice_line_items row snapshotting the expense's cost/customer
+// charge via source_expense_id/source_expense_cost_snapshot/
+// source_expense_customer_charge_snapshot (schema added by migration
+// 20260805075928), marks the expense invoiced, and recalculates totals via
+// the same trigger-backed path every other line-item mutation uses.
+//
+// Double-billing guard: there is no DB unique constraint stopping the same
+// expense being linked to two invoices, so this function re-checks
+// invoice_line_items for an existing source_expense_id match immediately
+// before inserting (app-layer mitigation, not a schema fix — documented in
+// the finance slice report as a real, acknowledged gap rather than assumed
+// closed).
+// ---------------------------------------------------------------------------
+
+export async function addExpenseChargeToInvoice(
+  client: DbClient,
+  args: { invoiceId: string; expenseId: string; orgId: string }
+): Promise<Result<InvoiceLineItem>> {
+  const guard = await assertDraftInvoice(client, { invoiceId: args.invoiceId, orgId: args.orgId });
+  if (!guard.success) return guard;
+
+  const { data: invoice, error: invoiceError } = await client
+    .from('invoices')
+    .select('job_id')
+    .eq('id', args.invoiceId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+  if (invoiceError) return err(ErrorCode.DB_ERROR, invoiceError.message);
+  if (!invoice) return err(ErrorCode.NOT_FOUND, 'Invoice not found.');
+
+  const { data: expense, error: expenseError } = await client
+    .from('expenses')
+    .select('*')
+    .eq('id', args.expenseId)
+    .eq('org_id', args.orgId)
+    .maybeSingle();
+  if (expenseError) return err(ErrorCode.DB_ERROR, expenseError.message);
+  if (!expense) return err(ErrorCode.NOT_FOUND, 'Expense not found.');
+
+  if (expense.job_id !== invoice.job_id) {
+    return err(ErrorCode.VALIDATION_ERROR, 'This expense is not linked to the invoice’s job.');
+  }
+  if (!isExpenseEligibleForInvoiceCharge(expense)) {
+    return err(
+      ErrorCode.VALIDATION_ERROR,
+      'This expense is not eligible to be added to an invoice — it must be ready to invoice with a billing treatment that allows a customer charge.'
+    );
+  }
+
+  const { data: existingLink, error: existingLinkError } = await client
+    .from('invoice_line_items')
+    .select('id')
+    .eq('source_expense_id', args.expenseId)
+    .maybeSingle();
+  if (existingLinkError) return err(ErrorCode.DB_ERROR, existingLinkError.message);
+  if (existingLink) {
+    return err(ErrorCode.VALIDATION_ERROR, 'This expense has already been added to an invoice.');
+  }
+
+  const chargeAmount = expense.customer_charge_amount ?? expense.total_cost ?? expense.amount + expense.tax;
+
+  const payload: InvoiceLineItemInsert = {
+    description: expense.vendor ? `Vendor: ${expense.vendor}` : null,
+    invoice_id: args.invoiceId,
+    name: expense.description,
+    quantity: 1,
+    source_expense_cost_snapshot: expense.total_cost ?? expense.amount + expense.tax,
+    source_expense_customer_charge_snapshot: chargeAmount,
+    source_expense_id: expense.id,
+    unit: 'expense',
+    unit_price: chargeAmount,
+  };
+
+  const { data: lineItem, error: insertError } = await client
+    .from('invoice_line_items')
+    .insert(payload)
+    .select('*')
+    .single();
+  if (insertError) return err(ErrorCode.DB_ERROR, insertError.message);
+
+  await client
+    .from('expenses')
+    .update({ invoice_id: args.invoiceId, status: 'invoiced' })
+    .eq('id', expense.id)
+    .eq('org_id', args.orgId);
+
+  await recalcInvoiceTotals(client, { invoiceId: args.invoiceId, orgId: args.orgId });
+
+  return ok(lineItem);
 }
 
 export async function listPaymentsForInvoice(

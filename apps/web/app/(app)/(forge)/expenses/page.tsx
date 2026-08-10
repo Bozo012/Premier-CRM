@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { ExpensesShell } from './_components/expenses-shell';
+import { buildForgeShellData, buildMobileNavConfig } from './_lib/forge-shell-context';
 import {
   buildExpenseFilterHref,
   toForgeExpenseSummary,
@@ -42,11 +44,20 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   const orgContextResult = await getActiveOrgContext(supabase, user.id);
   if (!orgContextResult.success) {
     return (
-      <PageShell activeFilter={filter} filters={[]} search={search} summary={[]}>
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-4 p-6">
         <OrgContextError code={orgContextResult.code} message={orgContextResult.error} />
-      </PageShell>
+      </main>
     );
   }
+
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContextResult.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
 
   const result = await listExpenses(supabase, {
     filter,
@@ -58,39 +69,43 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
 
   if (!result.success) {
     return (
-      <PageShell activeFilter={filter} filters={[]} search={search} summary={[]}>
-        <ErrorPanel>Failed to load expenses: {result.error}</ErrorPanel>
-      </PageShell>
+      <ExpensesShell shellData={shellData} mobileNav={mobileNav}>
+        <PageShell activeFilter={filter} filters={[]} search={search} summary={[]}>
+          <ErrorPanel>Failed to load expenses: {result.error}</ErrorPanel>
+        </PageShell>
+      </ExpensesShell>
     );
   }
 
   const expenses = result.data.expenses.map((item) => toForgeExpenseSummary(item));
 
   return (
-    <PageShell
-      activeFilter={filter}
-      filters={result.data.filters}
-      search={search}
-      summary={toSummaryCards(result.data.summary)}
-      total={result.data.total}
-    >
-      <p className="text-sm font-medium text-muted-foreground">
-        {formatTotal(result.data.total, search, filter)}
-      </p>
+    <ExpensesShell shellData={shellData} mobileNav={mobileNav}>
+      <PageShell
+        activeFilter={filter}
+        filters={result.data.filters}
+        search={search}
+        summary={toSummaryCards(result.data.summary)}
+        total={result.data.total}
+      >
+        <p className="text-sm font-medium text-muted-foreground">
+          {formatTotal(result.data.total, search, filter)}
+        </p>
 
-      {expenses.length === 0 ? (
-        <EmptyState search={search} filter={filter} />
-      ) : (
-        <>
-          <ExpensesTable expenses={expenses} />
-          <div className="grid gap-3 lg:hidden">
-            {expenses.map((expense) => (
-              <ExpenseCard key={expense.id} expense={expense} />
-            ))}
-          </div>
-        </>
-      )}
-    </PageShell>
+        {expenses.length === 0 ? (
+          <EmptyState search={search} filter={filter} />
+        ) : (
+          <>
+            <ExpensesTable expenses={expenses} />
+            <div className="grid gap-3 lg:hidden">
+              {expenses.map((expense) => (
+                <ExpenseCard key={expense.id} expense={expense} />
+              ))}
+            </div>
+          </>
+        )}
+      </PageShell>
+    </ExpensesShell>
   );
 }
 

@@ -67,7 +67,7 @@ describe('representative staff page titles', () => {
     ['apps/web/app/(app)/(forge)/estimates/page.tsx', 'Estimates'],
     ['apps/web/app/(app)/(forge)/quotes/page.tsx', 'Quotes'],
     ['apps/web/app/(app)/(forge)/jobs/page.tsx', 'Jobs'],
-    ['apps/web/app/(app)/(legacy)/invoices/page.tsx', 'Invoices'],
+    ['apps/web/app/(app)/(forge)/invoices/page.tsx', 'Invoices'],
     ['apps/web/app/(app)/(legacy)/settings/website/page.tsx', 'Settings'],
   ];
 
