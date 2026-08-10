@@ -218,16 +218,16 @@ function ExpensesTable({ expenses }: { expenses: ForgeExpenseSummary[] }) {
         <tbody className="divide-y">
           {expenses.map((expense) => (
             <tr key={expense.id} className="transition hover:bg-muted/30">
-              <td className="px-5 py-4">
+              <td className="max-w-0 break-words px-5 py-4">
                 <Link href={`/expenses/${expense.id}`} className="group flex items-center gap-2 font-bold text-foreground">
                   {expense.hasReceipt ? (
-                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   ) : (
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" />
                   )}
-                  <span className="group-hover:underline">{expense.description}</span>
+                  <span className="truncate group-hover:underline">{expense.description}</span>
                 </Link>
-                <div className="mt-0.5 text-xs text-muted-foreground">
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">
                   {expense.propertyLabel} · {expense.dateLabel}
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -246,8 +246,8 @@ function ExpensesTable({ expenses }: { expenses: ForgeExpenseSummary[] }) {
                 ) : null}
               </td>
               <td className="px-5 py-4"><CategoryBadge label={expense.categoryLabel} /></td>
-              <td className="px-5 py-4 text-xs text-muted-foreground">{expense.jobLabel}</td>
-              <td className="px-5 py-4 text-xs font-medium text-foreground">{expense.vendor}</td>
+              <td className="max-w-0 truncate break-words px-5 py-4 text-xs text-muted-foreground">{expense.jobLabel}</td>
+              <td className="max-w-0 truncate break-words px-5 py-4 text-xs font-medium text-foreground">{expense.vendor}</td>
               <td className="px-5 py-4 font-bold text-foreground">{expense.amountLabel}</td>
               <td className="px-5 py-4"><ForgeStatusPill tone={expense.statusTone}>{expense.statusLabel}</ForgeStatusPill></td>
               <td className="px-5 py-4 text-right">

@@ -61,7 +61,7 @@ test.describe('invoices base44 shell bot', () => {
         const errors = collectConsoleErrors(page);
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await page.goto(routes.invoices);
-        await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Invoices', exact: true })).toBeVisible();
 
         await assertNoHorizontalOverflow(page);
         expect(errors, `no console errors at ${viewport.name}`).toEqual([]);
@@ -70,9 +70,14 @@ test.describe('invoices base44 shell bot', () => {
 
     test('search updates the URL query param (real server re-query, not client filtering)', async ({ page }) => {
       await page.goto(routes.invoices);
-      await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Invoices', exact: true })).toBeVisible();
 
-      await page.getByPlaceholder(/search by invoice number, customer, or job/i).fill('zzz-no-such-invoice-zzz');
+      // The invoices search box is a native GET <form action="/invoices">, not
+      // a live onChange handler (unlike the Jobs list) — it only re-queries
+      // the server on submit, so Enter (or a submit click) is required.
+      const searchInput = page.getByPlaceholder(/search by invoice number, customer, or job/i);
+      await searchInput.fill('zzz-no-such-invoice-zzz');
+      await searchInput.press('Enter');
       await expect(page).toHaveURL(/[?&]q=zzz-no-such-invoice-zzz/, { timeout: 5_000 });
     });
 
@@ -98,16 +103,16 @@ test.describe('invoices base44 shell bot', () => {
     test.describe('direct URL load, refresh, and Back against an existing invoice', () => {
       test('opens the first available invoice, shows summary + line items, then refreshes and goes Back', async ({ page }) => {
         await page.goto(routes.invoices);
-        await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Invoices', exact: true })).toBeVisible();
 
-        const firstRow = page
-          .locator('tbody tr')
-          .or(page.locator('a[href^="/invoices/"]').filter({ hasNotText: 'Back' }))
-          .first();
-        const hasInvoices = (await firstRow.count()) > 0;
+        // The <tr> itself has no onClick — only the nested invoice-number
+        // <Link> (desktop table) or the card <Link> (mobile) actually
+        // navigates, so the locator must target the link, not the row.
+        const firstLink = page.locator('a[href^="/invoices/"]').filter({ hasNotText: 'Back' }).first();
+        const hasInvoices = (await firstLink.count()) > 0;
         test.skip(!hasInvoices, 'Org has no invoices yet — nothing to open.');
 
-        await firstRow.click();
+        await firstLink.click();
         await expect(page).toHaveURL(new RegExp(`${routes.invoices}/[0-9a-f-]{36}$`));
 
         await expect(page.getByRole('heading', { name: 'Line items' })).toBeVisible();
@@ -121,7 +126,7 @@ test.describe('invoices base44 shell bot', () => {
 
         await page.goBack();
         await expect(page).toHaveURL(new RegExp(`${routes.invoices}$`));
-        await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Invoices', exact: true })).toBeVisible();
       });
     });
   });

@@ -222,16 +222,16 @@ function InvoicesTable({ invoices }: { invoices: ForgeInvoiceSummary[] }) {
         <tbody className="divide-y">
           {invoices.map((invoice) => (
             <tr key={invoice.id} className="transition hover:bg-muted/30">
-              <td className="px-5 py-4">
+              <td className="max-w-0 break-words px-5 py-4">
                 <Link href={`/invoices/${invoice.id}`} className="group flex items-center gap-2 font-bold text-foreground">
-                  <Receipt className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  <span className="group-hover:underline">{invoice.number}</span>
+                  <Receipt className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className="truncate group-hover:underline">{invoice.number}</span>
                 </Link>
-                <div className="mt-0.5 text-xs text-muted-foreground">{invoice.originLabel}</div>
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">{invoice.originLabel}</div>
               </td>
-              <td className="px-5 py-4">
-                <div className="font-medium text-foreground">{invoice.customerName}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{invoice.propertyName}</div>
+              <td className="max-w-0 break-words px-5 py-4">
+                <div className="truncate font-medium text-foreground">{invoice.customerName}</div>
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">{invoice.propertyName}</div>
               </td>
               <td className="px-5 py-4">
                 <div className="font-bold text-foreground">{invoice.amountLabel}</div>

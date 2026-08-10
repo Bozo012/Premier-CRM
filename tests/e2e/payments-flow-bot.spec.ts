@@ -29,16 +29,15 @@ import { hasAdminCredentials, loginAsAdmin } from './utils/auth';
 
 async function openFirstInvoiceWithFilter(page: Page, status: string): Promise<boolean> {
   await page.goto(`${routes.invoices}?status=${status}`);
-  await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Invoices', exact: true })).toBeVisible();
 
-  const firstRow = page
-    .locator('tbody tr')
-    .or(page.locator('a[href^="/invoices/"]'))
-    .first();
-  const hasRow = (await firstRow.count()) > 0;
+  // The <tr> itself has no onClick — only the nested invoice-number <Link>
+  // (desktop table) or card <Link> (mobile) navigates.
+  const firstLink = page.locator('a[href^="/invoices/"]').filter({ hasNotText: 'Back' }).first();
+  const hasRow = (await firstLink.count()) > 0;
   if (!hasRow) return false;
 
-  await firstRow.click();
+  await firstLink.click();
   await expect(page).toHaveURL(new RegExp(`${routes.invoices}/[0-9a-f-]{36}$`));
   return true;
 }

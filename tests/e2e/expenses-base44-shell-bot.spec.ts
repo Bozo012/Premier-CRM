@@ -60,7 +60,7 @@ test.describe('expenses base44 shell bot', () => {
         const errors = collectConsoleErrors(page);
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await page.goto(routes.expenses);
-        await expect(page.getByRole('heading', { name: 'Expenses' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible();
 
         await assertNoHorizontalOverflow(page);
         expect(errors, `no console errors at ${viewport.name}`).toEqual([]);
@@ -69,9 +69,13 @@ test.describe('expenses base44 shell bot', () => {
 
     test('search updates the URL query param (real server re-query, not client filtering)', async ({ page }) => {
       await page.goto(routes.expenses);
-      await expect(page.getByRole('heading', { name: 'Expenses' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible();
 
-      await page.getByPlaceholder(/search by description, vendor, job number/i).fill('zzz-no-such-expense-zzz');
+      // Native GET <form action="/expenses">, not a live onChange handler —
+      // only re-queries the server on submit.
+      const searchInput = page.getByPlaceholder(/search by description, vendor, job number/i);
+      await searchInput.fill('zzz-no-such-expense-zzz');
+      await searchInput.press('Enter');
       await expect(page).toHaveURL(/[?&]q=zzz-no-such-expense-zzz/, { timeout: 5_000 });
     });
 
@@ -83,7 +87,10 @@ test.describe('expenses base44 shell bot', () => {
 
     test('"New expense" reaches the real /expenses/new form', async ({ page }) => {
       await page.goto(routes.expenses);
-      await page.getByRole('link', { name: /new expense/i }).click();
+      // Two "New expense" CTAs can coexist (header button + empty-state
+      // link when the org has no expenses yet) — either one navigates the
+      // same place, so take the first.
+      await page.getByRole('link', { name: /new expense/i }).first().click();
       await expect(page).toHaveURL(new RegExp(`${routes.newExpense}$`));
       await expect(page.getByRole('heading', { name: 'Log an expense' })).toBeVisible();
     });
@@ -104,16 +111,17 @@ test.describe('expenses base44 shell bot', () => {
     test.describe('direct URL load, refresh, and Back against an existing expense', () => {
       test('opens the first available expense, shows cost/billing sections, then refreshes and goes Back', async ({ page }) => {
         await page.goto(routes.expenses);
-        await expect(page.getByRole('heading', { name: 'Expenses' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible();
 
-        const firstRow = page
-          .locator('tbody tr')
-          .or(page.locator('a[href^="/expenses/"]'))
-          .first();
-        const hasExpenses = (await firstRow.count()) > 0;
+        // The <tr> itself has no onClick — only the nested expense-number
+        // <Link> (desktop table) or card <Link> (mobile) navigates. Exclude
+        // "/expenses/new" so the "Log an expense" CTA is never mistaken for
+        // a row link.
+        const firstLink = page.locator('a[href^="/expenses/"]:not([href="/expenses/new"])').first();
+        const hasExpenses = (await firstLink.count()) > 0;
         test.skip(!hasExpenses, 'Org has no expenses yet — nothing to open.');
 
-        await firstRow.click();
+        await firstLink.click();
         await expect(page).toHaveURL(new RegExp(`${routes.expenses}/[0-9a-f-]{36}$`));
 
         await expect(page.getByRole('heading', { name: 'Cost and context' })).toBeVisible();
@@ -128,7 +136,7 @@ test.describe('expenses base44 shell bot', () => {
 
         await page.goBack();
         await expect(page).toHaveURL(new RegExp(`${routes.expenses}$`));
-        await expect(page.getByRole('heading', { name: 'Expenses' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible();
       });
     });
   });
