@@ -231,6 +231,145 @@ export async function createStandaloneJobAction(
   return ok({ id: newJob.id });
 }
 
+// ---------------------------------------------------------------------------
+// Combined "Job details -> Schedule and crew" creation step (Base44-exact
+// Jobs/Calendar port, job creation flow). This is NOT a single atomic RPC —
+// no combined create-job-with-crew RPC exists, and adding one would be a
+// schema-adjacent change out of this slice's authorization (see the report's
+// stop-condition note). Instead this runs the real, already-existing writes
+// sequentially inside one form submission: insert the job (same insert
+// createStandaloneJobAction uses), then optionally scheduleJob(), then
+// optionally assignMemberToJob() once per selected crew member — each a
+// real, independently-verified write. If a later step fails, the job (and
+// any earlier steps) are NOT rolled back — this is an honest multi-step
+// sequence, not a transaction, and the returned Result says exactly which
+// step failed so the UI can report it truthfully rather than implying
+// all-or-nothing atomicity that doesn't exist at the RPC level.
+// ---------------------------------------------------------------------------
+
+export type CreateJobWithScheduleActionState = Result<{
+  id: string;
+  scheduled: boolean;
+  crewAssignedCount: number;
+  warning: string | null;
+}>;
+
+export async function createJobWithScheduleAction(
+  _previousState: CreateJobWithScheduleActionState | null,
+  formData: FormData
+): Promise<CreateJobWithScheduleActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { orgId, userId, role } = access.data;
+
+  const customerId = readString(formData, 'customerId');
+  const propertyId = readString(formData, 'propertyId');
+  const title = readString(formData, 'title');
+  const description = readString(formData, 'description');
+
+  if (!customerId) return err(ErrorCode.VALIDATION_ERROR, 'A customer is required.');
+  if (!propertyId) return err(ErrorCode.VALIDATION_ERROR, 'A property is required.');
+  if (!title) return err(ErrorCode.VALIDATION_ERROR, 'A title is required.');
+
+  const serviceClient = createServiceClient();
+
+  const { data: customer, error: customerError } = await serviceClient
+    .from('customers')
+    .select('id')
+    .eq('id', customerId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (customerError) return err(ErrorCode.DB_ERROR, customerError.message);
+  if (!customer) return err(ErrorCode.NOT_FOUND, 'Customer not found.');
+
+  const { data: link, error: linkError } = await serviceClient
+    .from('customer_properties')
+    .select('property_id')
+    .eq('customer_id', customerId)
+    .eq('property_id', propertyId)
+    .maybeSingle();
+  if (linkError) return err(ErrorCode.DB_ERROR, linkError.message);
+  if (!link) return err(ErrorCode.VALIDATION_ERROR, 'The selected property is not linked to this customer.');
+
+  const { data: newJob, error: insertError } = await serviceClient
+    .from('jobs')
+    .insert({
+      org_id: orgId,
+      customer_id: customerId,
+      property_id: propertyId,
+      title,
+      description: description || null,
+      created_by: userId,
+    })
+    .select('id')
+    .single();
+
+  if (insertError || !newJob) {
+    return err(ErrorCode.DB_ERROR, insertError?.message ?? 'Failed to create job.');
+  }
+
+  const jobId = newJob.id as string;
+  let scheduled = false;
+  let crewAssignedCount = 0;
+  let warning: string | null = null;
+
+  // Step 2: optional scheduling — only if the caller can schedule jobs and
+  // supplied a start time. Crew assignment likewise requires canScheduleJobs
+  // (re-verified server-side by assign_member_to_job itself either way).
+  const scheduledStartInput = readString(formData, 'scheduledStart');
+  if (scheduledStartInput && hasCapability(role, 'canScheduleJobs')) {
+    const scheduledStartResult = parseIsoDateTime(scheduledStartInput, 'Scheduled start');
+    if (scheduledStartResult.success) {
+      const scheduledEndInput = readString(formData, 'scheduledEnd');
+      const scheduledEndResult = scheduledEndInput ? parseIsoDateTime(scheduledEndInput, 'Scheduled end') : ok<string | null>(null);
+      if (scheduledEndResult.success) {
+        const scheduleResult = await scheduleJob(serviceClient, {
+          orgId,
+          jobId,
+          scheduledStart: scheduledStartResult.data,
+          scheduledEnd: scheduledEndResult.data,
+          actorUserId: userId,
+        });
+        if (scheduleResult.success) {
+          scheduled = true;
+        } else {
+          warning = `Job created, but scheduling failed: ${scheduleResult.error}`;
+        }
+      }
+    }
+  }
+
+  // Step 3: optional crew assignment — one assign_member_to_job RPC call per
+  // selected member, via the caller's own RLS-scoped session client (the
+  // RPCs derive the actor from auth.uid() themselves, matching PR #131's
+  // established job_assignments pattern, not the service-role pattern used
+  // for the job insert/schedule above).
+  const crewUserIds = formData.getAll('crewUserId').map((value) => String(value)).filter(Boolean);
+  const leadUserId = readString(formData, 'leadUserId');
+  if (crewUserIds.length > 0 && hasCapability(role, 'canScheduleJobs')) {
+    const supabase = await getServerSupabase();
+    for (const memberUserId of crewUserIds) {
+      const assignResult = await assignMemberToJob(supabase, {
+        jobId,
+        userId: memberUserId,
+        isLead: memberUserId === leadUserId,
+      });
+      if (assignResult.success) {
+        crewAssignedCount += 1;
+      } else {
+        warning = warning
+          ? `${warning} Also, one crew assignment failed: ${assignResult.error}`
+          : `Job created, but a crew assignment failed: ${assignResult.error}`;
+      }
+    }
+  }
+
+  revalidatePath('/jobs');
+  revalidatePath(`/jobs/${jobId}`);
+
+  return ok({ id: jobId, scheduled, crewAssignedCount, warning });
+}
+
 export async function scheduleJobAction(
   _previousState: ScheduleJobActionState | null,
   formData: FormData

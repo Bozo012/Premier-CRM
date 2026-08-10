@@ -32,6 +32,7 @@ export const routes = {
   services: '/services',
   settings: '/settings/website',
   team: '/team',
+  calendar: '/calendar',
 } as const;
 
 export const login = {
