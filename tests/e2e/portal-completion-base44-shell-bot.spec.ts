@@ -7,11 +7,13 @@
  * detail-fetch service-role pattern the dashboard already used for
  * deposits/working-invoice/change-orders).
  *
- * This is a self-contained two-customer fixture (own org, own customers,
- * own properties/jobs/quotes/invoices), matching the pattern used by
- * job-assignments-model-bot.spec.ts's cross-org tests and the finance/
- * routing slices' own service-role fixtures — created and torn down here,
- * not depending on any seeded demo data.
+ * This is a self-contained two-customer fixture — own customers, own
+ * properties/jobs/quotes/invoices, created and torn down here by id, not
+ * depending on any seeded demo data. It reuses the shared demonstration org
+ * (PREMIER_ORG_ID) rather than creating a fresh one, since customer_accounts
+ * linkage and portal auth don't require org isolation the way staff-side
+ * cross-org tests (job-assignments-model-bot.spec.ts) do — cross-*customer*
+ * isolation within that one org is what this spec actually verifies.
  *
  * Follows the shell-bot conventions of every prior slice
  * (routes-base44-shell-bot.spec.ts, jobs-base44-shell-bot.spec.ts):
@@ -57,6 +59,7 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
 
 interface PortalFixtureCustomer {
   email: string;
+  password: string;
   userId: string;
   customerId: string;
   propertyId: string;
@@ -75,10 +78,11 @@ async function buildPortalFixtureCustomer(
 ): Promise<PortalFixtureCustomer> {
   const suffix = uniqueSuffix();
   const email = `${E2E_TEST_PREFIX.toLowerCase()}.portal.${label}.${suffix}@example.com`.replace(/\s+/g, '');
+  const password = `${E2E_TEST_PREFIX}Password_${suffix}`;
 
   const { data: userData, error: userError } = await client.auth.admin.createUser({
     email,
-    password: `${E2E_TEST_PREFIX}Password_${suffix}`,
+    password,
     email_confirm: true,
   });
   if (userError || !userData?.user) throw new Error(`createUser failed for ${email}: ${userError?.message}`);
@@ -191,6 +195,7 @@ async function buildPortalFixtureCustomer(
 
   return {
     email,
+    password,
     userId,
     customerId: customer.id,
     propertyId: property.id,
@@ -260,7 +265,7 @@ test.describe('portal completion base44 shell bot', () => {
     test('customer A sees their own job, request, quote, and invoice across the new nav pages', async ({ page }) => {
       const errors = collectConsoleErrors(page);
       const client = createGuardedServiceClient();
-      await loginAsPortalCustomer(page, client, customerA.email);
+      await loginAsPortalCustomer(page, client, customerA.email, customerA.password);
 
       await assertNoHorizontalOverflow(page);
 
@@ -275,7 +280,10 @@ test.describe('portal completion base44 shell bot', () => {
       );
 
       await page.goto(routes.portalInvoices);
-      await expect(page.getByText(`${E2E_TEST_PREFIX} A invoice`)).toBeVisible();
+      // The invoices view renders invoiceNumber + jobTitle, not the
+      // invoice's own `title` field (unlike the quotes view, which does
+      // render `quote.title`) — asserting against what's actually shown.
+      await expect(page.getByText(`${E2E_TEST_PREFIX} A job`)).toBeVisible();
       await expect(page.getByRole('link', { name: /view full invoice/i })).toHaveAttribute(
         'href',
         `/i/${customerA.invoiceToken}`
@@ -292,7 +300,7 @@ test.describe('portal completion base44 shell bot', () => {
 
     test('customer B never sees customer A records (requests, quotes, invoices) and vice versa', async ({ page }) => {
       const client = createGuardedServiceClient();
-      await loginAsPortalCustomer(page, client, customerB.email);
+      await loginAsPortalCustomer(page, client, customerB.email, customerB.password);
 
       await page.goto(routes.portalRequests);
       await expect(page.getByText(`${E2E_TEST_PREFIX} B request`)).toBeVisible();
@@ -303,15 +311,17 @@ test.describe('portal completion base44 shell bot', () => {
       await expect(page.getByText(`${E2E_TEST_PREFIX} A quote`)).toHaveCount(0);
 
       await page.goto(routes.portalInvoices);
-      await expect(page.getByText(`${E2E_TEST_PREFIX} B invoice`)).toBeVisible();
-      await expect(page.getByText(`${E2E_TEST_PREFIX} A invoice`)).toHaveCount(0);
+      // See the "customer A sees..." test above — the invoices view renders
+      // jobTitle, not the invoice's own `title` field.
+      await expect(page.getByText(`${E2E_TEST_PREFIX} B job`)).toBeVisible();
+      await expect(page.getByText(`${E2E_TEST_PREFIX} A job`)).toHaveCount(0);
     });
 
     test('no fake "Pay now" button exists anywhere on the invoices view — payment state is shown honestly', async ({
       page,
     }) => {
       const client = createGuardedServiceClient();
-      await loginAsPortalCustomer(page, client, customerA.email);
+      await loginAsPortalCustomer(page, client, customerA.email, customerA.password);
       await page.goto(routes.portalInvoices);
       await expect(page.getByRole('button', { name: /pay now/i })).toHaveCount(0);
       await expect(page.getByText(/arrange payment/i)).toBeVisible();
@@ -321,7 +331,7 @@ test.describe('portal completion base44 shell bot', () => {
       page,
     }) => {
       const client = createGuardedServiceClient();
-      await loginAsPortalCustomer(page, client, customerA.email);
+      await loginAsPortalCustomer(page, client, customerA.email, customerA.password);
       await page.goto(routes.portalDashboard);
 
       await page.getByRole('button', { name: /sign out/i }).first().click();
@@ -335,12 +345,20 @@ test.describe('portal completion base44 shell bot', () => {
       page,
     }) => {
       const client = createGuardedServiceClient();
-      await loginAsPortalCustomer(page, client, customerA.email);
+      await loginAsPortalCustomer(page, client, customerA.email, customerA.password);
 
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto(routes.portalDashboard);
-      await expect(page.getByRole('link', { name: 'Quotes' })).toBeVisible();
-      await expect(page.getByRole('link', { name: 'Properties' })).toBeVisible();
+      // Scoped to the desktop nav specifically — two <nav aria-label="Portal
+      // navigation"> landmarks exist simultaneously in the DOM (desktop
+      // sidebar + mobile bottom bar, CSS-hidden per breakpoint, same
+      // recurring dual-layout pattern as every prior slice), and the
+      // dashboard also has an inline "Quotes and invoices" summary link
+      // whose accessible name contains "Quotes", colliding under a bare
+      // page-wide locator.
+      const nav = page.getByRole('navigation').first();
+      await expect(nav.getByRole('link', { name: 'Quotes', exact: true })).toBeVisible();
+      await expect(nav.getByRole('link', { name: 'Properties', exact: true })).toBeVisible();
       await assertNoHorizontalOverflow(page);
 
       await page.setViewportSize({ width: 390, height: 844 });

@@ -53,7 +53,7 @@ export default async function PortalAccountPage() {
                 <span className="text-muted-foreground">Name:</span> {displayName}
               </p>
             ) : null}
-            <p>
+            <p className="break-words">
               <span className="text-muted-foreground">Portal sign-in email:</span> {account.email}
             </p>
             {customer?.phone_primary ? (

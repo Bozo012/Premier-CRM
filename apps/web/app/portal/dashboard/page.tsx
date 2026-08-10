@@ -228,7 +228,7 @@ export default async function PortalDashboardPage() {
             Premier customer portal
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="break-words text-sm text-muted-foreground">
             Signed in as {account.email}. Your customer account is separate from internal Premier org_members.
           </p>
         </div>

@@ -154,31 +154,46 @@ export async function createUserApiClient(account: TestAccount): Promise<Supabas
  * There is no in-portal sign-in FORM to drive — /portal/login always
  * redirects (unauthenticated visitors to the real ppmnky.com marketing
  * site, per the intentional ownership split; authenticated ones straight to
- * /portal/dashboard). So, exactly like portal-auth-bot.spec.ts's real
- * confirmation/recovery-link tests, this drives the actual Supabase
- * callback a browser would land on — here via
- * `supabase.auth.admin.generateLink({ type: 'magiclink' })`, which returns
- * the real `action_link` Supabase would have emailed, for an
- * already-existing user (created by the caller's own fixture via
- * `admin.createUser`). Navigating to it exercises the real callback route
- * (`lib/auth-callback.ts`) exactly as a live user would, not a synthetic
- * cookie injection.
+ * /portal/dashboard).
+ *
+ * `type: 'magiclink'` (an earlier version of this helper) is NOT an auth
+ * method this app actually offers customers — Supabase's hosted auth
+ * server ignores the requested `redirectTo` for that link type in this
+ * project's configuration and falls back to the Site URL (the real
+ * ppmnky.com marketing site), landing the browser there with tokens in the
+ * URL fragment instead of at /portal/dashboard. Confirmed live: the two
+ * link types the app actually uses — 'signup' and 'recovery' — both honor
+ * `redirectTo` correctly (see portal-auth-bot.spec.ts).
+ *
+ * The real customer sign-in path is POST /portal/handoff/sign-in (see that
+ * route.ts) — a real signInWithPassword() + ensureCustomerAccount() call,
+ * gated on an allowed marketing-site Origin header. This drives that exact
+ * route for real, using Playwright's request context (which shares the
+ * browser's cookie jar with `page`), with the Origin the marketing site's
+ * local dev server would send in NODE_ENV=development
+ * (customer-portal-handoff.ts's DEV_ALLOWED_MARKETING_ORIGINS) — not a
+ * synthetic cookie injection, the real route handler runs end to end.
  */
 export async function loginAsPortalCustomer(
   page: Page,
   serviceClient: SupabaseClient<Database>,
-  email: string
+  email: string,
+  password: string
 ): Promise<void> {
-  const { data, error } = await serviceClient.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-    options: { redirectTo: `${process.env.BASE_URL ?? 'http://localhost:3000'}/portal/dashboard` },
+  const baseUrl = process.env.BASE_URL ?? 'http://localhost:3000';
+  const response = await page.request.post(`${baseUrl}/portal/handoff/sign-in`, {
+    form: { email, password },
+    headers: { origin: 'http://localhost:5173' },
+    maxRedirects: 0,
   });
 
-  if (error || !data?.properties?.action_link) {
-    throw new Error(`Could not generate a portal magic link for ${email}: ${error?.message ?? 'no action_link'}`);
+  const location = response.headers()['location'];
+  if (response.status() !== 303 || !location || !location.includes('/portal/dashboard')) {
+    throw new Error(
+      `Portal handoff sign-in for ${email} did not redirect to /portal/dashboard (status ${response.status()}, location: ${location ?? 'none'}).`
+    );
   }
 
-  await page.goto(data.properties.action_link);
+  await page.goto(`${baseUrl}/portal/dashboard`);
   await expect(page).toHaveURL(/\/portal\/dashboard/, { timeout: 10_000 });
 }
