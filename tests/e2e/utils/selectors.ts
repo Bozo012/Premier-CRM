@@ -19,6 +19,8 @@ export const routes = {
   customers: '/customers',
   newCustomer: '/customers/new',
   invoices: '/invoices',
+  expenses: '/expenses',
+  newExpense: '/expenses/new',
   jobs: '/jobs',
   newJob: '/jobs/new',
   properties: '/properties',
