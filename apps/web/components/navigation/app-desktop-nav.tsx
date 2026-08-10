@@ -52,6 +52,7 @@ const iconsByHref = {
   '/properties': MapPin,
   '/quotes': ScrollText,
   '/requests': ClipboardList,
+  '/routes': MapPin,
   '/services': Settings,
   '/settings': Settings,
   '/site-photos': Images,
