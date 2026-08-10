@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import Link from 'next/link';
 
 import {
   createServiceClient,
@@ -16,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Timeline } from '@/components/timeline';
 import { buildChangeOrderHistoryFeed } from '@/lib/change-order-history';
-import { buildMarketingPortalUrl } from '@/lib/customer-portal-handoff';
 import {
   getPortalRequestStatusDescription,
   getPortalRequestStatusLabel,
@@ -26,16 +24,12 @@ import { getServerSupabase } from '@/lib/supabase-server';
 import { AddChangeOrderCommentForm } from '../_components/add-change-order-comment-form';
 import { BookSchedulingSlotForm } from '../_components/book-scheduling-slot-form';
 import { PortalContactSheet } from '../_components/portal-contact-sheet';
+import { PortalShell, requirePortalUser } from '../_components/portal-shell';
 import { RequestChangeOrderForm } from '../_components/request-change-order-form';
 import { RespondToChangeOrderForm } from '../_components/respond-change-order-form';
 import { buildPortalContactViewModel } from '../_lib/portal-contact-view-model';
+import { resolveActivePortalAccount } from '../_lib/portal-session';
 import { signOutCustomerPortal } from '../actions';
-
-interface CustomerAccountRow {
-  customer_id: string;
-  email: string;
-  status: string;
-}
 
 interface ServiceRequestRow {
   id: string;
@@ -66,23 +60,6 @@ interface CustomerPropertyRow {
     state: string;
     zip: string;
   } | null;
-}
-
-function asCustomerAccountRow(value: unknown): CustomerAccountRow | null {
-  if (!value || typeof value !== 'object') return null;
-  const row = value as Record<string, unknown>;
-  if (
-    typeof row.customer_id === 'string' &&
-    typeof row.email === 'string' &&
-    typeof row.status === 'string'
-  ) {
-    return {
-      customer_id: row.customer_id,
-      email: row.email,
-      status: row.status,
-    };
-  }
-  return null;
 }
 
 function asServiceRequestRows(value: unknown): ServiceRequestRow[] {
@@ -152,41 +129,12 @@ export default async function PortalDashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect(buildMarketingPortalUrl());
+  requirePortalUser(Boolean(user));
 
-  const portalClient = supabase as unknown as SupabaseClient;
+  const { account, portalClient } = await resolveActivePortalAccount();
 
-  const { data: accountData, error: accountError } = await portalClient
-    .from('customer_accounts')
-    .select('customer_id, email, status')
-    .eq('auth_user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  const account = asCustomerAccountRow(accountData);
-
-  if (accountError || !account || account.status !== 'active') {
-    return (
-      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-5 px-4 py-8 sm:px-6 lg:px-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Portal account not linked yet</CardTitle>
-            <CardDescription>
-              Your sign-in works, but we could not find an active customer account link yet.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <p>
-              Customer portal users are linked through customer_accounts, not org_members.
-              Ask Premier to confirm your email if you expected to see requests here.
-            </p>
-            <form action={signOutCustomerPortal}>
-              <Button type="submit" variant="outline">Sign out</Button>
-            </form>
-          </CardContent>
-        </Card>
-      </main>
-    );
+  if (!account) {
+    return <PortalShell account={null} activeId="home"><></></PortalShell>;
   }
 
   const [serviceRequestsResult, propertiesResult] = await Promise.all([
@@ -195,12 +143,12 @@ export default async function PortalDashboardPage() {
       .select(
         'id, request_number, status, priority, estimate_id, job_id, service_title, service_description, submitted_at, reviewed_at, converted_at, preferred_date, property_address_line_1, property_city, property_state'
       )
-      .eq('customer_id', account.customer_id)
+      .eq('customer_id', account.customerId)
       .order('submitted_at', { ascending: false }),
     portalClient
       .from('customer_properties')
       .select('relationship, is_primary, properties(id, address_line_1, address_line_2, city, state, zip)')
-      .eq('customer_id', account.customer_id),
+      .eq('customer_id', account.customerId),
   ]);
 
   const serviceRequests = asServiceRequestRows(serviceRequestsResult.data);
@@ -234,7 +182,7 @@ export default async function PortalDashboardPage() {
   const { data: jobs } = await portalClient
     .from('jobs')
     .select('id, title, status, scheduled_start, scheduled_end, org_id')
-    .eq('customer_id', account.customer_id)
+    .eq('customer_id', account.customerId)
     .order('created_at', { ascending: false });
 
   const jobDetails = await Promise.all(
@@ -272,6 +220,7 @@ export default async function PortalDashboardPage() {
   );
 
   return (
+    <PortalShell account={account} activeId="home">
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
@@ -301,7 +250,7 @@ export default async function PortalDashboardPage() {
         <SummaryCard title="Active requests" value={activeRequests.length.toString()} />
         <SummaryCard title="Completed requests" value={completedRequests.length.toString()} />
         <SummaryCard title="Properties" value={properties.length.toString()} />
-        <SummaryCard title="Account balance" value="Coming soon" />
+        <SummaryCard title="Quotes and invoices" value="View" href="/portal/quotes" />
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
@@ -343,7 +292,7 @@ export default async function PortalDashboardPage() {
       </Card>
 
       {jobDetails.length > 0 ? (
-        <section className="space-y-4">
+        <section id="jobs" className="space-y-4">
           <h2 className="text-xl font-semibold tracking-tight">Your jobs</h2>
           {jobDetails.map(({ job, openSlots, depositState, workingInvoiceSummary, changeOrders, timeline }) => (
             <Card key={job.id}>
@@ -454,17 +403,24 @@ export default async function PortalDashboardPage() {
         </section>
       ) : null}
     </main>
+    </PortalShell>
   );
 }
 
-function SummaryCard({ title, value }: { title: string; value: string }) {
-  return (
-    <Card>
+function SummaryCard({ title, value, href }: { title: string; value: string; href?: string }) {
+  const card = (
+    <Card className={href ? 'transition-colors hover:border-[#ea580c]' : undefined}>
       <CardHeader className="pb-2">
         <CardDescription>{title}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>
       </CardHeader>
     </Card>
+  );
+  if (!href) return card;
+  return (
+    <Link href={href} className="block">
+      {card}
+    </Link>
   );
 }
 
