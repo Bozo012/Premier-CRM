@@ -13,6 +13,7 @@ import {
   ForgeSectionTitle,
   ForgeStatusPill,
 } from '@/components/forge/presentation';
+import { buildOpenInMapsUrl } from '@/lib/maps/external-maps-url';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 import { GenerateEstimateButton } from '../_components/generate-estimate-button';
@@ -78,6 +79,28 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
   }
 
   const visit = result.data;
+
+  // Real, address-driven "View location" link-out (routing/map slice,
+  // Phase 14) — getSiteVisitById doesn't carry the request's denormalized
+  // property_address_* fields, so this is one small additive read against
+  // the same real service_requests row visit.serviceRequestId already
+  // points at, not a fabricated address.
+  const { data: addressRow } = await serviceClient
+    .from('service_requests')
+    .select('property_address_line_1, property_address_line_2, property_city, property_state, property_zip')
+    .eq('id', visit.serviceRequestId)
+    .eq('org_id', orgContextResult.data.orgId)
+    .maybeSingle();
+  const mapsUrl = addressRow
+    ? buildOpenInMapsUrl({
+        addressLine1: addressRow.property_address_line_1,
+        addressLine2: addressRow.property_address_line_2,
+        city: addressRow.property_city,
+        state: addressRow.property_state,
+        zip: addressRow.property_zip,
+      })
+    : null;
+
   const fieldDefinitions = visit.fieldDefinitions as InspectionFieldDefinition[];
   const progress = inspectionDetailProgress(visit.inspectionResponses ?? {}, fieldDefinitions);
   const actions = siteVisitDetailActions(visit);
@@ -177,7 +200,7 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
         </div>
       </ForgeCard>
 
-      <VisitContextCard visit={visit} />
+      <VisitContextCard visit={visit} mapsUrl={mapsUrl} />
 
       {visit.status === 'completed' ? (
         <CompletedInspectionSummary
@@ -192,6 +215,7 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
 
 function VisitContextCard({
   visit,
+  mapsUrl,
 }: {
   visit: {
     serviceRequestId: string;
@@ -200,6 +224,7 @@ function VisitContextCard({
     serviceRequestTitle: string;
     activeAppointment: { scheduledStart: string; scheduledEnd: string } | null;
   };
+  mapsUrl: string | null;
 }) {
   return (
     <ForgeCard className="space-y-3">
@@ -211,6 +236,11 @@ function VisitContextCard({
         <Link href={`/customers/${visit.customerId}`} className="rounded-xl border px-3 py-2 font-bold hover:bg-muted">
           {visit.customerDisplayName} →
         </Link>
+        {mapsUrl ? (
+          <a href={mapsUrl} target="_blank" rel="noreferrer noopener" className="rounded-xl border px-3 py-2 font-bold hover:bg-muted">
+            View location →
+          </a>
+        ) : null}
       </div>
     </ForgeCard>
   );

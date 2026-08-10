@@ -5,6 +5,7 @@ import { getActiveOrgContext, getPropertyMemory } from '@premier/db';
 import { ErrorCode } from '@premier/shared';
 
 import { OrgContextError } from '@/components/org-context-error';
+import { buildOpenInMapsUrl } from '@/lib/maps/external-maps-url';
 import { getServerSupabase } from '@/lib/supabase-server';
 
 // ── LAYER 2: adapter / view-model ───────────────────────────────────────────
@@ -82,10 +83,18 @@ export default async function PropertyDetailPage({ params }: PropertyDetailPageP
     email: user.email ?? 'No email',
   });
   const model = toPropertyDetailModel(result.data);
+  const { property } = result.data;
+  const mapsUrl = buildOpenInMapsUrl({
+    addressLine1: property.address_line_1,
+    addressLine2: property.address_line_2,
+    city: property.city,
+    state: property.state,
+    zip: property.zip,
+  });
 
   return (
     <PropertiesShell shellData={shellData} mobileNav={buildMobileNavConfig()}>
-      <PropertyDetailContainer model={model} />
+      <PropertyDetailContainer model={model} mapsUrl={mapsUrl} />
     </PropertiesShell>
   );
 }
