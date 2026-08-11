@@ -205,7 +205,9 @@ export {
 
 export {
   createServiceRequest,
+  createPortalServiceRequest,
   type CreateServiceRequestResult,
+  type CreatePortalServiceRequestResult,
 } from './service-requests';
 export {
   createJobFromAcceptedQuote,

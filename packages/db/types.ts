@@ -5734,6 +5734,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_portal_service_request: {
+        Args: {
+          p_property_id?: string | null
+          p_service_description: string
+          p_service_title: string
+        }
+        Returns: {
+          id: string
+          request_number: string
+          status: Database["public"]["Enums"]["service_request_status"]
+          submitted_at: string
+        }[]
+      }
       create_quote_from_estimate: {
         Args: { p_estimate_id: string }
         Returns: string
