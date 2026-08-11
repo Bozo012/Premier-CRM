@@ -4,6 +4,7 @@ import { PortalShell, requirePortalUser } from '../_components/portal-shell';
 import { getPortalRequestStatusDescription, getPortalRequestStatusLabel } from '@/lib/request-intake-flow';
 import { resolveActivePortalAccount } from '../_lib/portal-session';
 import { getServerSupabase } from '@/lib/supabase-server';
+import { PortalNewRequestSheet, type PortalNewRequestProperty } from './_components/portal-new-request-sheet';
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(
@@ -23,58 +24,58 @@ export default async function PortalRequestsPage() {
     return <PortalShell account={null} activeId="requests"><></></PortalShell>;
   }
 
-  const { data } = await portalClient
-    .from('service_requests')
-    .select(
-      'id, request_number, status, priority, estimate_id, job_id, service_title, service_description, submitted_at, preferred_date, property_address_line_1, property_city, property_state'
-    )
-    .eq('customer_id', account.customerId)
-    .order('submitted_at', { ascending: false });
+  const [{ data }, { data: propertyLinks }] = await Promise.all([
+    portalClient
+      .from('service_requests')
+      .select(
+        'id, request_number, status, priority, estimate_id, job_id, service_title, service_description, submitted_at, preferred_date, property_address_line_1, property_city, property_state'
+      )
+      .eq('customer_id', account.customerId)
+      .order('submitted_at', { ascending: false }),
+    portalClient
+      .from('customer_properties')
+      .select('properties(id, address_line_1, address_line_2, city, state, zip)')
+      .eq('customer_id', account.customerId),
+  ]);
 
   const requests = data ?? [];
+
+  const newRequestProperties: PortalNewRequestProperty[] = ((propertyLinks ?? []) as unknown as Array<{
+    properties:
+      | { id: string; address_line_1: string; address_line_2: string | null; city: string; state: string; zip: string }
+      | Array<{ id: string; address_line_1: string; address_line_2: string | null; city: string; state: string; zip: string }>
+      | null;
+  }>)
+    .map((row) => (Array.isArray(row.properties) ? row.properties[0] : row.properties))
+    .filter((property): property is NonNullable<typeof property> => Boolean(property))
+    .map((property) => ({
+      id: property.id,
+      label: property.address_line_2
+        ? `${property.address_line_1}, ${property.address_line_2}, ${property.city}, ${property.state} ${property.zip}`
+        : `${property.address_line_1}, ${property.city}, ${property.state} ${property.zip}`,
+    }));
 
   return (
     <PortalShell account={account} activeId="requests">
       <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">Requests</h1>
-          <p className="text-sm text-muted-foreground">
-            All service requests submitted for your properties.
-          </p>
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-semibold tracking-tight">Requests</h1>
+            <p className="text-sm text-muted-foreground">
+              All service requests submitted for your properties.
+            </p>
+          </div>
+          {/*
+            Real portal-submission path, added by migration
+            20260810120000_create_portal_service_request_rpc.sql: a guarded
+            SECURITY DEFINER RPC (create_portal_service_request), not a
+            restored INSERT policy — see docs/implementation/
+            portal-request-creation.md. service_requests still has no
+            direct-INSERT grant/policy for `authenticated`; this button
+            only ever reaches the RPC.
+          */}
+          <PortalNewRequestSheet properties={newRequestProperties} />
         </header>
-
-        {/*
-          NEW REQUEST — INTENTIONALLY NOT BUILT THIS SLICE.
-          A real, matching RLS INSERT policy (customer_insert_own_portal_
-          service_requests) existed on service_requests, but was
-          deliberately DROPPED — along with the INSERT/UPDATE/DELETE grant
-          to `authenticated` on the whole table — by migration
-          20260803080000_harden_service_requests_estimates_site_visits.sql,
-          which explicitly states the unused policy was closed as part of a
-          security hardening pass and that any future portal-submission
-          feature "should be designed and reviewed as a deliberate addition,
-          not inherited from a policy nobody currently exercises." That is a
-          genuine stop condition per this slice's own instructions: it
-          cannot be wired without either (a) a new migration re-opening a
-          scoped write path, ideally as a SECURITY DEFINER RPC
-          (create_portal_service_request(...), matching the guarded-RPC
-          pattern the hardening migration itself prefers) validating
-          source='portal', status='new', reviewed_at IS NULL, and portal
-          account ownership server-side, or (b) a new server action using
-          the service-role client with the same validation performed in
-          application code. Both are genuine additive changes requiring
-          review, not something this pass can quietly restore. See the
-          delivery report's gap table for the proposed smallest model.
-        */}
-        <Card className="border-dashed">
-          <CardContent className="py-4 text-sm text-muted-foreground">
-            Submitting a new request from inside the portal isn&apos;t available yet — use{' '}
-            <a href="/portal/messages" className="underline underline-offset-4">
-              Contact Premier
-            </a>{' '}
-            and we&apos;ll get a request started for you.
-          </CardContent>
-        </Card>
 
         {requests.length === 0 ? (
           <Card>
