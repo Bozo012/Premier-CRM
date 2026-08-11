@@ -80,7 +80,7 @@ Job photo upload is already capability-gated: `requestJobPhotoUploadAction` requ
 
 The repo has an established, dual-enforced capability pattern (`packages/shared/permissions.ts` `CAPABILITIES` map + `role_has_capability()` SQL function in `20260802020000_capability_matrix.sql`, kept in sync by an automated parity test) used by every sensitive-mutation RPC (`book_scheduling_slot`, site-visit lifecycle RPCs, triage RPCs). Sensitive/customer-facing actions consistently land at `owner`/`admin` only: `canApproveEstimatePricing`, `canIssueRefunds`, `canApproveExpenses`, `canManageDeposits`, `canManageInspectionTemplates`.
 
-**Recommendation**: add a new capability, `canPublishCustomerMedia`, scoped to `['owner', 'admin']` — matching the existing pattern for actions that change what a customer is shown/charged (not `canScheduleJobs`'s broader `employee`/`subcontractor` set, since publishing is a customer-facing exposure decision, not routine field-staff work). This must be added to **both** `packages/shared/permissions.ts` and `role_has_capability()` in a new migration, per the existing parity discipline — a mismatch between the two would itself be a security defect.
+**Decision (approved 2026-08-11, PR #141)**: `canPublishCustomerMedia` is scoped to `['owner', 'admin']` only — matching the existing pattern for actions that change what a customer is shown/charged (not `canScheduleJobs`'s broader `employee`/`subcontractor` set). Employees and subcontractors keep whatever upload/media capabilities they already have (`canScheduleJobs` governs adding job photos, unchanged by this design) but gain no authority to publish or unpublish media to the customer portal. Reason, as stated in the approval: customer publication is a distinct outward-facing authorization decision, not merely an operational media action — it is not a broader "media" capability, it is its own narrow one. This must be added to **both** `packages/shared/permissions.ts` and `role_has_capability()` in a new migration, per the existing parity discipline — a mismatch between the two would itself be a security defect. Expanding this scope later (e.g. to `employee`) requires its own explicit product decision, not an incidental change.
 
 ## 5. Current portal exposure
 
@@ -276,4 +276,28 @@ Checked against every listed stop condition:
 
 **IMPLEMENT** — with the scope narrowed to job- and estimate-linked photos for the first slice (site-visit/inspection photos as an explicit fast-follow, not silently included). No stop condition was triggered; the existing codebase already contains every primitive this design needs (capability matrix + SQL parity function, SECURITY DEFINER RPC idiom, customer_accounts ownership-check idiom, private-bucket + signed-URL pattern, and even a naming precedent in `expenses.receipt_visibility`) — this is a genuinely additive, low-risk slice, not a new architecture.
 
-One open product decision for the user before implementation: confirm `canPublishCustomerMedia` role scope (§4/§18.4) — `owner`/`admin` only (recommended) vs. including `employee`/`subcontractor`.
+**Role scope — resolved 2026-08-11**: `canPublishCustomerMedia` is `owner`/`admin` only. `employee`/`subcontractor` are explicitly denied publish/unpublish authority; they retain their existing (unchanged) media-upload capabilities. No open product decision remains.
+
+### `canPublishCustomerMedia` — final matrix
+
+| Role | Publish / unpublish to customer portal |
+|---|---|
+| owner | yes |
+| admin | yes |
+| employee | no |
+| subcontractor | no |
+| customer (portal) | no (read-only via the centralized query, never a mutation path) |
+
+### Fast-follow: site-visit / inspection photo ownership chain
+
+Not implemented in the first slice (§11, §18.1). The exact chain to verify before extending `list_customer_visible_photos` (or an equivalent) to site-visit-linked photos:
+
+```
+vault_items.site_visit_id
+  → site_visits.service_request_id  (site_visits has no direct customer_id)
+    → service_requests.customer_id  (service_requests already has a working
+                                      customer RLS policy, customer_select_own_service_requests,
+                                      to model the EXISTS clause on)
+```
+
+Inspection `photo_list` photos reuse this exact chain unchanged — an inspection response is stored as JSONB on the site visit record and references `vault_items` by id (`{vaultItemId, caption}`), but the underlying `vault_items` row still carries `site_visit_id`, so no separate inspection-specific ownership path is needed; the fast-follow is a single new `EXISTS` branch in the centralized function (mirroring the `job_id`/`estimate_id` branches already implemented), not a new architecture. Before implementing it: confirm no inspection response contains customer-inappropriate fields expected to leak alongside the photo (e.g. an internal finding note stored in the same JSONB blob as the photo reference) — this was not audited in this pass since site-visit photos are out of scope.
