@@ -1,0 +1,209 @@
+# V1 Known Gaps — Consolidated Audit
+
+Status: **documentation-only deliverable.** No application code, migrations, or tests were written or modified to produce this document. It synthesizes every gap, deferred item, and Base44-vs-real mismatch that the Base44-exact rebuild program (and its predecessor batch passes) explicitly documented, plus TODO/FIXME scanning, honest E2E skip inspection, and PR history — into one deduplicated backlog.
+
+Audited at worktree `C:\dev\Premier-CRM-v1-gap-audit`, branch `audit/v1-known-gaps`, base `origin/main` @ `dfde682` (PR #137 merged — portal request creation RPC).
+
+**Sources read in full**: all `docs/ux/base44-exact-*.md` reports (customers via PR#125 referenced but no longer a standalone doc — its content is inherited by later reports; properties-team, requests-site-visits, estimates-quotes, jobs-calendar, finance, routing-map, customer-portal-completion), `docs/ux/forge-base44-batch-{2..8}-*.md`, `docs/security/customers-properties-authorization-audit.md`, `docs/security/service-requests-authorization-audit.md`, `docs/implementation/portal-request-creation.md`, `docs/implementation/job-crew-assignment-model.md`, `docs/implementation/today-kanban-board-semantics.md`, `docs/implementation/request-site-visit-estimate-workflow.md`, `docs/releases/forge-v1-readiness-audit.md` (+ its 3 dated addenda), `docs/ux/forge-v1.1-today-redesign.md`, `docs/ux/base44-today-sync-and-portability-audit.md`, `docs/ux/hazards-section-proposal.md`, `docs/ux/request-list-density-recommendation.md`. Plus: repo-wide grep for `TODO|FIXME|HACK` (zero genuine hits outside test files), `tests/e2e/*.spec.ts` skip-reason inspection, legacy-route inventory, and targeted re-verification greps (`stripe`, `GOOGLE_MAPS_API_KEY`, migration filenames).
+
+**Not read in full** (skimmed/grepped only, judged lower-yield after the above): `docs/ux/base44-handoff.md`, `docs/ux/base44-presentation-contracts.md`, `docs/ux/base44-builder-readiness-plan.md`, `docs/ux/base44-compatibility-spike-plan.md`, `docs/implementation/brandon-demo-onboarding-and-observation.md`, `docs/implementation/kevin-demo-ui-observation.md`, `docs/implementation/premier-crm-demo-dataset-manifest.md`, `docs/implementation/premier-crm-demonstration-organization.md` — these are methodology/demo-data docs, not gap reports; a spot-check of each found no distinct unresolved gap beyond what's captured below. If a real gap was missed there, treat this audit's totals as a floor, not a ceiling.
+
+## Summary
+
+| Classification | Count |
+|---|---|
+| P0 (blocks safe/usable V1) | 3 |
+| P1 (should complete before V1) | 11 |
+| P2 (valuable, ship after V1) | 21 |
+| P3 (future enhancement) | 14 |
+| **Total distinct gaps** | **49** |
+
+Headline: **the two authorization audits (customers/properties, service_requests/estimates/site_visits) are fully closed in production** except four narrow, already-triaged-as-non-blocking items (F2, F4, F6, F7 below — none is a live tenant-isolation break). The dominant remaining risk surface is **payments** (no processor, no webhook — everything is "record it after the fact by hand") and **Maps/Routing** (built but functionally unverified without a live `GOOGLE_MAPS_API_KEY`). No fabricated functionality was found anywhere — every report's own "known limitations" section held up under spot-check.
+
+---
+
+## 1. Portal
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| No staff-reply message thread — portal Messages is submit-only, history-only | `base44-customer-portal-completion-report.md` §Messages, gap table; `forge-base44-batch-3-portal-contact-report.md` Backend Notes | "there is no in-app reply thread — replies happen by the method the customer chose" | No — `activity_log` has no thread/reply model | Yes — new table (`message_thread`/`request_messages`) | None (no data exposure; explicitly not faked) | L | No | P2 |
+| No portal notification dispatch (email/SMS) for portal messages or status changes | `forge-base44-batch-3-portal-contact-report.md` Backend Notes | "Email/SMS notification dispatch and delivery status" listed as a backend gap | No | Maybe (delivery-status tracking) | None | M | No | P2 |
+| Customer-safe site photo visibility not built — portal cannot show job/site-visit photos at all | `base44-customer-portal-completion-report.md` gap table ("Site photos... Not built (per task instruction)"); `base44-exact-jobs-calendar-report.md` gap table (`vault_items` has no visibility column) | "No customer-safe visibility column exists on `vault_items`. Adding one is a genuine schema decision" | No | Yes — visibility column/enum on `vault_items` + portal read path | Low (currently: correctly *absent* rather than leaky — not a live risk, but blocks a real customer-value feature) | M | Overlaps §6 below (media/security) — same underlying gap | P1 |
+| Portal request creation has no attachment support | `docs/implementation/portal-request-creation.md` Known limitations | "No attachments. Out of scope" | No | No (additive column on an existing upload pattern) | None | S | No | P2 |
+| No self-declared priority/urgency on portal-submitted requests | `portal-request-creation.md` Known limitations | "priority always defaults to 'normal'... RPC has no parameter for it at all" (deliberate) | Partial (table has the column, RPC just never accepts it) | No | Low (an emergency portal submission looks identical to routine — could delay real triage) | XS | No | P1 |
+| Customer account profile (name/phone/email) is read-only in the portal | `base44-customer-portal-completion-report.md` gap table | "Account profile editing... Not built (not a confirmed gap)" | No | No | None | S | No | P3 |
+| Quote/Invoice portal views: no "Pay now" (see Payments §3); no in-portal PDF | `base44-customer-portal-completion-report.md` §Invoices; `base44-exact-estimates-quotes-report.md` gap table | "No payment processor exists anywhere... honest link-out" / `FutureSectionCard`s on quote detail | No | See §3 | None (honestly labeled) | — | Duplicate of §3 payment-processor gap and the pre-existing quote PDF placeholder | (rolled into §3/§8) |
+| Change orders / Appointments have no standalone portal list page (deep-link to Home job cards only) | `base44-customer-portal-completion-report.md` gap table | "Consolidated, not duplicated... no independent data model" | N/A — by design, not a gap | No | None | — | No | P3 (cosmetic-only, arguably correct as-is) |
+
+---
+
+## 2. Maps / Routing
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| No real `GOOGLE_MAPS_API_KEY`/`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` provisioned anywhere | `base44-routing-map-report.md` "Google Maps provisioning checklist", gap table | "No `GOOGLE_MAPS_API_KEY` configured anywhere in this worktree" | N/A — env/config, not code | No | None directly; blocks verifying everything below | XS (ops task, not eng) | Blocks: live map render, live geocoding, live Directions, marker/list sync verification | **P0** |
+| Live Maps JS SDK render never verified (no key) | `base44-routing-map-report.md` gap table, Testing | "Live geocoding / live Directions / live map render / marker↔list sync... Not live-verifiable" | Yes — code is written, fixture-tested only | No | None | XS once key exists | Depends on the key above | P0 |
+| Live Geocoding API never verified against a real response (fixtures only cover shape) | same | same | Yes | No | None | XS once key exists | Depends on key | P0 |
+| Directions "Calculate route" has no UI trigger — adapter/parser exist, nothing calls `getDirections()` | `base44-routing-map-report.md` Phase 11, gap table | "no button calls `getDirections()` yet... flagged explicitly rather than silently skipped" | Yes (adapter), No (UI wiring) | No | None | S | No | P1 |
+| `route_stop_order` persisted dispatcher reordering not built — order is scheduled-time only, no drag-to-reorder | `base44-routing-map-report.md` Phase 8, "Future persisted-ordering proposal" | Smallest model documented: nullable `route_stop_order INTEGER` on `jobs` + `site_visit_appointments`, RPC-gated | No | Yes — 2-column additive migration + RPC | None | M | No | P2 |
+| No route optimization / drive-time / mileage — order is scheduled-time only | `base44-routing-map-report.md` Phase 5 ("never mileage/drive-time") | Summary tiles explicitly never show mileage/drive-time | No | No (would ride on Directions API once wired) | None | L | Benefits from Directions UI trigger above | P2 |
+| `properties.location`/`geocoded_at` never persisted — every page load re-geocodes ephemerally, no caching | `base44-routing-map-report.md` "Location-data audit", Known limitations #4 | "Ephemeral per-request geocoding... documented future opportunity" | Column exists, unused | No (column exists already) | None (cost/perf only) | M | No | P2 |
+| Priority-marker visual distinction (icon vs. color) built but pixel-unverified without a live key | `base44-routing-map-report.md` gap table | "Built, not live-verified" | Yes | No | None | XS | Depends on key | P1 |
+| "Route today" quick link from Today not added | `base44-routing-map-report.md` Known limitations #3 | "time-budget cut" | N/A | No | None | XS | No | P3 |
+| Site-visit calendar events never show a real technician (`site_visit_appointments` crew field not joined) | `base44-exact-jobs-calendar-report.md` gap table | "Shows 'Not assigned' unconditionally today" | Partial — column may not exist; needs audit | Unsure | None | S | No | P2 |
+| Route Planning has no Base44 reference at all — presentation is originated, not ported; visual fidelity claim is N/A by definition | `base44-routing-map-report.md` scope-honesty note | — | — | — | None | — | No | (informational, not a backlog item) |
+
+---
+
+## 3. Payments
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| No real online payment processor anywhere (Stripe types are dead/unused) | `base44-exact-finance-report.md` §Payments; `base44-customer-portal-completion-report.md` §Invoices; re-verified independently this pass (`grep -rli stripe apps/web packages` → only `packages/db/types.ts` dead columns and a portal test file) | "no webhook directory exists at all"; confirmed still true as of `dfde682` | No | Yes (processor integration + webhook table/handler) | **High if left unaddressed for a real launch** — no way to take a card payment at all; every payment is manual-entry-only | L | Blocks: portal "Pay now", payment links/checkout, webhook authority, deposits-via-card | **P0** |
+| No payment links / customer-initiated checkout | (same as above — same root cause) | "Contact Premier... to arrange payment" is the only invoice-detail CTA | No | Yes (rides on processor above) | None (honest) | — | Same root cause as processor gap — not separately sized | (rolled into processor gap) |
+| No webhook authority — all payment state is staff-entered via `recordPaymentAction`, trigger-computed totals only | `base44-exact-finance-report.md` §Payments | `recordPayment()` + `apply_payment_to_invoice()` trigger — real, but manual-only | Partial (manual recording is real and correct) | Yes (webhook endpoint + idempotency ledger) | Medium — no reconciliation risk today since nothing auto-applies, but this is the architectural gap a real processor integration must close | — | Same root cause | (rolled into processor gap) |
+| No partial-payment UX beyond the existing amount-typed-manually form (no split/schedule) | `base44-exact-finance-report.md` §Payments (implicit — only method/amount/date/reference/notes fields exist) | `RecordPaymentForm` fields enumerated | Partial — partial payments recordable, no scheduling/plan concept | No | None | M | No | P2 |
+| No deposits-via-processor, no refund/credit issuance beyond `canIssueRefunds` capability existing with no processor to refund against | `base44-exact-finance-report.md` (capability exists, `canIssueRefunds`, but no processor action calls it against real money) | Capability defined in `permissions.ts`; no refund action found wired to a processor | No | Yes (rides on processor) | Low — capability without a live money-movement path is inert, not exploitable | — | Same root cause | (rolled into processor gap) |
+| Invoice creation not rebuilt into the originally-scoped 5-step wizard (Source → Customer/billing → Line items → Terms → Review) | `base44-exact-finance-report.md` Known limitations #1 (marked open, not resolved) | "not rebuilt... existing job-/quote-anchored `NewInvoiceDialog` + `LineItemEditor` kept" | Yes (current flow is real, just narrower) | No | None | M | No | P2 |
+| Partial expense billing not supported — an expense can only be billed as one whole line item, even though `expenses.status` has an unused `partially_invoiced` enum value | `base44-exact-finance-report.md` Known limitations #4 | "Only `ready_to_invoice`... offered, so partial invoicing is a real, documented, unbuilt follow-up" | Partial (enum exists, no code path produces or consumes it) | No (enum already exists) | None | M | No | P2 |
+| Expense receipt-upload UI never wired to Vault | `forge-base44-batch-5-expenses-report.md` Backend Rework Notes | "`receipt_vault_item_id` [exists]... a later batch should wire this to Premier Vault upload/finalization" | Column exists, no UI | No | None | S | No | P2 |
+
+---
+
+## 4. Scheduling
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| No double-booking / scheduling-conflict detection anywhere (jobs, site visits, or crew) | `base44-exact-jobs-calendar-report.md` gap table + Known limitations #3; `base44-routing-map-report.md` (crew filtering docs the same absence) | "No real query for this exists... flagged, not built" | No | Maybe (query-only, or a materialized check) | Low — operational risk (double-scheduling a tech), not a data/security risk | M | No | P1 |
+| Job creation's crew+schedule step is a non-atomic 3-step sequence (`createJobWithScheduleAction`) — partial failure leaves an unscheduled/crew-less job with only a `warning` string, no rollback | `base44-exact-jobs-calendar-report.md` §Job creation, gap table, Known limitations #4 | "not transactional... flagged here per the task's instruction to stop and flag rather than build a fake combined RPC" | Partial — sequential real writes, no atomic RPC | Yes if fixed (combined RPC) | Low — a rare partial-failure state, self-correcting (job still real, just needs manual schedule/crew follow-up) | M | No | P1 |
+| No recurring-service scheduling backend — only a dead boolean toggle (`recurring_templates_available`) exists | `base44-exact-jobs-calendar-report.md` §Job creation, gap table | "No `recurring`/`schedule_rule` backend concept exists (verified: only a dead boolean toggle)" | No | Yes (recurrence rule model + generation job) | None | L | No | P2 |
+| No direct site-visit → job shortcut (must go through estimate → quote → accept) | `base44-exact-jobs-calendar-report.md` §Job creation | "no direct site-visit-to-job path exists" | No | Maybe | None | M | No | P3 |
+| Site-visit "assigned" is single-person (`assigned_user_id`), structurally different from jobs' multi-person `job_assignments` — not merged, but a real UX inconsistency | `base44-exact-jobs-calendar-report.md` gap table; `base44-routing-map-report.md` §Crew integration | "Documented mismatch, not papered over" | N/A — both models are real, just different | Unsure (would require a product decision, not just schema) | None | — | No | P3 |
+| No "internal calendar block" concept (Base44-style maintenance/blocked-time entries) | `base44-exact-jobs-calendar-report.md` gap table | "No backing schema concept; not faked" | No | Yes | None | S | No | P3 |
+
+---
+
+## 5. Jobs
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| Job progress is still status-derived, not an authoritative checklist — `job_phases` table is real but has 0 rows and no populating UI anywhere | `base44-exact-jobs-calendar-report.md` "Progress-source audit and decision", gap table | `select count(*) from job_phases` → 0 at audit time; `deriveJobProgress()` maps `job.status` to a fixed % table instead | Partial — table + query exist, nothing writes to it | No (table already exists) | None | L (to make real) | No | P2 |
+| `jobs.closed_at` is dead — no application code ever sets it; Today's "completed today" board bucket uses `updated_at` as an honest-but-imprecise proxy | `docs/implementation/today-kanban-board-semantics.md` Known limitations #1 | "a job's `updated_at` changes for a reason unrelated to completion... could be marginally imprecise" | Column exists, unused | No (column exists) | None | S | No | P2 |
+| No `jobs.description` customer-vs-staff visibility flag — Scope section carries no visibility tag at all (correctly, not guessed) | `base44-exact-jobs-calendar-report.md` §Job Detail, gap table | "no such column exists... carries no visibility tag" | No | Yes if wanted | None (currently: correctly conservative) | S | Overlaps §6 | P2 |
+| Job logs and job photos are internal-only, full stop — no customer-visible toggle exists at the schema level (`activity_log`/`vault_items` have no visibility column) | `base44-exact-jobs-calendar-report.md` §Job logs, §Job photos, gap table | "no visibility column at all (verified)" | No | Yes | None (correctly conservative today) | M | Same underlying gap as the portal photo-visibility item in §1/§6 | P1 |
+
+---
+
+## 6. Portal/media/security (customer-safe visibility model)
+
+*Cross-references §1 (Portal) and §5 (Jobs) — the same underlying schema gap surfaces in three places; counted once here.*
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| No customer-safe visibility model exists anywhere on `vault_items` (photos) or `activity_log` (job logs) — every attachment/log is internal-by-default with no mechanism to mark anything customer-facing | `base44-exact-jobs-calendar-report.md` gap table; `base44-customer-portal-completion-report.md` gap table ("Site photos... Not built"); `forge-base44-batch-4-shell-nav-pages-report.md` Explicit Backend Gaps ("Base44's richer gallery filters/detail route need approved metadata fields") | Multiple independent confirmations, all consistent: no visibility column, nothing fabricated | No | Yes — one visibility column/enum, consistently applied across `vault_items` and (if job logs are ever exposed) `activity_log` | Low today (fail-closed: nothing is accidentally exposed) — but this is the single blocking dependency for "customer sees their own job photos," a plausible V1-adjacent expectation | M–L | Blocks: portal site photos, Property Detail photo section for customers, any future customer-visible job-log surface | **P1** |
+| No document upload/storage feature at all — no `/documents` route, no upload action, confirmed via full-repo grep and an explicit E2E `NOT IMPLEMENTED` skip | `tests/e2e/customer-command-center-bot.spec.ts:154` ("documents: upload or view a document on this customer"); `tests/e2e/operator-workflow-bot.spec.ts:98` (duplicate skip, same gap) | "no /documents route, no uploadDocument/addDocument action, no document UI anywhere in the app (grepped apps/web end to end)" | No | Yes (storage bucket + upload UI + linking model) | None | L | No | P2 |
+| Inspection field customer-visibility split (`field.visibility`) is real and correctly wired, but every field in the one seeded template is `staff_only` — nothing is customer-facing today, reported honestly | `base44-exact-requests-site-visits-report.md` gap table | "no field in the seeded template is currently customer-facing, reported honestly rather than assumed" | Yes — mechanism is real | No | None | — | — | (informational, not a gap — mechanism works, just unused by current data) |
+
+---
+
+## 7. Messaging
+
+*Also see §1 (Portal Messages) — the customer-facing half of this gap is counted there; this section is the staff/notification half.*
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| No two-way customer/staff message thread model — only one-directional `portal_contact_requested` activity-log entries, no staff inbox/work queue | `forge-base44-batch-3-portal-contact-report.md` Backend Notes; `base44-customer-portal-completion-report.md` §Messages | "Dedicated portal messages table or conversation model" + "Staff inbox/work queue for customer portal messages" both listed as unbuilt | No | Yes — new table(s) | None | L | No | P2 |
+| No unread/read state or notification dispatch for any message | `forge-base44-batch-3-portal-contact-report.md` Backend Notes | "Email/SMS notification dispatch and delivery status" | No | Yes | None | M | Blocked by / bundled with the thread-model gap above | P2 |
+| No attachments on portal contact messages | `forge-base44-batch-3-portal-contact-report.md` Backend Notes | listed explicitly | No | Yes | None | S | No | P3 |
+
+---
+
+## 8. Finance
+
+*Payment-processor items are in §3. This section covers the remaining manual-only/incomplete finance surfaces not already listed there.*
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| Estimate activity/review history is thinner than Base44's model (no rich review-history timeline) | `forge-base44-batch-2-finance-integration-report.md` Backend Gap Notes | "Base44 models richer activity and review-history timelines than the current estimate detail query exposes" | Partial | Maybe | None | M | No | P3 |
+| Quote revision/PDF history not modeled — quote detail's "PDF" and "Revisions" sections are honest, pre-existing placeholders | `base44-exact-estimates-quotes-report.md` gap table; `forge-base44-batch-2-finance-integration-report.md` | "explicit, honest placeholders... not fabricated, just labeled deferred work" | No | Yes | None | M | No | P3 |
+| Invoice preview/revision/warning/attachment model thinner than Base44's (no customer-document preview beyond the existing `/i/[token]` view) | `forge-base44-batch-2-finance-integration-report.md` Backend Gap Notes | listed explicitly | Partial | Maybe | None | M | No | P3 |
+| No dashboard finance aggregate summaries (e.g., YTD paid) — list pages use currently-supplied rows only | `forge-base44-batch-2-finance-integration-report.md` Backend Gap Notes | "did not introduce new aggregate queries" | No | No (query-only) | None | S | No | P3 |
+| Expense search hydrates the first 500 org expenses server-side, not indexed/denormalized — a scale limit, not a bug today | `forge-base44-batch-5-expenses-report.md` Backend Rework Notes | "If expense volume grows, add indexed denormalized search text" | N/A | Maybe (future) | None | S | No | P3 |
+
+---
+
+## 9. Production readiness
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| Two e2e-test-purposed accounts (`e2e-admin-bot@example.com` admin; `delivered+e2e-employee-persistent@resend.dev` employee) hold **standing active membership in the real PPM production organization** | `docs/releases/forge-v1-readiness-audit.md` finding F7, re-confirmed open in the V1.0.1 and V1.0.2 release docs | "remains open, unchanged, still a Kevin decision" | N/A — access/data action, not code | No | **Medium and rising** — "no data at risk today (PPM is blank) but real standing risk once PPM is populated" — this is the one open item that gets *worse*, not better, the closer V1 gets to real customer data | XS (access removal, no code) | No | **P0** (must resolve before real PPM data is entered — the audit's own words) |
+| `customer_archetype_defaults` has RLS **disabled** — globally writable by any authenticated user across any org | `docs/releases/forge-v1-readiness-audit.md` finding F6, re-confirmed open through V1.0.2 | "production Supabase security advisor, ERROR level... globally writable" | N/A (RLS-only fix) | Yes — one migration (RLS policy) | Low-medium — cross-tenant blast radius but non-sensitive reference data, per the audit's own severity call | XS | No | P1 |
+| `createEstimateFromRequestAction` still never calls `record_request_triage` — `triage_decision` stays desynced from the resulting estimate for this one legacy conversion path (F2) | `docs/releases/forge-v1-readiness-audit.md` finding F2, confirmed open through V1.0.2 | "unchanged, still open, explicitly out of Batch A scope" | Partial (action works, just doesn't sync triage state) | No | Low — data-integrity/reporting corruption, not an authorization bypass (already fixed for the capability side) | S | No | P1 |
+| Duplicate legacy/canonical UI on request-detail — old `CreateEstimateButton`/`CreateJobButton` still render alongside the real `TriagePanel` with no visual signal distinguishing them (F4) | `docs/releases/forge-v1-readiness-audit.md` finding F4, confirmed open through V1.0.2; independently re-confirmed by `base44-exact-requests-site-visits-report.md` ("moved but not re-wired... nothing references them") | Grep-verified in the requests/site-visits rebuild: the buttons exist on disk but are unreferenced | N/A | No | None (dead code, not reachable — the requests/site-visits rebuild confirms nothing imports either button anymore) | XS (delete dead files) | No | P2 (downgraded from the original audit's "Major" — the later rebuild already made the buttons unreachable, just didn't delete the files) |
+| SR-1/SR-2 — no FK/trigger enforces that `service_requests`/`estimates`/`jobs`/`quote_line_items`/etc.'s `customer_id`/`property_id` actually belong to the same org as the parent row | `docs/security/service-requests-authorization-audit.md` §7, §9 finding SR-5; `docs/security/customers-properties-authorization-audit.md` §7 finding CP-7 | "Data-integrity corruption; RLS... is correctly org-scoped for reads, so this is not a new read-exposure path" | N/A (constraint-only) | Yes (defense-in-depth follow-up, out of scope in both audits) | Low — confirmed non-exploitable for cross-org *reads* (RLS already blocks that); only a tampering/corruption risk requiring an already-authenticated org member | M | No | P2 |
+| CP-4 — no capability model exists at all for who may create/edit customers or properties (every signed-in org member can, including subcontractors) | `docs/security/customers-properties-authorization-audit.md` §10, §15 (Kevin decision, unresolved) | "no capability exists at all... Kevin decision required before classification" | N/A | No (TS-layer capability, not a migration) | Low-Medium — a real product-policy gap, not a live bypass (the DB write boundary is already correctly closed) | S | No | P1 |
+| E2E project (`premier-crm-e2e`) has a 27-migration version-number bookkeeping drift vs. local filenames — cosmetic only (schema content matches), confirmed **not** present in production | `docs/security/customers-properties-authorization-audit.md` §16 | "This drift predates CP-A/CP-B... was not reconciled, repaired, renamed, or otherwise touched" | N/A | No (bookkeeping only) | None (E2E-only, prod unaffected — verified) | M (reconciliation effort, if ever done) | No | P3 |
+| Generated types (`packages/db/types.ts`) drift risk: `job_assignments` model was applied to E2E via hand-written type-escape casts, `pnpm db:types` never re-run against it in the design-doc pass | `docs/implementation/job-crew-assignment-model.md` Known follow-ups #1 | "intentionally temporary debt... natural first step of whichever future PR builds the Jobs/Calendar presentation layer" | — | No | None (the later Jobs/Calendar slice appears to have consumed this correctly — re-verify types are current) | XS (run `pnpm db:types`, verify clean diff) | No | P2 |
+| `GOOGLE_MAPS_API_KEY`/`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` not provisioned anywhere (ops gap, duplicated from §2 for completeness) | `base44-routing-map-report.md` | — | — | — | — | — | — | (see §2 — same item, not double-counted in totals) |
+| `pending_uploads` stale-cleanup worker was never built (indexed `expires_at` exists, no scheduled job consumes it) | `docs/implementation/request-site-visit-estimate-workflow.md` §9 Known limitations | "a deferred scheduled job — the indexed `expires_at` column needed to build one already exists, but no worker has been written" | Partial (column exists) | No | Low — orphaned quarantine-bucket objects accumulate, storage-cost/hygiene issue, not a data-exposure issue | S | No | P2 |
+| HEIC/HEIF photo upload unsupported (sharp's prebuilt binary limitation) — JPEG/PNG only | `request-site-visit-estimate-workflow.md` §9 Known limitations | "remains unavailable... JPEG/PNG only for v1" | N/A (library limitation) | No | None | M (would need a different image-processing dependency) | No | P2 |
+| Server-Action-layer authorization has no dedicated automated test harness — the 3 non-RPC IDOR-class fixes from the senior-review audit (defects 2-4) were verified only by code reading + full-suite regression, not a targeted unit/integration test | `request-site-visit-estimate-workflow.md` §13 "What was verified after fixing" | "a passing typecheck proves types line up, not that authorization logic is correct... stated plainly as a real limitation" | N/A | No | Low — the actual defects were already found and fixed; this is a coverage gap for *future* similar defects, not a live hole | M | No | P2 |
+| `employee-onboarding-admin-invite-bot.spec.ts` is a known-flaky, pre-existing, unrelated E2E suite (Supabase Auth invite-propagation timing) — not a product defect, but reduces CI signal quality | `request-site-visit-estimate-workflow.md` §12; independently referenced in the SR audit's V1.0.1 verification | "confirmed pre-existing and unrelated... by direct comparison... against a clean `origin/main` worktree" | N/A | No | None | S (flake investigation) | No | P3 |
+| `docs/integration/base44-deferred-data-integrity.md` is referenced by name in `forge-base44-batch-8-requests-site-visits-inspection-report.md` (twice) as the tracking doc for a `service_requests.job_id` NULL backfill on two specific demo records (SR-000013/SR-000010) but **the file does not exist anywhere in the repository** | `forge-base44-batch-8-requests-site-visits-inspection-report.md:125,135`; confirmed via repo-wide search this pass | grep for the filename and for `SR-000013` found zero matches outside the batch-8 report and the demo dataset manifest | Unsure — the underlying data issue's current state was not re-verified this pass | Unsure | None known (demo-data only, not real PPM data) | XS to re-investigate | No | P3 |
+
+---
+
+## 10. UI
+
+| Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
+|---|---|---|---|---|---|---|---|---|
+| Four route families remain under `(legacy)` and were never moved into `(forge)`/given `ForgeShell` chrome: **activity-logs, settings, site-photos, today** | Direct inventory this pass: `ls apps/web/app/(app)/(legacy)/` → `activity-logs`, `layout.tsx`, `settings`, `site-photos`, `today`; cross-checked against every `base44-exact-*` report's "Routes moved" table (none mention these four) | `apps/web/app/(app)/(legacy)/{activity-logs,settings,site-photos,today}` still present on disk | N/A | No | None | M (mechanical route-group move, same pattern as 8 prior slices) | No — but Today in particular has already had two rounds of redesign work (`forge-v1.1-today-redesign.md`, `base44-today-sync-and-portability-audit.md`) while staying architecturally under `(legacy)` — a real inconsistency worth closing for consistency's sake, not urgency | P1 |
+| Base44 reference repo not diffed byte-for-byte for Estimates/Quotes/Services, or for Jobs/Calendar's scheduling/log/photo forms — visual pixel-fidelity unconfirmed (functional/architectural claims were verified; visual claims were not) | `base44-exact-estimates-quotes-report.md` scope-honesty note + "Independent verification pass" (partially resolved — status vocabulary and one portable-feature risk were checked and closed); `base44-exact-jobs-calendar-report.md` scope-honesty note, Known limitations #7 | "flagged for the verification pass, same as prior slices" / "not independently diffed file-by-file for every component" | N/A | No | None | M (a deliberate follow-up diff pass) | No | P2 |
+| Requests/Site Visits list search+filter uses full-page `<form>`/`<Link>` navigation, not the client-debounced `router.replace` pattern `customers-list-container.tsx` uses elsewhere — a real UI inconsistency, both are functionally real | `base44-exact-requests-site-visits-report.md` gap table, Known limitations #1 | "Both are real, server-backed; unifying them is a reasonable low-risk follow-up" | N/A | No | None | S | No | P3 |
+| Mobile overflow bugs were a **recurring defect class** across every single slice (Properties, Requests/Site Visits, Estimates/Quotes, Jobs, Finance, Portal) — all individually found and fixed via `max-w-0 break-words`/`break-words`, but no shared lint rule or component-level guard exists to catch the *next* one before it ships | Pattern observed across `base44-exact-properties-team-report.md`, `-jobs-calendar-report.md`, `-finance-report.md`, `-customer-portal-completion-report.md` "Implementation defects found and fixed" sections (5 independent occurrences of the identical bug class) | Each report's own "defects found and fixed" section | N/A | No | None | S (a shared table-cell/word-break utility class or lint rule) | No | P1 (process gap — cheap to close, has recurred 5 times) |
+| Customer Detail page has no cross-links to filtered Jobs/Invoices/Estimates views scoped to that customer (list items render as plain text; the target routes have no customer-scoping query param) | `tests/e2e/customer-command-center-bot.spec.ts:115-134` (3 distinct honest `test.skip` + inline `NOT IMPLEMENTED` comments) | "'Recent jobs' list items... render as plain text... /jobs has no customer-scoping query param" | No | No (query-param + link wiring only, once the target pages exist) | None | M | No | P2 |
+| No customer-level payments view (payments are only visible per-invoice) | `tests/e2e/customer-command-center-bot.spec.ts:136-142` | "there is no customer-level payments view anywhere" | No (aggregation query only) | No | None | S | No | P3 |
+| Customer "Account notes" is read-only — no textarea, no save action, no `addNote`/`updateNote` function anywhere (notes are only set once, at customer-creation time) | `tests/e2e/customer-command-center-bot.spec.ts:144-152` | "no textarea, no save action, no addNote/updateNote function anywhere in packages/db or apps/web (grepped)" | No | No | None | S | No | P2 |
+| No org-ownership-transfer or org-deletion UI/action exists (DB layer already correctly refuses both regardless) | `tests/e2e/staff-permissions-bot.spec.ts:254-260` | "no UI or server action exists yet... nothing to test here beyond [proof the] DB layer already refuses both operations" | N/A (DB already fail-closed) | No | None (DB already denies it) | — | No | P3 |
+| Hazards section is free-text only, no structured taxonomy/severity/acknowledgement model — a proposal exists, not yet decided or built | `docs/ux/hazards-section-proposal.md` (full doc, discussion-stage) | "Proposed direction (for discussion, not final)" | Partial (free text is real) | Yes if adopted | None | M | No | P3 |
+| Requests list density recommendation — a UX proposal for a redesign, not implemented, explicitly not a containment/overflow fix | `docs/ux/request-list-density-recommendation.md` (full doc) | "What this recommendation does NOT propose" | N/A | No | None | S–M | No | P3 |
+
+---
+
+# Ordered Implementation Plan
+
+## Phase A — must finish before V1 (all P0s)
+
+Three items, none blocking each other technically, but ordered by urgency:
+
+1. **Remove/demote the two e2e-bot accounts' standing access to the real PPM production org** (F7). Zero code risk, an access action only — do this first, it's free and the audit itself calls the risk "rising" the closer real PPM data gets to being entered. *(Production readiness §9)*
+2. **Provision `GOOGLE_MAPS_API_KEY`/`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` and run the full live-verification checklist** (`base44-routing-map-report.md`'s own checklist: real map render, real geocoding, real Directions call once wired, marker/list sync, priority-marker icon distinction). This is the only way to know whether Route Planning — built, tested against fixtures, never run against a real API — actually works. *(Maps/Routing §2)*
+3. **Decide and, if needed, implement a real payment-processor integration** (or explicitly and permanently accept manual-recording-only as the V1 posture, in writing, so it stops appearing as an open question in every finance-adjacent report). This is the single largest scope item in this whole audit and the one every downstream doc (Finance, Portal, Customer Portal Completion) is waiting on the same answer to. *(Payments §3)*
+
+## Phase B — should finish before V1 (P1s, ordered)
+
+1. Wire the Directions "Calculate route" UI trigger (depends on Phase A.2's key being live to test against).
+2. Close the customer-safe visibility gap on `vault_items` (photos) — one column, unblocks the portal photo section and the Property Detail customer view. *(§1/§5/§6)*
+3. Fix CP-4 — decide and implement a capability gate for customer/property creation/editing (a TS-layer change, no migration).
+4. Fix F6 — enable RLS on `customer_archetype_defaults` (one small migration).
+5. Fix F2 — make `createEstimateFromRequestAction` call `record_request_triage` (or retire it in favor of the RPC) so `triage_decision` stays in sync.
+6. Add double-booking/scheduling-conflict detection for jobs/site visits/crew.
+7. Make `createJobWithScheduleAction`'s 3-step sequence atomic (or explicitly accept the documented non-atomic behavior as permanent and remove it from the open-limitations list).
+8. Add a self-declared priority/urgency field to portal request creation (currently always `'normal'`).
+9. Move the four remaining `(legacy)` route families (`activity-logs`, `settings`, `site-photos`, `today`) into `(forge)` for architectural consistency — mechanical, low-risk, matches 8 prior slices' exact pattern.
+10. Adopt a shared table-cell word-break utility/lint rule to stop the 5-times-recurring mobile-overflow bug class from recurring a 6th time.
+11. Prioritize the customer-safe photo visibility work per item 2 above ahead of any new portal feature work, since three separate reports are each independently blocked on it.
+
+## Phase C — post-V1 enhancements (P2/P3, grouped, no strict order)
+
+**Messaging & Portal**: two-way staff-reply thread model, unread/read state, notification dispatch, message attachments, document upload feature, portal profile editing, portal request attachments.
+
+**Finance**: partial-payment/payment-plan UX, partial expense billing, expense receipt-to-Vault wiring, invoice creation 5-step wizard, quote revision/PDF history, richer estimate activity history, dashboard finance aggregates, expense search scaling.
+
+**Maps/Routing**: persisted `route_stop_order` + dispatcher drag-to-reorder, route optimization/drive-time, `properties.location` geocode persistence/caching, "Route today" quick link, site-visit calendar technician display.
+
+**Jobs/Scheduling**: real `job_phases`-backed progress, real `jobs.closed_at`/completion timestamp, recurring-service scheduling, direct site-visit→job shortcut, "internal calendar block" concept.
+
+**Production hygiene**: SR-1/SR-2/CP-7 broader FK cross-org consistency (defense-in-depth), delete the dead legacy `CreateEstimateButton`/`CreateJobButton` files (F4), reconcile the E2E migration-bookkeeping drift, `pending_uploads` cleanup worker, HEIC/HEIF upload support, Server-Action-layer authorization test harness, investigate/recreate the missing `base44-deferred-data-integrity.md` tracking doc (or confirm the underlying demo-data issue is moot).
+
+**UI polish**: Base44 byte-for-byte visual diff for Estimates/Quotes/Services and Jobs/Calendar forms, unify Requests/Site-Visits search to the client-debounced pattern, customer-detail cross-links to filtered jobs/invoices/estimates, customer notes editing, customer-level payments view, hazards taxonomy (pending a product decision), request-list density redesign (pending a product decision), org-ownership-transfer UI (no current product need).
