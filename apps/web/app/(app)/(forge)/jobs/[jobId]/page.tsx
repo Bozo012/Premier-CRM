@@ -42,6 +42,7 @@ import {
 } from '../_components/change-order-action-buttons';
 import { AddJobLogForm } from '../_components/add-job-log-form';
 import { AddJobPhotoForm } from '../_components/add-job-photo-form';
+import { PublishPhotoControl } from '../_components/publish-photo-control';
 import { ChangeOrderDraftForm } from '../_components/change-order-draft-form';
 import { CreateDraftQuoteButton } from '../_components/create-draft-quote-button';
 import { CreateInvoiceButton } from '../_components/create-invoice-button';
@@ -81,6 +82,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const { orgId, role } = orgContextResult.data;
   const canCreateQuote = hasCapability(role as OrgRole, 'canCreateQuote');
   const canManageCrew = hasCapability(role as OrgRole, 'canScheduleJobs');
+  const canPublishCustomerMedia = hasCapability(role as OrgRole, 'canPublishCustomerMedia');
 
   const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
   const shellData = buildForgeShellData({
@@ -130,7 +132,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     getEntityTimeline(serviceClient, { orgId, entityType: 'job', entityId: jobId }),
     serviceClient
       .from('vault_items')
-      .select('id, content, created_at, storage_object_key, image_url')
+      .select('id, content, created_at, storage_object_key, image_url, customer_visible')
       .eq('org_id', orgId)
       .eq('job_id', jobId)
       .eq('type', 'photo')
@@ -206,6 +208,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
         caption: item.content?.trim() || 'Job photo',
         createdAt: item.created_at,
         imageUrl: signedUrl?.success ? signedUrl.data : null,
+        customerVisible: item.customer_visible,
       };
     })
   );
@@ -326,8 +329,8 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
               ) : (
                 <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {jobPhotos.map((photo) => (
-                    <li key={photo.id}>
-                      <Link href={`/site-photos/${photo.id}`} className="block overflow-hidden rounded-md border transition hover:opacity-90">
+                    <li key={photo.id} className="overflow-hidden rounded-md border">
+                      <Link href={`/site-photos/${photo.id}`} className="block transition hover:opacity-90">
                         <div className="grid aspect-video place-items-center bg-muted">
                           {photo.imageUrl ? (
                             <div
@@ -345,6 +348,14 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
                           <p className="text-xs text-muted-foreground">{formatScheduledAt(photo.createdAt)}</p>
                         </div>
                       </Link>
+                      <div className="border-t p-2">
+                        <PublishPhotoControl
+                          vaultItemId={photo.id}
+                          jobId={job.id}
+                          initialCustomerVisible={photo.customerVisible}
+                          canPublish={canPublishCustomerMedia}
+                        />
+                      </div>
                     </li>
                   ))}
                 </ul>

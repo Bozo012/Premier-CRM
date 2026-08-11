@@ -48,6 +48,7 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   canManageDeposits: 'manage deposits',
   canManageInspectionTemplates: 'manage inspection templates',
   canProposeChangeOrders: 'propose change orders',
+  canPublishCustomerMedia: 'publish photos to the customer portal',
   canRecordPayments: 'record payments',
   canScheduleJobs: 'schedule jobs',
   canSendEstimates: 'send estimates',

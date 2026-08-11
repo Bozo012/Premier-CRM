@@ -67,6 +67,7 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   canCreateExpenses: 'create or edit expenses',
   canApproveExpenses: 'approve or reject expenses',
   canSendQuote: 'send a quote',
+  canPublishCustomerMedia: 'publish photos to the customer portal',
 };
 
 async function getQuoteActionContext(

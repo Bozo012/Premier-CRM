@@ -169,3 +169,66 @@ export async function getSignedReadUrl(client: DbClient, storagePath: string, ex
   if (error || !data) return err(ErrorCode.DB_ERROR, error?.message ?? 'Failed to create signed read URL.');
   return ok(data.signedUrl);
 }
+
+/**
+ * Customer-Safe Photo Visibility (docs/implementation/customer-safe-photo-
+ * visibility-design.md, PR #141). publish/unpublish are SECURITY DEFINER
+ * RPCs (20260811030000_customer_safe_photo_visibility.sql) — org/role are
+ * derived server-side from the caller's session, never accepted as a
+ * parameter here. Call with the user's own session client (never
+ * service-role) so the RPC's canPublishCustomerMedia check runs against the
+ * real caller, not an elevated bypass.
+ */
+export interface PublishedPhoto {
+  id: string;
+  customerVisible: boolean;
+}
+
+export async function publishCustomerVisiblePhoto(client: DbClient, vaultItemId: string): Promise<Result<PublishedPhoto>> {
+  const { data, error } = await client.rpc('publish_customer_visible_photo', { p_vault_item_id: vaultItemId });
+  if (error || !data) return err(ErrorCode.VALIDATION_ERROR, error?.message ?? 'Failed to publish photo.');
+  return ok({ id: data.id, customerVisible: data.customer_visible });
+}
+
+export async function unpublishCustomerVisiblePhoto(client: DbClient, vaultItemId: string): Promise<Result<PublishedPhoto>> {
+  const { data, error } = await client.rpc('unpublish_customer_visible_photo', { p_vault_item_id: vaultItemId });
+  if (error || !data) return err(ErrorCode.VALIDATION_ERROR, error?.message ?? 'Failed to unpublish photo.');
+  return ok({ id: data.id, customerVisible: data.customer_visible });
+}
+
+/**
+ * The ONE centralized customer read path (`list_customer_visible_photos`).
+ * Call with the user's own session client — the RPC proves ownership via
+ * auth.uid() against customer_accounts, plus explicit customer_visible=true,
+ * in a single WHERE clause. Pass exactly one of jobId/estimateId; the RPC
+ * itself never trusts a bare vault_item id.
+ */
+export interface CustomerVisiblePhoto {
+  id: string;
+  storagePath: string | null;
+  caption: string;
+  createdAt: string;
+}
+
+export async function listCustomerVisiblePhotosForJob(client: DbClient, jobId: string): Promise<Result<CustomerVisiblePhoto[]>> {
+  const { data, error } = await client.rpc('list_customer_visible_photos', { p_job_id: jobId });
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok(mapCustomerVisiblePhotoRows(data));
+}
+
+export async function listCustomerVisiblePhotosForEstimate(client: DbClient, estimateId: string): Promise<Result<CustomerVisiblePhoto[]>> {
+  const { data, error } = await client.rpc('list_customer_visible_photos', { p_estimate_id: estimateId });
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok(mapCustomerVisiblePhotoRows(data));
+}
+
+function mapCustomerVisiblePhotoRows(
+  data: Array<{ id: string; storage_object_key: string | null; image_url: string | null; caption: string | null; created_at: string }> | null
+): CustomerVisiblePhoto[] {
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    storagePath: row.storage_object_key ?? row.image_url,
+    caption: row.caption?.trim() || 'Photo',
+    createdAt: row.created_at,
+  }));
+}

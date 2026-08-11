@@ -67,7 +67,7 @@ export function AddJobPhotoForm({ jobId }: { jobId: string }) {
         className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted"
       />
       {isUploading ? <p className="text-xs text-muted-foreground">Uploading…</p> : null}
-      <p className="text-xs text-muted-foreground">JPEG or PNG, up to 15MB. Staff-only — never customer-visible.</p>
+      <p className="text-xs text-muted-foreground">JPEG or PNG, up to 15MB. Internal only until a staff member explicitly publishes it to the customer portal.</p>
     </div>
   );
 }

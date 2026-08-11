@@ -26,16 +26,19 @@ import {
   listJobAssignments,
   logActivity,
   proposeChangeOrderRevision,
+  publishCustomerVisiblePhoto,
   removeMemberFromJob,
   requestPendingUpload,
   scheduleJob,
   setDepositRequirement,
   setJobLead,
+  unpublishCustomerVisiblePhoto,
   waiveDepositRequirement,
   withdrawChangeOrderRevision,
   type ActivityLogEventType,
   type ChangeOrderLineItemInput,
   type JobAssignment,
+  type PublishedPhoto,
 } from '@premier/db';
 
 import { sendJobScheduledNotification } from '@/lib/customer-lifecycle-notifications';
@@ -881,6 +884,50 @@ export async function finalizeJobPhotoUploadAction(
 
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath('/site-photos');
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Customer-Safe Photo Visibility (docs/implementation/customer-safe-photo-
+// visibility-design.md, PR #141). canPublishCustomerMedia is checked here
+// AND re-checked server-side inside the RPC itself — the RPC is the real
+// enforcement boundary; this check only produces a clean error message
+// before ever calling it.
+// ---------------------------------------------------------------------------
+
+export type PublishJobPhotoActionState = Result<PublishedPhoto>;
+
+export async function publishJobPhotoAction(vaultItemId: string, jobId: string): Promise<PublishJobPhotoActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canPublishCustomerMedia')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit publishing photos to the customer portal.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await publishCustomerVisiblePhoto(supabase, vaultItemId);
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
+  return result;
+}
+
+export async function unpublishJobPhotoAction(vaultItemId: string, jobId: string): Promise<PublishJobPhotoActionState> {
+  const access = await getJobActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canPublishCustomerMedia')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit removing photos from the customer portal.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await unpublishCustomerVisiblePhoto(supabase, vaultItemId);
+  if (!result.success) return result;
+
+  revalidatePath(`/jobs/${jobId}`);
   return result;
 }
 

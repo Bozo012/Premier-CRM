@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import {
   createServiceClient,
+  getSignedReadUrl,
   type EstimateStatus,
   getActiveOrgContext,
   getEstimateById,
@@ -19,6 +20,7 @@ import { CreateQuoteButton } from '../_components/create-quote-button';
 import { EstimatesShell } from '../_components/estimates-shell';
 import { LineItemsSection } from '../_components/line-items-section';
 import { PricingReviewPanel } from '../_components/pricing-review-panel';
+import { PublishPhotoControl } from '../_components/publish-photo-control';
 import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
 import { estimateStatusTone } from '../_lib/forge-estimate-view-model';
 
@@ -48,6 +50,7 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
   const { orgId, role } = orgContextResult.data;
   const canApprovePricing = hasCapability(role as OrgRole, 'canApproveEstimatePricing');
   const canEditEstimate = hasCapability(role as OrgRole, 'canEditEstimate');
+  const canPublishCustomerMedia = hasCapability(role as OrgRole, 'canPublishCustomerMedia');
 
   const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
   const shellData = buildForgeShellData({
@@ -58,10 +61,17 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
   });
   const mobileNav = buildMobileNavConfig();
 
-  const [result, quotesResult, lineItemsResult] = await Promise.all([
+  const [result, quotesResult, lineItemsResult, photosResult] = await Promise.all([
     getEstimateById(supabase, { estimateId, orgId }),
     listQuotesForEstimate(serviceClient, { estimateId, orgId }),
     listEstimateLineItems(serviceClient, { estimateId, orgId }),
+    serviceClient
+      .from('vault_items')
+      .select('id, content, created_at, storage_object_key, image_url, customer_visible')
+      .eq('org_id', orgId)
+      .eq('estimate_id', estimateId)
+      .eq('type', 'photo')
+      .order('created_at', { ascending: false }),
   ]);
 
   if (!result.success) {
@@ -82,6 +92,19 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
   const estimate = result.data;
   const quotes = quotesResult.success ? quotesResult.data : [];
   const lineItems = lineItemsResult.success ? lineItemsResult.data : [];
+  const estimatePhotos = await Promise.all(
+    (photosResult.data ?? []).map(async (item) => {
+      const storagePath = item.storage_object_key ?? item.image_url;
+      const signedUrl = storagePath ? await getSignedReadUrl(serviceClient, storagePath) : null;
+      return {
+        id: item.id,
+        caption: item.content?.trim() || 'Estimate photo',
+        createdAt: item.created_at,
+        imageUrl: signedUrl?.success ? signedUrl.data : null,
+        customerVisible: item.customer_visible,
+      };
+    })
+  );
 
   const address = estimate.property
     ? `${estimate.property.addressLine1}, ${estimate.property.city}, ${estimate.property.state} ${estimate.property.zip}`
@@ -210,6 +233,41 @@ export default async function EstimateDetailPage({ params }: EstimateDetailPageP
           canApprovePricing={canApprovePricing}
           canEditEstimate={canEditEstimate}
         />
+      ) : null}
+
+      {estimatePhotos.length > 0 ? (
+        <section id="estimate-photos" className="space-y-3">
+          <h2 className="text-lg font-semibold">Photos</h2>
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {estimatePhotos.map((photo) => (
+              <li key={photo.id} className="overflow-hidden rounded-md border">
+                <div className="grid aspect-video place-items-center bg-muted">
+                  {photo.imageUrl ? (
+                    <div
+                      role="img"
+                      aria-label={photo.caption}
+                      className="h-full w-full bg-cover bg-center"
+                      style={{ backgroundImage: `url(${photo.imageUrl})` }}
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Preview unavailable</span>
+                  )}
+                </div>
+                <div className="p-2">
+                  <p className="line-clamp-1 text-xs font-medium text-foreground">{photo.caption}</p>
+                </div>
+                <div className="border-t p-2">
+                  <PublishPhotoControl
+                    vaultItemId={photo.id}
+                    estimateId={estimate.id}
+                    initialCustomerVisible={photo.customerVisible}
+                    canPublish={canPublishCustomerMedia}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {/* Quotes section */}
