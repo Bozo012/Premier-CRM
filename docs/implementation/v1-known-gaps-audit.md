@@ -12,13 +12,15 @@ Audited at worktree `C:\dev\Premier-CRM-v1-gap-audit`, branch `audit/v1-known-ga
 
 | Classification | Count |
 |---|---|
-| P0 (blocks safe/usable V1) | 2 |
+| P0 (blocks safe/usable V1) | 1 |
 | P1 (should complete before V1) | 11 |
-| P2 (valuable, ship after V1) | 21 |
+| P2 (valuable, ship after V1) | 22 |
 | P3 (future enhancement) | 14 |
 | **Total distinct gaps** | **49** (48 open, 1 resolved) |
 
-Headline: **the two authorization audits (customers/properties, service_requests/estimates/site_visits) are fully closed in production** except four narrow, already-triaged-as-non-blocking items (F2, F4, F6, F7 below — none is a live tenant-isolation break). F7 (production access hygiene) was resolved 2026-08-11 — see §9. The dominant remaining risk surface is **payments** (no processor, no webhook — everything is "record it after the fact by hand") and **Maps/Routing** (built but functionally unverified without a live `GOOGLE_MAPS_API_KEY`). No fabricated functionality was found anywhere — every report's own "known limitations" section held up under spot-check.
+**Product decision recorded 2026-08-11**: Forge V1 does **not** require customers to pay online through the product. Manual payment handling (staff records payment method/amount/date/reference by hand; portal shows an honest "Contact Premier to arrange payment" link-out, never a fake "Pay now" button) is the accepted V1 posture. The online payment-processor gap (§3) is reclassified from P0 to P2 — a valuable post-V1 capability, not a launch blocker. No vendor has been selected; no payment code has been written as part of this decision.
+
+Headline: **the two authorization audits (customers/properties, service_requests/estimates/site_visits) are fully closed in production** except four narrow, already-triaged-as-non-blocking items (F2, F4, F6, F7 below — none is a live tenant-isolation break). F7 (production access hygiene) was resolved 2026-08-11 — see §9. Payments was reassessed 2026-08-11: manual payment handling is the accepted V1 posture (see Summary), so the online payment-processor gap is no longer P0. The remaining P0 item is **Maps/Routing** (built but functionally unverified without a live `GOOGLE_MAPS_API_KEY` — see the provisioning checklist below). No fabricated functionality was found anywhere — every report's own "known limitations" section held up under spot-check.
 
 ---
 
@@ -59,7 +61,7 @@ Headline: **the two authorization audits (customers/properties, service_requests
 
 | Gap | Source(s) | Evidence | Backend exists? | Schema work? | Security impact | Size | Blocks | Class |
 |---|---|---|---|---|---|---|---|---|
-| No real online payment processor anywhere (Stripe types are dead/unused) | `base44-exact-finance-report.md` §Payments; `base44-customer-portal-completion-report.md` §Invoices; re-verified independently this pass (`grep -rli stripe apps/web packages` → only `packages/db/types.ts` dead columns and a portal test file) | "no webhook directory exists at all"; confirmed still true as of `dfde682` | No | Yes (processor integration + webhook table/handler) | **High if left unaddressed for a real launch** — no way to take a card payment at all; every payment is manual-entry-only | L | Blocks: portal "Pay now", payment links/checkout, webhook authority, deposits-via-card | **P0** |
+| No real online payment processor anywhere (Stripe types are dead/unused) | `base44-exact-finance-report.md` §Payments; `base44-customer-portal-completion-report.md` §Invoices; re-verified independently this pass (`grep -rli stripe apps/web packages` → only `packages/db/types.ts` dead columns and a portal test file) | "no webhook directory exists at all"; confirmed still true as of `dfde682` | No | Yes (processor integration + webhook table/handler) | **Reclassified 2026-08-11 — product decision: manual payment handling is the accepted V1 posture, online payment is a post-V1 capability, not a launch blocker** | L | Blocks: portal "Pay now", payment links/checkout, webhook authority, deposits-via-card | **P2** (was P0, reclassified — see Summary) |
 | No payment links / customer-initiated checkout | (same as above — same root cause) | "Contact Premier... to arrange payment" is the only invoice-detail CTA | No | Yes (rides on processor above) | None (honest) | — | Same root cause as processor gap — not separately sized | (rolled into processor gap) |
 | No webhook authority — all payment state is staff-entered via `recordPaymentAction`, trigger-computed totals only | `base44-exact-finance-report.md` §Payments | `recordPayment()` + `apply_payment_to_invoice()` trigger — real, but manual-only | Partial (manual recording is real and correct) | Yes (webhook endpoint + idempotency ledger) | Medium — no reconciliation risk today since nothing auto-applies, but this is the architectural gap a real processor integration must close | — | Same root cause | (rolled into processor gap) |
 | No partial-payment UX beyond the existing amount-typed-manually form (no split/schedule) | `base44-exact-finance-report.md` §Payments (implicit — only method/amount/date/reference/notes fields exist) | `RecordPaymentForm` fields enumerated | Partial — partial payments recordable, no scheduling/plan concept | No | None | M | No | P2 |
@@ -178,7 +180,7 @@ Three items, none blocking each other technically, but ordered by urgency:
 
 1. ~~Remove/demote the two e2e-bot accounts' standing access to the real PPM production org~~ (F7) — **done, 2026-08-11**. *(Production readiness §9)*
 2. **Provision `GOOGLE_MAPS_API_KEY`/`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` and run the full live-verification checklist** (`base44-routing-map-report.md`'s own checklist: real map render, real geocoding, real Directions call once wired, marker/list sync, priority-marker icon distinction). This is the only way to know whether Route Planning — built, tested against fixtures, never run against a real API — actually works. *(Maps/Routing §2)*
-3. **Decide and, if needed, implement a real payment-processor integration** (or explicitly and permanently accept manual-recording-only as the V1 posture, in writing, so it stops appearing as an open question in every finance-adjacent report). This is the single largest scope item in this whole audit and the one every downstream doc (Finance, Portal, Customer Portal Completion) is waiting on the same answer to. *(Payments §3)*
+3. ~~Decide and, if needed, implement a real payment-processor integration (or explicitly and permanently accept manual-recording-only as the V1 posture, in writing)~~ — **decided 2026-08-11: manual-recording-only accepted for V1; online payment processor reclassified P0 → P2, post-V1**. *(Payments §3)*
 
 ## Phase B — should finish before V1 (P1s, ordered)
 
