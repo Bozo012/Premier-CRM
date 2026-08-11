@@ -15,6 +15,13 @@ export interface CreateServiceRequestResult {
   dedupedProperty: boolean;
 }
 
+export interface CreatePortalServiceRequestResult {
+  serviceRequestId: string;
+  requestNumber: string | null;
+  status: string;
+  submittedAt: string;
+}
+
 function normalizePhoneForLookup(phone: string): string {
   return phone.replace(/\D+/g, '').slice(-10);
 }
@@ -231,5 +238,44 @@ export async function createServiceRequest(
     propertyId,
     dedupedCustomer,
     dedupedProperty,
+  });
+}
+
+/**
+ * Thin wrapper around the create_portal_service_request(...) SECURITY
+ * DEFINER RPC (supabase/migrations/20260810120000_create_portal_service_
+ * request_rpc.sql). All authority — customer_id/org_id, contact snapshot,
+ * property-ownership verification — is derived server-side inside the RPC
+ * from auth.uid(); this function does not (and must not) accept or forward
+ * a customer_id/org_id. MUST be called with the RLS-authenticated portal
+ * client (resolveActivePortalAccount()'s portalClient), not the service-role
+ * client, so auth.uid() resolves to the signed-in customer inside the RPC.
+ */
+export async function createPortalServiceRequest(
+  client: DbClient,
+  args: { serviceTitle: string; serviceDescription: string; propertyId?: string | null }
+): Promise<Result<CreatePortalServiceRequestResult>> {
+  const { data, error } = await client.rpc('create_portal_service_request', {
+    p_service_title: args.serviceTitle,
+    p_service_description: args.serviceDescription,
+    p_property_id: (args.propertyId ?? null) as unknown as string,
+  });
+
+  if (error) return err(ErrorCode.VALIDATION_ERROR, error.message);
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    request_number: string | null;
+    status: string;
+    submitted_at: string;
+  }>;
+  const row = rows[0];
+  if (!row) return err(ErrorCode.DB_ERROR, 'The request was not created.');
+
+  return ok({
+    serviceRequestId: row.id,
+    requestNumber: row.request_number,
+    status: row.status,
+    submittedAt: row.submitted_at,
   });
 }
