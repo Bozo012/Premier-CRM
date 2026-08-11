@@ -45,10 +45,18 @@ interface PortalRequestFixture {
 
 async function buildFixture(admin: SupabaseClient<Database>): Promise<PortalRequestFixture> {
   const suffix = uniqueSuffix();
-  const orgId = crypto.randomUUID();
-  await admin
-    .from('organizations')
-    .insert({ id: orgId, name: `${E2E_TEST_PREFIX}PORTAL_REQUEST_CREATE_ORG`, slug: `e2e-portal-request-${suffix}` });
+  // Reuses the shared demonstration org (matching portal-completion-base44-
+  // shell-bot.spec.ts's own established fix for this exact issue) rather
+  // than creating a fresh one: the real /portal/handoff/sign-in route's
+  // ensureCustomerAccount() (apps/web/lib/customer-portal-account.ts)
+  // always resolves/creates the customer_accounts row under a hardcoded
+  // PREMIER_ORG_ID, regardless of what org a directly-inserted fixture row
+  // used — a fresh random org here would get silently overwritten the
+  // moment loginAsPortalCustomer() drives the real browser login, which is
+  // exactly what happened before this fix (test 7 failed because the
+  // fixture's customer_accounts row got reassigned to the demo org's own
+  // customer, orphaning the requests created against the random org).
+  const orgId = process.env.PREMIER_ORG_ID ?? 'a0000000-0000-0000-0000-000000000001';
 
   const { data: customer } = await admin
     .from('customers')
@@ -112,14 +120,20 @@ async function buildFixture(admin: SupabaseClient<Database>): Promise<PortalRequ
 }
 
 async function teardownFixture(admin: SupabaseClient<Database>, fixture: PortalRequestFixture): Promise<void> {
-  await admin.from('service_requests').delete().eq('org_id', fixture.orgId);
-  await admin.from('customer_accounts').delete().eq('org_id', fixture.orgId);
+  // orgId is the SHARED demonstration org here (see buildFixture) — every
+  // delete below is scoped by this fixture's own specific customer/property
+  // ids, never by org_id, so this can never touch another test's or the
+  // demo org's own real data. The organization row itself is never deleted.
+  await admin.from('service_requests').delete().eq('customer_id', fixture.customerId);
+  await admin.from('service_requests').delete().eq('customer_id', fixture.otherCustomerId);
+  await admin.from('customer_accounts').delete().eq('customer_id', fixture.customerId);
   await admin.from('customer_properties').delete().eq('customer_id', fixture.customerId);
   await admin.from('customer_properties').delete().eq('customer_id', fixture.otherCustomerId);
   if (fixture.userId) await admin.auth.admin.deleteUser(fixture.userId);
-  await admin.from('properties').delete().eq('org_id', fixture.orgId);
-  await admin.from('customers').delete().eq('org_id', fixture.orgId);
-  await admin.from('organizations').delete().eq('id', fixture.orgId);
+  await admin.from('properties').delete().eq('id', fixture.propertyId);
+  await admin.from('properties').delete().eq('id', fixture.otherPropertyId);
+  await admin.from('customers').delete().eq('id', fixture.customerId);
+  await admin.from('customers').delete().eq('id', fixture.otherCustomerId);
 }
 
 test.describe('portal request creation bot (create_portal_service_request RPC)', () => {

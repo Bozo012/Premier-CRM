@@ -57,11 +57,17 @@ declare
   v_customer_id uuid;
   v_org_id uuid;
   v_customer record;
-  v_property record;
   v_request_id uuid;
   v_title text := trim(coalesce(p_service_title, ''));
   v_description text := trim(coalesce(p_service_description, ''));
   v_contact_name text;
+  v_property_address_line_1 text;
+  v_property_address_line_2 text;
+  v_property_city text;
+  v_property_state text;
+  v_property_zip text;
+  v_property_country text;
+  v_property_type text;
 begin
   if auth.uid() is null then
     raise exception 'Authentication required.';
@@ -109,7 +115,8 @@ begin
 
   if p_property_id is not null then
     select p.address_line_1, p.address_line_2, p.city, p.state, p.zip, p.country, p.property_type
-      into v_property
+      into v_property_address_line_1, v_property_address_line_2, v_property_city, v_property_state,
+           v_property_zip, v_property_country, v_property_type
       from public.properties p
       join public.customer_properties cp on cp.property_id = p.id
      where p.id = p_property_id
@@ -129,8 +136,8 @@ begin
   ) values (
     v_org_id, 'portal', v_customer_id, p_property_id,
     v_contact_name, v_customer.email, v_customer.phone_primary, v_customer.preferred_channel,
-    v_property.address_line_1, v_property.address_line_2, v_property.city, v_property.state, v_property.zip,
-    coalesce(v_property.country, 'US'), v_property.property_type,
+    v_property_address_line_1, v_property_address_line_2, v_property_city, v_property_state, v_property_zip,
+    coalesce(v_property_country, 'US'), v_property_type,
     v_title, v_description
   )
   returning service_requests.id into v_request_id;
@@ -317,10 +324,56 @@ needed to change.
   7. the created request appears in `/portal/requests` after creation, via a
      real browser render through `loginAsPortalCustomer`.
 
-  Written and typechecked only (`npx tsc --noEmit -p tests/e2e/tsconfig.json`
-  — zero new errors), not run live, per this program's standing workflow:
-  Kevin applies the migration to `premier-crm-e2e` after his own independent
-  audit and runs the suite himself.
+  Executed live against `premier-crm-e2e` during independent verification —
+  7/7 passing after two real bugs were found and fixed:
+
+  1. **A real bug in the RPC itself**: the original body declared
+     `v_property record;` and only populated it inside
+     `if p_property_id is not null then ... end if;`. On the fully
+     legitimate no-property path, PL/pgSQL raises "record 'v_property' is
+     not assigned yet" the moment any of its fields are read in the INSERT
+     — meaning every portal request submitted *without* a property (a
+     normal, common case) failed with a 500 error. Confirmed live: WITH a
+     property succeeded, WITHOUT one failed every time. Fixed by replacing
+     the single `record` variable with individual scalar variables
+     (`v_property_address_line_1`, `_line_2`, `_city`, `_state`, `_zip`,
+     `_country`, `_type`), which default to `NULL` safely when never
+     assigned — no behavior change on the property-supplied path, the
+     `coalesce(..., 'US')` country default is preserved unchanged either
+     way. Applied via `CREATE OR REPLACE` on `premier-crm-e2e`; the local
+     migration file was corrected in place (this migration had never been
+     merged or reviewed, so editing it pre-merge is the clean choice — no
+     separate "fix" migration was left in the permanent history).
+  2. **A real bug in the E2E fixture** (test-only, not product code): the
+     fixture originally created a fresh random `orgId` per run. But the
+     real `/portal/handoff/sign-in` route's `ensureCustomerAccount()`
+     (`apps/web/lib/customer-portal-account.ts`) always resolves/creates
+     the `customer_accounts` row under a hardcoded `PREMIER_ORG_ID` —
+     regardless of what org a directly-inserted fixture row used. The
+     moment `loginAsPortalCustomer()` drove the real browser login (test
+     7), it silently reassigned the fixture's `customer_accounts` row to
+     the demo org's own customer, orphaning the random-org rows the earlier
+     tests had created against it — test 7 then correctly found "No
+     service requests yet." because the browser session's resolved
+     `customer_id` no longer matched any of them. Fixed by reusing the
+     shared demonstration org (`PREMIER_ORG_ID`), matching the exact fix
+     `portal-completion-base44-shell-bot.spec.ts` already established for
+     this same underlying constraint — and rewrote `teardownFixture()` to
+     delete only this fixture's specific customer/property/request rows by
+     id, never by `org_id` (which is now the shared org), so it can never
+     touch another test's or the demo org's own real data.
+  3. One real residue row from the account-reassignment bug (a `customers`
+     row created under the demo org by `ensureCustomerAccount`, with null
+     names and the test's distinctive `e2e_test_.portal.request.` email
+     marker) was identified unambiguously and deleted directly. Confirmed
+     zero residue across `customers`/`customer_accounts`/`service_requests`/
+     `auth.users` after the corrected fixture's own clean run.
+
+  Full regression run alongside `portal-completion-base44-shell-bot`,
+  `portal-auth-bot`, `requests-base44-shell-bot`, and
+  `request-site-visit-workflow-bot` — 38/38 passing, confirming no
+  regression to Quotes/Invoices, cross-customer isolation, staff request
+  triage, or the marketing-site-doorway/no-competing-sign-in invariants.
 
 ## Known limitations / deliberate non-goals
 

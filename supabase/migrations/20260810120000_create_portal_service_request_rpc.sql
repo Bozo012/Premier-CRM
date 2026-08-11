@@ -72,11 +72,21 @@ declare
   v_customer_id uuid;
   v_org_id uuid;
   v_customer record;
-  v_property record;
   v_request_id uuid;
   v_title text := trim(coalesce(p_service_title, ''));
   v_description text := trim(coalesce(p_service_description, ''));
   v_contact_name text;
+  -- Individual scalar variables, not a `record` — a record type raises
+  -- "record is not assigned yet" when its fields are read before any
+  -- SELECT INTO has populated it, which always happens on the (fully
+  -- legitimate) no-property path. Scalars default to NULL safely instead.
+  v_property_address_line_1 text;
+  v_property_address_line_2 text;
+  v_property_city text;
+  v_property_state text;
+  v_property_zip text;
+  v_property_country text;
+  v_property_type text;
 begin
   if auth.uid() is null then
     raise exception 'Authentication required.';
@@ -124,7 +134,8 @@ begin
 
   if p_property_id is not null then
     select p.address_line_1, p.address_line_2, p.city, p.state, p.zip, p.country, p.property_type
-      into v_property
+      into v_property_address_line_1, v_property_address_line_2, v_property_city, v_property_state,
+           v_property_zip, v_property_country, v_property_type
       from public.properties p
       join public.customer_properties cp on cp.property_id = p.id
      where p.id = p_property_id
@@ -144,8 +155,8 @@ begin
   ) values (
     v_org_id, 'portal', v_customer_id, p_property_id,
     v_contact_name, v_customer.email, v_customer.phone_primary, v_customer.preferred_channel,
-    v_property.address_line_1, v_property.address_line_2, v_property.city, v_property.state, v_property.zip,
-    coalesce(v_property.country, 'US'), v_property.property_type,
+    v_property_address_line_1, v_property_address_line_2, v_property_city, v_property_state, v_property_zip,
+    coalesce(v_property_country, 'US'), v_property_type,
     v_title, v_description
   )
   returning service_requests.id into v_request_id;
