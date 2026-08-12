@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as PremierDb from '@premier/db';
 
 // Regression coverage for the Forge V1 readiness audit's Batch A finding
 // (docs/releases/forge-v1-readiness-audit.md, Finding F1):
@@ -10,8 +11,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // authorization boundary directly at the server-action call site, not by
 // checking whether a UI button is hidden — matching the established
 // pattern in jobs/actions.test.ts and quotes/actions.test.ts.
+//
+// Also covers F2 (docs/implementation/v1-known-gaps-audit.md §9):
+// createEstimateFromRequestAction() now delegates to record_request_triage
+// instead of hand-reproducing its transition logic, so its tests mock the
+// RPC boundary (`rpcMock`) the same way
+// site-visits/triage-consolidation.test.ts does for
+// recordRequestTriageAction, using the real `recordRequestTriage` query-layer
+// function (vi.importActual) rather than re-mocking it — this proves the
+// action passes decision='remote_estimate' through unmodified, not that a
+// second hand-written mock happens to agree with the RPC.
 
-const { getServerSupabaseMock, getActiveOrgContextMock, createServiceClientMock, createServiceRequestMock, logActivityMock, fromMock } =
+const { getServerSupabaseMock, getActiveOrgContextMock, createServiceClientMock, createServiceRequestMock, logActivityMock, fromMock, rpcMock } =
   vi.hoisted(() => ({
     getServerSupabaseMock: vi.fn(),
     getActiveOrgContextMock: vi.fn(),
@@ -19,18 +30,23 @@ const { getServerSupabaseMock, getActiveOrgContextMock, createServiceClientMock,
     createServiceRequestMock: vi.fn(),
     logActivityMock: vi.fn(),
     fromMock: vi.fn(),
+    rpcMock: vi.fn(),
   }));
 
 vi.mock('@/lib/supabase-server', () => ({
   getServerSupabase: getServerSupabaseMock,
 }));
 
-vi.mock('@premier/db', () => ({
-  getActiveOrgContext: getActiveOrgContextMock,
-  createServiceClient: createServiceClientMock,
-  createServiceRequest: createServiceRequestMock,
-  logActivity: logActivityMock,
-}));
+vi.mock('@premier/db', async () => {
+  const actual = await vi.importActual<typeof PremierDb>('@premier/db');
+  return {
+    ...actual,
+    getActiveOrgContext: getActiveOrgContextMock,
+    createServiceClient: createServiceClientMock,
+    createServiceRequest: createServiceRequestMock,
+    logActivity: logActivityMock,
+  };
+});
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
@@ -89,6 +105,7 @@ function buildManualRequestFormData(overrides: Record<string, string> = {}): For
 function mockSignedInAs(role: 'owner' | 'admin' | 'employee' | 'subcontractor' | 'viewer') {
   getServerSupabaseMock.mockResolvedValue({
     auth: { getUser: () => Promise.resolve({ data: { user: { id: 'user-1' } }, error: null }) },
+    rpc: rpcMock,
   });
   getActiveOrgContextMock.mockResolvedValue({ success: true, data: { orgId: ORG_ID, role } });
 }
@@ -245,20 +262,79 @@ describe('direct-work-order authorization boundary (createJobFromRequestAction)'
   });
 });
 
-describe('remote-estimate conversion path is unaffected by the Batch A fix', () => {
+describe('remote-estimate conversion path delegates to record_request_triage (Finding F2 fix)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     createServiceClientMock.mockReturnValue({ from: fromMock });
     logActivityMock.mockResolvedValue(undefined);
   });
 
-  it('subcontractor can still create an estimate from a request (canCreateEstimates, unchanged — Finding F2 is explicitly out of Batch A scope)', async () => {
-    mockSignedInAs('subcontractor');
-    mockServiceClientForConversion('estimates', 'est-1');
+  for (const role of ['owner', 'admin', 'employee', 'subcontractor'] as const) {
+    it(`${role} can create an estimate from a request (canTriageRequests, matches TriagePanel's own gate)`, async () => {
+      mockSignedInAs(role);
+      rpcMock.mockResolvedValue({ data: { estimateId: 'est-1', siteVisitId: null, jobId: null }, error: null });
+
+      const result = await createEstimateFromRequestAction(null, buildFormData(REQUEST_ID));
+
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.estimateId).toBe('est-1');
+    });
+  }
+
+  it('viewer CANNOT create an estimate from a request — the RPC-level canTriageRequests gate now applies here too (previously this legacy action had no capability check at all)', async () => {
+    mockSignedInAs('viewer');
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'Role viewer does not have canTriageRequests' } });
 
     const result = await createEstimateFromRequestAction(null, buildFormData(REQUEST_ID));
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+  });
+
+  it('calls record_request_triage with decision=remote_estimate unmodified — no second, hand-written source of triage semantics', async () => {
+    mockSignedInAs('owner');
+    rpcMock.mockResolvedValue({ data: { estimateId: 'est-1', siteVisitId: null, jobId: null }, error: null });
+
+    await createEstimateFromRequestAction(null, buildFormData(REQUEST_ID));
+
+    expect(rpcMock).toHaveBeenCalledWith(
+      'record_request_triage',
+      expect.objectContaining({ p_request_id: REQUEST_ID, p_decision: 'remote_estimate' })
+    );
+    // No raw table writes — the RPC is the sole write path now.
+    expect(createServiceClientMock).not.toHaveBeenCalled();
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('a request already triaged some other way rejects the legacy conversion instead of creating a second, conflicting estimate — the RPC-level "already triaged" rule is surfaced, not swallowed', async () => {
+    mockSignedInAs('owner');
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { message: 'This request has already been triaged — use correct_request_triage to change it' },
+    });
+
+    const result = await createEstimateFromRequestAction(null, buildFormData(REQUEST_ID));
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toContain('already been triaged');
+    // Exactly one attempt — no retry/fallback path that could create a
+    // duplicate estimate through some other write.
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('repeated conversion attempts remain safe — a second call surfaces the same rejection, not a second estimate', async () => {
+    mockSignedInAs('owner');
+    rpcMock.mockResolvedValueOnce({ data: { estimateId: 'est-1', siteVisitId: null, jobId: null }, error: null });
+    rpcMock.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'This request has already been triaged — use correct_request_triage to change it' },
+    });
+
+    const first = await createEstimateFromRequestAction(null, buildFormData(REQUEST_ID));
+    const second = await createEstimateFromRequestAction(null, buildFormData(REQUEST_ID));
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(false);
+    expect(rpcMock).toHaveBeenCalledTimes(2);
   });
 });
 
