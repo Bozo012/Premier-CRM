@@ -11,7 +11,7 @@ import {
   type OrgRole,
   type Result,
 } from '@premier/shared';
-import { createServiceClient, createServiceRequest, getActiveOrgContext, logActivity } from '@premier/db';
+import { createServiceClient, createServiceRequest, getActiveOrgContext, recordRequestTriage } from '@premier/db';
 
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -206,6 +206,27 @@ export async function createManualRequestAction(
 
 // ---------------------------------------------------------------------------
 // Create estimate from request
+//
+// F2 (docs/releases/forge-v1-readiness-audit.md; docs/implementation/
+// v1-known-gaps-audit.md §9): this legacy action used to hand-reproduce
+// record_request_triage(decision='remote_estimate')'s insert/update logic
+// directly against the tables, which meant it never set triage_decision/
+// triage_reason/triaged_by/triaged_at, and — because it checked
+// estimate_id/job_id instead of triage_decision — could be called again
+// after the request had already been triaged some other way (e.g.
+// site_visit_required), producing a request in two conflicting states at
+// once. It also had no capability check at all (unlike createManualRequest-
+// Action/createJobFromRequestAction), so — although this action has no
+// remaining UI caller (TriagePanel is the only visible trigger; see
+// tests/e2e/request-conversion-bot.spec.ts) — a direct call could reach it
+// as a viewer, which canTriageRequests never permits.
+//
+// Fix: delegate to record_request_triage itself rather than duplicating its
+// transition logic a second time. This is the same authoritative RPC
+// TriagePanel calls via recordRequestTriageAction — the two paths now
+// produce byte-identical service_requests state, one source of triage
+// semantics, and the RPC's own capability + duplicate-triage checks apply
+// here for free.
 // ---------------------------------------------------------------------------
 
 export type CreateEstimateFromRequestActionState = Result<{ estimateId: string }>;
@@ -216,66 +237,30 @@ export async function createEstimateFromRequestAction(
 ): Promise<CreateEstimateFromRequestActionState> {
   const contextResult = await getRequestActionContext();
   if (!contextResult.success) return contextResult;
-  const { orgId, userId } = contextResult.data;
 
   const requestId = readString(formData, 'requestId');
   if (!requestId) {
     return err(ErrorCode.VALIDATION_ERROR, 'Missing request ID.');
   }
 
-  const conversionResult = await getRequestConversionContext({ orgId, requestId });
-  if (!conversionResult.success) return conversionResult;
-  const { customerId, estimateTitle, propertyId, request } = conversionResult.data;
-
-  const client = createServiceClient();
-
-  const { data: newEstimate, error: insertError } = await client
-    .from('estimates')
-    .insert({
-      org_id: orgId,
-      customer_id: customerId,
-      property_id: propertyId,
-      service_request_id: requestId,
-      description: request.service_description ?? null,
-      title: estimateTitle,
-      status: 'draft',
-      created_by: userId,
-    })
-    .select('id')
-    .single();
-
-  if (insertError || !newEstimate) {
-    return err(ErrorCode.DB_ERROR, insertError?.message ?? 'Failed to create estimate.');
-  }
-
-  const { error: updateError } = await client
-    .from('service_requests')
-    .update({
-      estimate_id: newEstimate.id,
-      status: 'estimate_created',
-      converted_at: new Date().toISOString(),
-    })
-    .eq('id', requestId)
-    .eq('org_id', orgId);
-
-  if (updateError) {
-    return err(ErrorCode.DB_ERROR, updateError.message);
-  }
-
-  await logActivity(client, {
-    orgId,
-    entityType: 'estimate',
-    entityId: newEstimate.id,
-    eventType: 'estimate_created_from_request',
-    message: `Estimate created from service request ${requestId}.`,
-    actorUserId: userId,
+  const supabase = await getServerSupabase();
+  const result = await recordRequestTriage(supabase, {
+    requestId,
+    decision: 'remote_estimate',
+    reason: 'Estimate created via legacy conversion action.',
   });
+  if (!result.success) return result;
+
+  const { estimateId } = result.data;
+  if (!estimateId) {
+    return err(ErrorCode.DB_ERROR, 'Triage succeeded but no estimate was created.');
+  }
 
   revalidatePath(`/requests/${requestId}`);
   revalidatePath('/requests');
   revalidatePath('/estimates');
 
-  return ok({ estimateId: newEstimate.id });
+  return ok({ estimateId });
 }
 
 // ---------------------------------------------------------------------------
