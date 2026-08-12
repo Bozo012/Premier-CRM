@@ -141,6 +141,29 @@ export function PortalNewRequestSheet({ properties }: { properties: PortalNewReq
                   />
                 </div>
 
+                <div>
+                  <label
+                    htmlFor="portal-new-request-urgency"
+                    className="block text-xs font-bold uppercase tracking-wide text-muted-foreground"
+                  >
+                    How urgent is this?
+                  </label>
+                  <select
+                    id="portal-new-request-urgency"
+                    name="customerReportedUrgency"
+                    defaultValue=""
+                    className="mt-1.5 min-h-11 w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Prefer not to say</option>
+                    <option value="routine">Routine — whenever works</option>
+                    <option value="soon">Soon — within the next few days</option>
+                    <option value="urgent">Urgent — needs attention right away</option>
+                  </select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    This helps our team understand your situation — our staff still reviews and schedules every request.
+                  </p>
+                </div>
+
                 {state && !state.success ? (
                   <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>
                 ) : null}

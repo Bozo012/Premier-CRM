@@ -1,6 +1,7 @@
 import { ErrorCode, err, ok, type Result } from '@premier/shared';
 
 import type { DbClient } from '../client';
+import type { CustomerReportedUrgency } from './service-requests';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,6 +34,8 @@ export interface RequestListItem {
   serviceLine: string | null;
   status: string;
   priority: string;
+  /** What the customer said about urgency at submission — portal-only, never staff-set, never used to derive `priority`. */
+  customerReportedUrgency: CustomerReportedUrgency | null;
   createdAt: string;
   /** Linked job id if this request has been converted to a job (legacy path). */
   jobId: string | null;
@@ -96,6 +99,7 @@ export async function listRequests(
       request_number,
       status,
       priority,
+      customer_reported_urgency,
       job_id,
       estimate_id,
       customer_id,
@@ -153,6 +157,7 @@ export async function listRequests(
       serviceLine,
       status: row.status,
       priority: row.priority,
+      customerReportedUrgency: (row.customer_reported_urgency as CustomerReportedUrgency | null) ?? null,
       createdAt: row.submitted_at,
       jobId: row.job_id ?? null,
       estimateId: row.estimate_id ?? null,
@@ -188,6 +193,7 @@ export async function getRequestById(
       request_number,
       status,
       priority,
+      customer_reported_urgency,
       job_id,
       estimate_id,
       customer_id,
@@ -271,6 +277,7 @@ export async function getRequestById(
     serviceLine,
     status: row.status,
     priority: row.priority,
+    customerReportedUrgency: (row.customer_reported_urgency as CustomerReportedUrgency | null) ?? null,
     createdAt: row.submitted_at,
     jobId: row.job_id ?? null,
     estimateId: row.estimate_id ?? null,

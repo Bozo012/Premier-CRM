@@ -33,7 +33,8 @@ export type Capability =
   | 'canCreateExpenses'
   | 'canApproveExpenses'
   | 'canPublishCustomerMedia'
-  | 'canReplyToCustomers';
+  | 'canReplyToCustomers'
+  | 'canManageCustomers';
 
 /**
  * Day-to-day estimate/invoice creation and sending is normal operations for
@@ -111,6 +112,19 @@ export const CAPABILITIES: Record<Capability, readonly OrgRole[]> = {
   // does not block subcontractors from performing assigned operational
   // work elsewhere.
   canReplyToCustomers: ['owner', 'admin', 'employee'],
+
+  // CP-4 (docs/security/customers-properties-authorization-audit.md §10/§15;
+  // product decision recorded 2026-08-13). Covers the only two operations
+  // that exist today — createCustomerAction and createPropertyForCustomerAction
+  // — deliberately not split into separate customer/property or
+  // create/edit/archive capabilities, since no edit/archive/delete action
+  // exists yet for either entity; invent that split when those actions do.
+  // Deliberately narrower than canScheduleJobs/canTriageRequests: customers
+  // and properties are the CRM's authoritative master identity/contact/
+  // location records, not routine field-work data, so subcontractors don't
+  // get standing authority to create them just from active org membership —
+  // this can be widened later if a real operational need appears.
+  canManageCustomers: ['owner', 'admin', 'employee'],
 };
 
 export function hasCapability(role: OrgRole, capability: Capability): boolean {

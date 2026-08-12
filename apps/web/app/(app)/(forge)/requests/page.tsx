@@ -136,7 +136,12 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
                       {request.ageLabel}
                     </span>
                     {request.priorityLabel ? (
-                      <ForgeStatusPill tone={request.priorityTone}>{request.priorityLabel}</ForgeStatusPill>
+                      <ForgeStatusPill tone={request.priorityTone}>Internal priority: {request.priorityLabel}</ForgeStatusPill>
+                    ) : null}
+                    {request.customerReportedUrgencyLabel ? (
+                      <span className="rounded-full bg-muted px-2 py-0.5 font-medium">
+                        Customer reported: {request.customerReportedUrgencyLabel}
+                      </span>
                     ) : null}
                     {intakePathLabel ? <span>{intakePathLabel}</span> : null}
                   </div>

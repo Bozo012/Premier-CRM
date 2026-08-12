@@ -4129,6 +4129,9 @@ export type Database = {
           converted_at: string | null
           created_at: string
           customer_id: string
+          customer_reported_urgency:
+            | Database["public"]["Enums"]["service_request_customer_urgency"]
+            | null
           estimate_id: string | null
           id: string
           internal_notes: string | null
@@ -4174,6 +4177,9 @@ export type Database = {
           converted_at?: string | null
           created_at?: string
           customer_id: string
+          customer_reported_urgency?:
+            | Database["public"]["Enums"]["service_request_customer_urgency"]
+            | null
           estimate_id?: string | null
           id?: string
           internal_notes?: string | null
@@ -4219,6 +4225,9 @@ export type Database = {
           converted_at?: string | null
           created_at?: string
           customer_id?: string
+          customer_reported_urgency?:
+            | Database["public"]["Enums"]["service_request_customer_urgency"]
+            | null
           estimate_id?: string | null
           id?: string
           internal_notes?: string | null
@@ -5934,6 +5943,7 @@ export type Database = {
       }
       create_portal_service_request: {
         Args: {
+          p_customer_reported_urgency?: string
           p_property_id?: string
           p_service_description: string
           p_service_title: string
@@ -7443,6 +7453,7 @@ export type Database = {
         | "expired"
         | "revised"
       quote_type: "standard" | "options" | "package" | "quick"
+      service_request_customer_urgency: "routine" | "soon" | "urgent"
       service_request_priority: "low" | "normal" | "high" | "emergency"
       service_request_source:
         | "website"
@@ -7779,6 +7790,7 @@ export const Constants = {
         "revised",
       ],
       quote_type: ["standard", "options", "package", "quick"],
+      service_request_customer_urgency: ["routine", "soon", "urgent"],
       service_request_priority: ["low", "normal", "high", "emergency"],
       service_request_source: [
         "website",

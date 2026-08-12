@@ -45,6 +45,7 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   canEditEstimate: 'edit the estimate',
   canEditWorkingInvoice: 'edit the working invoice',
   canIssueRefunds: 'issue refunds',
+  canManageCustomers: 'create or edit customers and properties',
   canManageDeposits: 'manage deposits',
   canManageInspectionTemplates: 'manage inspection templates',
   canProposeChangeOrders: 'propose change orders',

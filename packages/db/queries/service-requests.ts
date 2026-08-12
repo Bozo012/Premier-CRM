@@ -22,6 +22,13 @@ export interface CreatePortalServiceRequestResult {
   submittedAt: string;
 }
 
+// Mirrors public.service_request_customer_urgency
+// (20260813020000_portal_customer_reported_urgency.sql). Declared as a local
+// literal union rather than importing from Database['public']['Enums'] since
+// packages/db/types.ts is regenerated from the live schema and this type is
+// needed before that regeneration runs.
+export type CustomerReportedUrgency = 'routine' | 'soon' | 'urgent';
+
 function normalizePhoneForLookup(phone: string): string {
   return phone.replace(/\D+/g, '').slice(-10);
 }
@@ -253,12 +260,18 @@ export async function createServiceRequest(
  */
 export async function createPortalServiceRequest(
   client: DbClient,
-  args: { serviceTitle: string; serviceDescription: string; propertyId?: string | null }
+  args: {
+    serviceTitle: string;
+    serviceDescription: string;
+    propertyId?: string | null;
+    customerReportedUrgency?: CustomerReportedUrgency | null;
+  }
 ): Promise<Result<CreatePortalServiceRequestResult>> {
   const { data, error } = await client.rpc('create_portal_service_request', {
     p_service_title: args.serviceTitle,
     p_service_description: args.serviceDescription,
     p_property_id: (args.propertyId ?? null) as unknown as string,
+    p_customer_reported_urgency: (args.customerReportedUrgency ?? null) as unknown as string,
   });
 
   if (error) return err(ErrorCode.VALIDATION_ERROR, error.message);

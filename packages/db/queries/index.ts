@@ -208,6 +208,7 @@ export {
   createPortalServiceRequest,
   type CreateServiceRequestResult,
   type CreatePortalServiceRequestResult,
+  type CustomerReportedUrgency,
 } from './service-requests';
 export {
   createJobFromAcceptedQuote,

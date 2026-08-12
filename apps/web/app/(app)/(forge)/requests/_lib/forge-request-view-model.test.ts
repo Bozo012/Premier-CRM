@@ -13,6 +13,7 @@ describe('forge request view model', () => {
         serviceLine: 'Fence repair',
         status: 'new',
         priority: 'high',
+        customerReportedUrgency: null,
         createdAt: '2026-08-05T12:00:00.000Z',
         jobId: null,
         estimateId: null,
@@ -28,8 +29,35 @@ describe('forge request view model', () => {
 
     expect(model.statusTone).toBe('amber');
     expect(model.priorityLabel).toBe('High');
+    expect(model.customerReportedUrgencyLabel).toBeNull();
     expect(model.nextActionLabel).toBe('Triage request');
     expect(model.ageLabel).toBe('2h ago');
+  });
+
+  it('surfaces customer-reported urgency as a separate label from internal priority — never conflated', () => {
+    const model = toForgeRequestSummary(
+      {
+        id: 'req-3',
+        requestNumber: 'REQ-003',
+        title: 'Alex Customer — Roof leak',
+        description: 'Water coming through the ceiling',
+        serviceLine: 'Roofing',
+        status: 'new',
+        // Staff-authoritative priority stays at its untouched default even
+        // though the customer reported "urgent" — this is the exact
+        // separation the portal urgency feature must preserve.
+        priority: 'normal',
+        customerReportedUrgency: 'urgent',
+        createdAt: '2026-08-05T12:00:00.000Z',
+        jobId: null,
+        estimateId: null,
+        customer: null,
+      },
+      new Date('2026-08-05T13:00:00.000Z')
+    );
+
+    expect(model.priorityLabel).toBeNull();
+    expect(model.customerReportedUrgencyLabel).toBe('Urgent');
   });
 
   it('keeps linked estimate navigation explicit', () => {
@@ -42,6 +70,7 @@ describe('forge request view model', () => {
         serviceLine: 'Deck',
         status: 'estimate_created',
         priority: 'normal',
+        customerReportedUrgency: null,
         createdAt: '2026-08-01T12:00:00.000Z',
         jobId: null,
         estimateId: 'est-1',

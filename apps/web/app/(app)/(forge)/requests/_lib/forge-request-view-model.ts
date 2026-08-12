@@ -16,6 +16,8 @@ export interface ForgeRequestSummary {
   statusTone: StatusTone;
   priorityLabel: string | null;
   priorityTone: StatusTone;
+  /** What the customer reported, separate from and never mapped into internal priority. */
+  customerReportedUrgencyLabel: string | null;
   nextActionLabel: string | null;
   relatedHref: string | null;
 }
@@ -43,6 +45,7 @@ export function toForgeRequestSummary(item: RequestListItem, now = new Date()): 
     statusTone: requestStatusTone(item.status),
     priorityLabel: item.priority !== 'normal' ? formatEnumLabel(item.priority) : null,
     priorityTone: priorityTone(item.priority),
+    customerReportedUrgencyLabel: item.customerReportedUrgency ? formatEnumLabel(item.customerReportedUrgency) : null,
     nextActionLabel: nextRequestActionLabel(item),
     relatedHref: item.estimateId ? `/estimates/${item.estimateId}` : item.jobId ? `/jobs/${item.jobId}` : null,
   };

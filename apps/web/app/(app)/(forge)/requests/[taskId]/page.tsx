@@ -78,7 +78,12 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
         <div className="flex flex-wrap items-center gap-2">
           <ForgeStatusPill tone={model.statusTone}>{model.statusLabel}</ForgeStatusPill>
           {model.priorityLabel ? (
-            <ForgeStatusPill tone={model.priorityTone}>{model.priorityLabel}</ForgeStatusPill>
+            <ForgeStatusPill tone={model.priorityTone}>Internal priority: {model.priorityLabel}</ForgeStatusPill>
+          ) : null}
+          {model.customerReportedUrgencyLabel ? (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              Customer reported: {model.customerReportedUrgencyLabel}
+            </span>
           ) : null}
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
             {model.number}
@@ -143,6 +148,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
       <ForgeCard>
         <TriagePanel
           requestId={request.id}
+          customerReportedUrgency={request.customerReportedUrgency}
           triageDecision={request.triageDecision}
           triageReason={request.triageReason}
           triagedAt={request.triagedAt}

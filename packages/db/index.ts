@@ -184,6 +184,7 @@ export {
   type EstimateStatus,
   type CreateServiceRequestResult,
   type CreatePortalServiceRequestResult,
+  type CustomerReportedUrgency,
   type Customer,
   type Customer360,
   type Customer360Invoice,

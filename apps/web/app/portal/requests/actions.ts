@@ -27,6 +27,11 @@ const CreatePortalRequestSchema = z.object({
     .min(1, 'A description is required.')
     .max(5000, 'Keep the description under 5,000 characters.'),
   propertyId: z.string().trim().uuid('Choose a valid property.').optional().or(z.literal('')),
+  // What the customer says about urgency — never priority. See
+  // 20260813020000_portal_customer_reported_urgency.sql: this is a
+  // separate column, staff-facing context only, and is never copied into
+  // service_requests.priority anywhere in this action, the RPC, or the DB.
+  customerReportedUrgency: z.enum(['routine', 'soon', 'urgent']).optional().or(z.literal('')),
 });
 
 export type CreatePortalServiceRequestActionState = Result<{
@@ -45,6 +50,7 @@ export async function createPortalServiceRequestAction(
   }
 
   const rawPropertyId = formData.get('propertyId');
+  const rawUrgency = formData.get('customerReportedUrgency');
   const parsed = CreatePortalRequestSchema.safeParse({
     serviceTitle: formData.get('serviceTitle'),
     serviceDescription: formData.get('serviceDescription'),
@@ -52,6 +58,7 @@ export async function createPortalServiceRequestAction(
     // .optional() only accepts undefined, so normalize null -> undefined
     // here rather than widening the schema to accept null everywhere.
     propertyId: typeof rawPropertyId === 'string' ? rawPropertyId : undefined,
+    customerReportedUrgency: typeof rawUrgency === 'string' ? rawUrgency : undefined,
   });
 
   if (!parsed.success) {
@@ -60,11 +67,13 @@ export async function createPortalServiceRequestAction(
   }
 
   const propertyId = parsed.data.propertyId ? parsed.data.propertyId : null;
+  const customerReportedUrgency = parsed.data.customerReportedUrgency ? parsed.data.customerReportedUrgency : null;
 
   const result = await createPortalServiceRequest(portalClient as unknown as DbClient, {
     serviceTitle: parsed.data.serviceTitle,
     serviceDescription: parsed.data.serviceDescription,
     propertyId,
+    customerReportedUrgency,
   });
 
   if (!result.success) return result;

@@ -69,6 +69,7 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
   canSendQuote: 'send a quote',
   canPublishCustomerMedia: 'publish photos to the customer portal',
   canReplyToCustomers: 'reply to customers',
+  canManageCustomers: 'create or edit customers and properties',
 };
 
 async function getQuoteActionContext(
