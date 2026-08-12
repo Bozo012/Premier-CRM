@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { createServiceClient, getActiveOrgContext, listThreadMessages, markThreadReadByStaff } from '@premier/db';
+import { hasCapability, type OrgRole } from '@premier/shared';
 
 import { ForgeBackLink, ForgeCard, ForgePage, ForgeSectionTitle } from '@/components/forge/presentation';
 import { OrgContextError } from '@/components/org-context-error';
@@ -47,7 +48,8 @@ export default async function MessageThreadDetailPage({ params }: MessageThreadD
     );
   }
 
-  const { orgId } = orgContext.data;
+  const { orgId, role } = orgContext.data;
+  const canReply = hasCapability(role as OrgRole, 'canReplyToCustomers');
   const serviceClient = createServiceClient();
 
   const { data: thread, error: threadError } = await serviceClient
@@ -133,7 +135,7 @@ export default async function MessageThreadDetailPage({ params }: MessageThreadD
         </div>
       </ForgeCard>
 
-      <StaffReplyForm threadId={thread.id} />
+      <StaffReplyForm threadId={thread.id} canReply={canReply} />
     </ForgePage>
   );
 }

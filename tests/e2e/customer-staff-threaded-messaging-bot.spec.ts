@@ -44,6 +44,9 @@ interface Fixture {
   otherOrgRequestId: string;
   owner: StaffAccount;
   admin: StaffAccount;
+  employee: StaffAccount;
+  subcontractor: StaffAccount;
+  viewer: StaffAccount;
   otherOrgOwner: StaffAccount;
   customer: CustomerAccount;
   otherCustomer: CustomerAccount;
@@ -154,7 +157,7 @@ test.describe('customer-staff threaded messaging bot', () => {
       .select('id')
       .single();
 
-    async function createStaff(role: 'owner' | 'admin', targetOrgId: string): Promise<StaffAccount> {
+    async function createStaff(role: 'owner' | 'admin' | 'employee' | 'subcontractor' | 'viewer', targetOrgId: string): Promise<StaffAccount> {
       const email = `${E2E_TEST_PREFIX.toLowerCase()}messaging-${role}-${suffix}-${Math.random().toString(36).slice(2, 6)}@example.com`;
       const password = `Messaging_${Math.random().toString(36).slice(2)}!1`;
       const { data: created, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
@@ -189,6 +192,9 @@ test.describe('customer-staff threaded messaging bot', () => {
       otherOrgRequestId: otherOrgRequest!.id,
       owner: await createStaff('owner', orgId),
       admin: await createStaff('admin', orgId),
+      employee: await createStaff('employee', orgId),
+      subcontractor: await createStaff('subcontractor', orgId),
+      viewer: await createStaff('viewer', orgId),
       otherOrgOwner: await createStaff('owner', otherOrgId),
       customer: await createCustomerAccount(customerId, orgId, 'owner'),
       otherCustomer: await createCustomerAccount(otherCustomerId, orgId, 'other'),
@@ -197,7 +203,16 @@ test.describe('customer-staff threaded messaging bot', () => {
 
   test.afterAll(async () => {
     if (!admin || !fx) return;
-    const userIds = [fx.owner.userId, fx.admin.userId, fx.otherOrgOwner.userId, fx.customer.userId, fx.otherCustomer.userId];
+    const userIds = [
+      fx.owner.userId,
+      fx.admin.userId,
+      fx.employee.userId,
+      fx.subcontractor.userId,
+      fx.viewer.userId,
+      fx.otherOrgOwner.userId,
+      fx.customer.userId,
+      fx.otherCustomer.userId,
+    ];
     await admin.from('communication_messages').delete().eq('org_id', fx.orgId);
     await admin.from('communication_threads').delete().eq('org_id', fx.orgId);
     await admin.from('customer_accounts').delete().in('customer_id', [fx.customerId, fx.otherCustomerId]);
@@ -417,5 +432,59 @@ test.describe('customer-staff threaded messaging bot', () => {
     expect(threadId).toBeTruthy();
     expect(fx.customer.userId).toBeTruthy();
     expect(fx.owner.userId).toBeTruthy();
+  });
+
+  // ==========================================================================
+  // canReplyToCustomers role matrix (PR #144 correction): owner/admin/employee
+  // allowed, subcontractor/viewer rejected. Proven directly against the RPC —
+  // the actual enforcement boundary — not just the app-level capability map
+  // (packages/shared/permissions.test.ts covers that half).
+  // ==========================================================================
+
+  test('17. admin reply succeeds', async () => {
+    const client = await signIn(fx.admin.email, fx.admin.password);
+    const { data, error } = await client.rpc('send_staff_reply', { p_thread_id: threadId, p_body: 'Admin reply.' });
+    expect(error).toBeNull();
+    expect(data?.sender_type).toBe('staff');
+    expect(data?.sender_user_id).toBe(fx.admin.userId);
+  });
+
+  test('18. employee reply succeeds', async () => {
+    const client = await signIn(fx.employee.email, fx.employee.password);
+    const { data, error } = await client.rpc('send_staff_reply', { p_thread_id: threadId, p_body: 'Employee reply.' });
+    expect(error).toBeNull();
+    expect(data?.sender_type).toBe('staff');
+    expect(data?.sender_user_id).toBe(fx.employee.userId);
+  });
+
+  test('19. subcontractor reply fails (direct RPC attempt rejected)', async () => {
+    const client = await signIn(fx.subcontractor.email, fx.subcontractor.password);
+    const { data, error } = await client.rpc('send_staff_reply', { p_thread_id: threadId, p_body: 'Subcontractor reply attempt.' });
+    expect(error).not.toBeNull();
+    expect(data).toBeNull();
+
+    const { data: messages } = await admin.from('communication_messages').select('sender_user_id').eq('thread_id', threadId);
+    for (const m of messages ?? []) {
+      expect(m.sender_user_id).not.toBe(fx.subcontractor.userId);
+    }
+  });
+
+  test('20. viewer reply fails (direct RPC attempt rejected)', async () => {
+    const client = await signIn(fx.viewer.email, fx.viewer.password);
+    const { data, error } = await client.rpc('send_staff_reply', { p_thread_id: threadId, p_body: 'Viewer reply attempt.' });
+    expect(error).not.toBeNull();
+    expect(data).toBeNull();
+
+    const { data: messages } = await admin.from('communication_messages').select('sender_user_id').eq('thread_id', threadId);
+    for (const m of messages ?? []) {
+      expect(m.sender_user_id).not.toBe(fx.viewer.userId);
+    }
+  });
+
+  test('21. unauthenticated caller cannot call send_staff_reply', async () => {
+    const anon = apiClient();
+    const { data, error } = await anon.rpc('send_staff_reply', { p_thread_id: threadId, p_body: 'Anonymous reply attempt.' });
+    expect(error).not.toBeNull();
+    expect(data).toBeNull();
   });
 });

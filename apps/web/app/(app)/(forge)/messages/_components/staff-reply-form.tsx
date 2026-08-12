@@ -10,11 +10,25 @@ import { Button } from '@/components/ui/button';
 
 import { sendStaffReplyAction } from '../actions';
 
-export function StaffReplyForm({ threadId }: { threadId: string }) {
+interface StaffReplyFormProps {
+  threadId: string;
+  /** owner/admin/employee only — enforced again server-side by the RPC regardless. */
+  canReply: boolean;
+}
+
+export function StaffReplyForm({ threadId, canReply }: StaffReplyFormProps) {
   const router = useRouter();
   const [body, setBody] = useState('');
   const [isPending, startTransition] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  if (!canReply) {
+    return (
+      <p className="rounded-xl border bg-muted px-3 py-2 text-sm text-muted-foreground">
+        Your role does not permit replying to customers.
+      </p>
+    );
+  }
 
   const send = () => {
     if (!body.trim()) return;
