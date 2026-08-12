@@ -1,9 +1,12 @@
+import Link from 'next/link';
+
+import { listCustomerThreads } from '@premier/db';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-import { PortalContactSheet } from '../_components/portal-contact-sheet';
+import { NewConversationSheet } from '../_components/new-conversation-sheet';
 import { PortalShell, requirePortalUser } from '../_components/portal-shell';
 import { buildPortalContactViewModel, type PortalContactProperty } from '../_lib/portal-contact-view-model';
-import { listPortalMessages } from '../_lib/portal-messages';
 import { resolveActivePortalAccount } from '../_lib/portal-session';
 import { getServerSupabase } from '@/lib/supabase-server';
 
@@ -29,8 +32,8 @@ export default async function PortalMessagesPage() {
     return <PortalShell account={null} activeId="messages"><></></PortalShell>;
   }
 
-  const [messages, propertiesResult, requestsResult] = await Promise.all([
-    listPortalMessages({ customerId: account.customerId, orgId: account.orgId }),
+  const [threadsResult, propertiesResult, requestsResult] = await Promise.all([
+    listCustomerThreads(supabase),
     portalClient
       .from('customer_properties')
       .select('relationship, is_primary, properties(id, address_line_1, city, state, zip)')
@@ -41,6 +44,7 @@ export default async function PortalMessagesPage() {
       .eq('customer_id', account.customerId),
   ]);
 
+  const threads = threadsResult.success ? threadsResult.data : [];
   const contactModel = buildPortalContactViewModel({
     customerEmail: account.email,
     properties: (propertiesResult.data ?? []) as unknown as PortalContactProperty[],
@@ -54,46 +58,49 @@ export default async function PortalMessagesPage() {
           <div className="space-y-1">
             <h1 className="text-3xl font-semibold tracking-tight">Messages</h1>
             <p className="text-sm text-muted-foreground">
-              Your past messages to Premier. Replies come by the method you chose (phone, email,
-              or text) — there is no in-app reply thread yet, so check your inbox or phone for a
-              response.
+              Your conversations with Premier. Send a message and reply right here — no need to check
+              email or phone for a response.
             </p>
           </div>
-          <PortalContactSheet model={contactModel} />
+          <NewConversationSheet model={contactModel} />
         </header>
 
-        {messages.length === 0 ? (
+        {threads.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              No messages yet. Use &quot;Contact Premier&quot; to send one.
+              No conversations yet. Use &quot;New conversation&quot; to start one.
             </CardContent>
           </Card>
         ) : (
           <ul className="space-y-3">
-            {messages.map((msg) => (
-              <li key={msg.id}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">{msg.subject}</CardTitle>
-                    <CardDescription>
-                      {msg.referenceNumber ?? 'Reference pending'} · {formatDate(msg.createdAt)}
-                      {msg.category ? ` · ${msg.category}` : ''}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              </li>
-            ))}
+            {threads.map((thread) => {
+              const hasUnread = !thread.lastCustomerReadAt || new Date(thread.updatedAt) > new Date(thread.lastCustomerReadAt);
+              return (
+                <li key={thread.id}>
+                  <Link href={`/portal/messages/${thread.id}`} className="block">
+                    <Card className="transition hover:bg-muted/40">
+                      <CardHeader>
+                        <div className="flex items-center justify-between gap-2">
+                          <CardTitle className="text-base">{thread.subject}</CardTitle>
+                          {hasUnread ? (
+                            <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                              New reply
+                            </span>
+                          ) : null}
+                        </div>
+                        <CardDescription>
+                          {formatDate(thread.updatedAt)}
+                          {thread.category ? ` · ${thread.category}` : ''}
+                          {thread.status === 'closed' ? ' · Closed' : ''}
+                        </CardDescription>
+                      </CardHeader>
+                    </Card>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
-
-        <p className="text-xs text-muted-foreground">
-          Looking for change-order discussion on a specific job? Those comments live on the job
-          card on your{' '}
-          <a href="/portal/dashboard#jobs" className="underline underline-offset-4">
-            Home
-          </a>{' '}
-          page.
-        </p>
       </main>
     </PortalShell>
   );

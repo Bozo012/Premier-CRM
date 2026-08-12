@@ -31,3 +31,28 @@ describe('canPublishCustomerMedia — owner/admin only', () => {
     expect(hasCapability('subcontractor', 'canPublishCustomerMedia')).toBe(false);
   });
 });
+
+/**
+ * `canReplyToCustomers` (Customer / Staff Threaded Messaging V1, PR #144)
+ * must resolve identically here and in `role_has_capability()`
+ * (20260812020000_customer_reply_capability.sql) — same parity discipline as
+ * canPublishCustomerMedia above. A staff reply is an outward-facing
+ * communication made as Premier Property Maintenance, so subcontractor is
+ * deliberately excluded despite holding canScheduleJobs/canTriageRequests;
+ * viewer never gets write capabilities anywhere in this codebase. The SQL
+ * side is proven live in
+ * tests/e2e/customer-staff-threaded-messaging-bot.spec.ts.
+ */
+describe('canReplyToCustomers — owner/admin/employee only', () => {
+  const EXPECTED_ALLOWED: readonly OrgRole[] = ['owner', 'admin', 'employee'];
+
+  it.each(ALL_ROLES)('role=%s', (role) => {
+    expect(hasCapability(role, 'canReplyToCustomers')).toBe(EXPECTED_ALLOWED.includes(role));
+  });
+
+  it('does not grant subcontractor customer-communication authority despite operational capabilities', () => {
+    expect(hasCapability('subcontractor', 'canScheduleJobs')).toBe(true);
+    expect(hasCapability('subcontractor', 'canReplyToCustomers')).toBe(false);
+    expect(hasCapability('viewer', 'canReplyToCustomers')).toBe(false);
+  });
+});

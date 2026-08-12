@@ -32,7 +32,8 @@ export type Capability =
   | 'canSendQuote'
   | 'canCreateExpenses'
   | 'canApproveExpenses'
-  | 'canPublishCustomerMedia';
+  | 'canPublishCustomerMedia'
+  | 'canReplyToCustomers';
 
 /**
  * Day-to-day estimate/invoice creation and sending is normal operations for
@@ -100,6 +101,16 @@ export const CAPABILITIES: Record<Capability, readonly OrgRole[]> = {
   // work, so employee/subcontractor never get it regardless of what other
   // media capabilities they hold.
   canPublishCustomerMedia: ['owner', 'admin'],
+
+  // Customer / Staff Threaded Messaging V1 (PR #144). A staff reply is a
+  // customer-facing communication made as Premier Property Maintenance, not
+  // routine operational work. Employees handle normal customer
+  // communication, so they get this; subcontractors do not automatically
+  // gain authority to represent the business to customers merely because
+  // they hold active org membership — narrower than canScheduleJobs, but
+  // does not block subcontractors from performing assigned operational
+  // work elsewhere.
+  canReplyToCustomers: ['owner', 'admin', 'employee'],
 };
 
 export function hasCapability(role: OrgRole, capability: Capability): boolean {

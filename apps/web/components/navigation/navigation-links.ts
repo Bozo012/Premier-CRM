@@ -13,6 +13,7 @@ export const forgeNavigationLinks = [
   { href: '/routes', label: 'Route Planning' },
   { href: '/activity-logs', label: 'Activity Logs' },
   { href: '/site-photos', label: 'Site Photos' },
+  { href: '/messages', label: 'Messages' },
   { href: '/expenses', label: 'Expenses' },
   { href: '/team', label: 'Team' },
   { href: '/settings', label: 'Settings' },

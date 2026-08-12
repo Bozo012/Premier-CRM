@@ -332,3 +332,17 @@ export {
   type PublishedPhoto,
   type RequestPendingUploadInput,
 } from './queries';
+export {
+  listCustomerThreadMessages,
+  listCustomerThreads,
+  listOrgThreads,
+  listThreadMessages,
+  markThreadReadByCustomer,
+  markThreadReadByStaff,
+  sendCustomerMessage,
+  sendStaffReply,
+  startCustomerThread,
+  type CommunicationMessage,
+  type CommunicationThread,
+  type StartCustomerThreadInput,
+} from './queries';
