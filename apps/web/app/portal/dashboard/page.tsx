@@ -5,8 +5,10 @@ import {
   getDepositState,
   getEntityTimelineForCustomer,
   getMySiteVisitSummary,
+  getSignedReadUrl,
   getWorkingInvoiceSummaryForCustomer,
   listChangeOrdersForJob,
+  listCustomerVisiblePhotosForJob,
   listOpenSchedulingSlots,
   type CustomerSiteVisitSummary,
 } from '@premier/db';
@@ -187,7 +189,7 @@ export default async function PortalDashboardPage() {
 
   const jobDetails = await Promise.all(
     (jobs ?? []).map(async (job) => {
-      const [slotsResult, depositResult, workingInvoiceResult, changeOrdersResult, timelineResult] =
+      const [slotsResult, depositResult, workingInvoiceResult, changeOrdersResult, timelineResult, photosResult] =
         await Promise.all([
           job.status === 'approved'
             ? listOpenSchedulingSlots(serviceClient, { orgId: job.org_id })
@@ -200,7 +202,23 @@ export default async function PortalDashboardPage() {
             entityType: 'job',
             entityId: job.id,
           }),
+          // Customer-Safe Photo Visibility (docs/implementation/customer-safe-
+          // photo-visibility-design.md, PR #141): called with the portal-scoped
+          // (RLS/auth.uid()-authenticated) client, same discipline as
+          // getMySiteVisitSummary above — list_customer_visible_photos proves
+          // ownership AND customer_visible=true together, server-side, before
+          // any signed URL is ever generated.
+          listCustomerVisiblePhotosForJob(portalClient, job.id),
         ]);
+
+      const photos = photosResult.success
+        ? await Promise.all(
+            photosResult.data.map(async (photo) => {
+              const signedUrl = photo.storagePath ? await getSignedReadUrl(serviceClient, photo.storagePath) : null;
+              return { id: photo.id, caption: photo.caption, imageUrl: signedUrl?.success ? signedUrl.data : null };
+            })
+          )
+        : [];
 
       return {
         job,
@@ -215,6 +233,7 @@ export default async function PortalDashboardPage() {
               createdAt: entry.createdAt,
             }))
           : [],
+        photos,
       };
     })
   );
@@ -294,7 +313,7 @@ export default async function PortalDashboardPage() {
       {jobDetails.length > 0 ? (
         <section id="jobs" className="space-y-4">
           <h2 className="text-xl font-semibold tracking-tight">Your jobs</h2>
-          {jobDetails.map(({ job, openSlots, depositState, workingInvoiceSummary, changeOrders, timeline }) => (
+          {jobDetails.map(({ job, openSlots, depositState, workingInvoiceSummary, changeOrders, timeline, photos }) => (
             <Card key={job.id}>
               <CardHeader>
                 <CardTitle>{job.title}</CardTitle>
@@ -343,6 +362,30 @@ export default async function PortalDashboardPage() {
                     Work in progress total so far: ${workingInvoiceSummary.runningTotal.toFixed(2)} (
                     {workingInvoiceSummary.lineCount} items)
                   </p>
+                ) : null}
+
+                {photos.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Photos</p>
+                    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {photos.map((photo) => (
+                        <li key={photo.id} className="overflow-hidden rounded-md border">
+                          <div className="grid aspect-video place-items-center bg-muted">
+                            {photo.imageUrl ? (
+                              <div
+                                role="img"
+                                aria-label={photo.caption}
+                                className="h-full w-full bg-cover bg-center"
+                                style={{ backgroundImage: `url(${photo.imageUrl})` }}
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Preview unavailable</span>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
 
                 {changeOrders.length > 0 ? (

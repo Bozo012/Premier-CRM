@@ -1419,6 +1419,163 @@ export type Database = {
           },
         ]
       }
+      expenses: {
+        Row: {
+          amount: number
+          approval_comment: string | null
+          approved_at: string | null
+          approved_by: string | null
+          billing_treatment: Database["public"]["Enums"]["expense_billing_treatment"]
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at: string
+          created_by: string | null
+          customer_charge_amount: number | null
+          customer_id: string
+          customer_visible_description: string | null
+          description: string
+          expense_number: string
+          id: string
+          internal_notes: string
+          invoice_id: string | null
+          job_id: string
+          markup_pct: number | null
+          org_id: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          property_id: string
+          purchase_date: string
+          receipt_vault_item_id: string | null
+          receipt_visibility: Database["public"]["Enums"]["expense_receipt_visibility"]
+          rejected_at: string | null
+          rejected_by: string | null
+          status: Database["public"]["Enums"]["expense_status"]
+          submitted_at: string | null
+          submitted_by: string | null
+          tax: number
+          total_cost: number | null
+          updated_at: string
+          vendor: string
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          amount: number
+          approval_comment?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          billing_treatment?: Database["public"]["Enums"]["expense_billing_treatment"]
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          created_by?: string | null
+          customer_charge_amount?: number | null
+          customer_id: string
+          customer_visible_description?: string | null
+          description: string
+          expense_number?: string
+          id?: string
+          internal_notes?: string
+          invoice_id?: string | null
+          job_id: string
+          markup_pct?: number | null
+          org_id: string
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          property_id: string
+          purchase_date?: string
+          receipt_vault_item_id?: string | null
+          receipt_visibility?: Database["public"]["Enums"]["expense_receipt_visibility"]
+          rejected_at?: string | null
+          rejected_by?: string | null
+          status?: Database["public"]["Enums"]["expense_status"]
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tax?: number
+          total_cost?: number | null
+          updated_at?: string
+          vendor?: string
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          amount?: number
+          approval_comment?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          billing_treatment?: Database["public"]["Enums"]["expense_billing_treatment"]
+          category?: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          created_by?: string | null
+          customer_charge_amount?: number | null
+          customer_id?: string
+          customer_visible_description?: string | null
+          description?: string
+          expense_number?: string
+          id?: string
+          internal_notes?: string
+          invoice_id?: string | null
+          job_id?: string
+          markup_pct?: number | null
+          org_id?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          property_id?: string
+          purchase_date?: string
+          receipt_vault_item_id?: string | null
+          receipt_visibility?: Database["public"]["Enums"]["expense_receipt_visibility"]
+          rejected_at?: string | null
+          rejected_by?: string | null
+          status?: Database["public"]["Enums"]["expense_status"]
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tax?: number
+          total_cost?: number | null
+          updated_at?: string
+          vendor?: string
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_receipt_vault_item_id_fkey"
+            columns: ["receipt_vault_item_id"]
+            isOneToOne: false
+            referencedRelation: "vault_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       geofence_events: {
         Row: {
           accuracy_meters: number | null
@@ -1663,163 +1820,6 @@ export type Database = {
           },
         ]
       }
-      expenses: {
-        Row: {
-          amount: number
-          approval_comment: string | null
-          approved_at: string | null
-          approved_by: string | null
-          billing_treatment: Database["public"]["Enums"]["expense_billing_treatment"]
-          category: Database["public"]["Enums"]["expense_category"]
-          created_at: string
-          created_by: string | null
-          customer_charge_amount: number | null
-          customer_id: string
-          customer_visible_description: string | null
-          description: string
-          expense_number: string
-          id: string
-          internal_notes: string
-          invoice_id: string | null
-          job_id: string
-          markup_pct: number | null
-          org_id: string
-          payment_method: Database["public"]["Enums"]["payment_method"]
-          property_id: string
-          purchase_date: string
-          receipt_vault_item_id: string | null
-          receipt_visibility: Database["public"]["Enums"]["expense_receipt_visibility"]
-          rejected_at: string | null
-          rejected_by: string | null
-          status: Database["public"]["Enums"]["expense_status"]
-          submitted_at: string | null
-          submitted_by: string | null
-          tax: number
-          total_cost: number | null
-          updated_at: string
-          vendor: string
-          voided_at: string | null
-          voided_by: string | null
-        }
-        Insert: {
-          amount: number
-          approval_comment?: string | null
-          approved_at?: string | null
-          approved_by?: string | null
-          billing_treatment?: Database["public"]["Enums"]["expense_billing_treatment"]
-          category: Database["public"]["Enums"]["expense_category"]
-          created_at?: string
-          created_by?: string | null
-          customer_charge_amount?: number | null
-          customer_id: string
-          customer_visible_description?: string | null
-          description: string
-          expense_number?: string
-          id?: string
-          internal_notes?: string
-          invoice_id?: string | null
-          job_id: string
-          markup_pct?: number | null
-          org_id: string
-          payment_method?: Database["public"]["Enums"]["payment_method"]
-          property_id: string
-          purchase_date?: string
-          receipt_vault_item_id?: string | null
-          receipt_visibility?: Database["public"]["Enums"]["expense_receipt_visibility"]
-          rejected_at?: string | null
-          rejected_by?: string | null
-          status?: Database["public"]["Enums"]["expense_status"]
-          submitted_at?: string | null
-          submitted_by?: string | null
-          tax?: number
-          total_cost?: never
-          updated_at?: string
-          vendor?: string
-          voided_at?: string | null
-          voided_by?: string | null
-        }
-        Update: {
-          amount?: number
-          approval_comment?: string | null
-          approved_at?: string | null
-          approved_by?: string | null
-          billing_treatment?: Database["public"]["Enums"]["expense_billing_treatment"]
-          category?: Database["public"]["Enums"]["expense_category"]
-          created_at?: string
-          created_by?: string | null
-          customer_charge_amount?: number | null
-          customer_id?: string
-          customer_visible_description?: string | null
-          description?: string
-          expense_number?: string
-          id?: string
-          internal_notes?: string
-          invoice_id?: string | null
-          job_id?: string
-          markup_pct?: number | null
-          org_id?: string
-          payment_method?: Database["public"]["Enums"]["payment_method"]
-          property_id?: string
-          purchase_date?: string
-          receipt_vault_item_id?: string | null
-          receipt_visibility?: Database["public"]["Enums"]["expense_receipt_visibility"]
-          rejected_at?: string | null
-          rejected_by?: string | null
-          status?: Database["public"]["Enums"]["expense_status"]
-          submitted_at?: string | null
-          submitted_by?: string | null
-          tax?: number
-          total_cost?: never
-          updated_at?: string
-          vendor?: string
-          voided_at?: string | null
-          voided_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "expenses_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expenses_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expenses_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expenses_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expenses_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expenses_receipt_vault_item_id_fkey"
-            columns: ["receipt_vault_item_id"]
-            isOneToOne: false
-            referencedRelation: "vault_items"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       invoice_line_items: {
         Row: {
           created_at: string
@@ -2041,6 +2041,61 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "quotes"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_assignments: {
+        Row: {
+          assigned_by: string | null
+          created_at: string
+          id: string
+          is_lead: boolean
+          job_id: string
+          org_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          is_lead?: boolean
+          job_id: string
+          org_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          is_lead?: boolean
+          job_id?: string
+          org_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_assignments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_assignments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_assignments_org_id_user_id_fkey"
+            columns: ["org_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "org_members"
+            referencedColumns: ["org_id", "user_id"]
           },
         ]
       }
@@ -2918,56 +2973,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "org_members_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      team_member_availability: {
-        Row: {
-          availability_status: Database["public"]["Enums"]["team_availability_status"]
-          created_at: string
-          id: string
-          last_seen_at: string | null
-          note: string | null
-          org_id: string
-          skills: string[]
-          status_expires_at: string | null
-          updated_at: string
-          updated_by: string | null
-          user_id: string
-        }
-        Insert: {
-          availability_status?: Database["public"]["Enums"]["team_availability_status"]
-          created_at?: string
-          id?: string
-          last_seen_at?: string | null
-          note?: string | null
-          org_id: string
-          skills?: string[]
-          status_expires_at?: string | null
-          updated_at?: string
-          updated_by?: string | null
-          user_id: string
-        }
-        Update: {
-          availability_status?: Database["public"]["Enums"]["team_availability_status"]
-          created_at?: string
-          id?: string
-          last_seen_at?: string | null
-          note?: string | null
-          org_id?: string
-          skills?: string[]
-          status_expires_at?: string | null
-          updated_at?: string
-          updated_by?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "team_member_availability_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -4452,6 +4457,63 @@ export type Database = {
           },
         ]
       }
+      team_member_availability: {
+        Row: {
+          availability_status: Database["public"]["Enums"]["team_availability_status"]
+          created_at: string
+          id: string
+          last_seen_at: string | null
+          note: string | null
+          org_id: string
+          skills: string[]
+          status_expires_at: string | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          availability_status?: Database["public"]["Enums"]["team_availability_status"]
+          created_at?: string
+          id?: string
+          last_seen_at?: string | null
+          note?: string | null
+          org_id: string
+          skills?: string[]
+          status_expires_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          availability_status?: Database["public"]["Enums"]["team_availability_status"]
+          created_at?: string
+          id?: string
+          last_seen_at?: string | null
+          note?: string | null
+          org_id?: string
+          skills?: string[]
+          status_expires_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_member_availability_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_member_availability_org_id_user_id_fkey"
+            columns: ["org_id", "user_id"]
+            isOneToOne: true
+            referencedRelation: "org_members"
+            referencedColumns: ["org_id", "user_id"]
+          },
+        ]
+      }
       time_entries: {
         Row: {
           auto_generated: boolean | null
@@ -4899,6 +4961,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           customer_id: string | null
+          customer_visible: boolean
           document_url: string | null
           duration_seconds: number | null
           embedding: string | null
@@ -4943,6 +5006,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          customer_visible?: boolean
           document_url?: string | null
           duration_seconds?: number | null
           embedding?: string | null
@@ -4987,6 +5051,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          customer_visible?: boolean
           document_url?: string | null
           duration_seconds?: number | null
           embedding?: string | null
@@ -5600,6 +5665,10 @@ export type Database = {
         Args: { p_estimate_id: string }
         Returns: undefined
       }
+      assign_member_to_job: {
+        Args: { p_is_lead?: boolean; p_job_id: string; p_user_id: string }
+        Returns: string
+      }
       book_scheduling_slot: {
         Args: {
           p_actor_customer_id: string
@@ -5736,7 +5805,7 @@ export type Database = {
       }
       create_portal_service_request: {
         Args: {
-          p_property_id?: string | null
+          p_property_id?: string
           p_service_description: string
           p_service_title: string
         }
@@ -5751,6 +5820,7 @@ export type Database = {
         Args: { p_estimate_id: string }
         Returns: string
       }
+      customer_org_id: { Args: { p_customer_id: string }; Returns: string }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -6008,8 +6078,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      list_customer_visible_photos: {
+        Args: { p_estimate_id?: string; p_job_id?: string }
+        Returns: {
+          caption: string
+          created_at: string
+          id: string
+          image_url: string
+          storage_object_key: string
+        }[]
+      }
       longtransactionsenabled: { Args: never; Returns: boolean }
       next_estimate_number: { Args: never; Returns: string }
+      next_expense_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }
       next_service_request_number: { Args: never; Returns: string }
       populate_geometry_columns:
@@ -6052,6 +6133,7 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      property_org_id: { Args: { p_property_id: string }; Returns: string }
       propose_change_order_revision: {
         Args: {
           p_actor_user_id: string
@@ -6091,6 +6173,60 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      publish_customer_visible_photo: {
+        Args: { p_vault_item_id: string }
+        Returns: {
+          ai_action_items: Json | null
+          ai_caption: string | null
+          ai_extracted_entities: Json | null
+          ai_sentiment: string | null
+          ai_summary: string | null
+          audio_url: string | null
+          captured_at: string
+          change_order_revision_id: string | null
+          classified_type: string | null
+          communication_id: string | null
+          content: string
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          customer_visible: boolean
+          document_url: string | null
+          duration_seconds: number | null
+          embedding: string | null
+          estimate_id: string | null
+          exif_data: Json | null
+          geo_address: string | null
+          id: string
+          image_url: string | null
+          job_id: string | null
+          location: unknown
+          metadata: Json | null
+          occurred_at: string
+          org_id: string
+          phase_id: string | null
+          processed_at: string | null
+          processing_error: string | null
+          processing_status: string | null
+          property_id: string | null
+          raw_content: string | null
+          site_visit_id: string | null
+          source: Database["public"]["Enums"]["vault_source"]
+          speakers: Json | null
+          storage_object_key: string | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          title: string | null
+          type: Database["public"]["Enums"]["vault_item_type"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vault_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       purge_old_location_events: { Args: never; Returns: number }
       recalc_invoice_totals: {
         Args: { p_invoice_id: string }
@@ -6113,6 +6249,10 @@ export type Database = {
       }
       refresh_job_time_rollup: {
         Args: { p_job_id: string }
+        Returns: undefined
+      }
+      remove_member_from_job: {
+        Args: { p_job_id: string; p_user_id: string }
         Returns: undefined
       }
       reopen_estimate_for_edit: {
@@ -6235,6 +6375,10 @@ export type Database = {
         Returns: undefined
       }
       seed_premier_data: { Args: { target_org_id: string }; Returns: undefined }
+      set_job_lead: {
+        Args: { p_job_id: string; p_user_id: string }
+        Returns: undefined
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       st_3dclosestpoint: {
@@ -6828,6 +6972,60 @@ export type Database = {
         Returns: undefined
       }
       unlockrows: { Args: { "": string }; Returns: number }
+      unpublish_customer_visible_photo: {
+        Args: { p_vault_item_id: string }
+        Returns: {
+          ai_action_items: Json | null
+          ai_caption: string | null
+          ai_extracted_entities: Json | null
+          ai_sentiment: string | null
+          ai_summary: string | null
+          audio_url: string | null
+          captured_at: string
+          change_order_revision_id: string | null
+          classified_type: string | null
+          communication_id: string | null
+          content: string
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          customer_visible: boolean
+          document_url: string | null
+          duration_seconds: number | null
+          embedding: string | null
+          estimate_id: string | null
+          exif_data: Json | null
+          geo_address: string | null
+          id: string
+          image_url: string | null
+          job_id: string | null
+          location: unknown
+          metadata: Json | null
+          occurred_at: string
+          org_id: string
+          phase_id: string | null
+          processed_at: string | null
+          processing_error: string | null
+          processing_status: string | null
+          property_id: string | null
+          raw_content: string | null
+          site_visit_id: string | null
+          source: Database["public"]["Enums"]["vault_source"]
+          speakers: Json | null
+          storage_object_key: string | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          title: string | null
+          type: Database["public"]["Enums"]["vault_item_type"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vault_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       updategeometrysrid: {
         Args: {
           catalogn_name: string
@@ -6914,6 +7112,15 @@ export type Database = {
         | "unknown"
       customer_type: "residential" | "commercial" | "property_manager"
       deposit_requirement_status: "none" | "required" | "waived"
+      estimate_status:
+        | "draft"
+        | "site_visit_scheduled"
+        | "site_visit_complete"
+        | "quoted"
+        | "accepted"
+        | "declined"
+        | "expired"
+        | "converted"
       expense_billing_treatment:
         | "internal_cost_only"
         | "included_fixed_price"
@@ -6945,15 +7152,6 @@ export type Database = {
         | "invoiced"
         | "reimbursed"
         | "voided"
-      estimate_status:
-        | "draft"
-        | "site_visit_scheduled"
-        | "site_visit_complete"
-        | "quoted"
-        | "accepted"
-        | "declined"
-        | "expired"
-        | "converted"
       geofence_event_type: "entered" | "exited" | "dwelled"
       geofence_type: "property" | "home" | "shop" | "supplier" | "custom"
       invoice_kind: "deposit" | "progress" | "final" | "standalone" | "working"
@@ -7025,13 +7223,13 @@ export type Database = {
         | "in_progress"
         | "completed"
         | "cancelled"
+      task_priority: "low" | "normal" | "high" | "urgent"
+      task_status: "open" | "in_progress" | "done" | "cancelled" | "snoozed"
       team_availability_status:
         | "available"
         | "on_job"
         | "off_shift"
         | "on_leave"
-      task_priority: "low" | "normal" | "high" | "urgent"
-      task_status: "open" | "in_progress" | "done" | "cancelled" | "snoozed"
       trip_purpose:
         | "to_job"
         | "from_job"
@@ -7252,6 +7450,40 @@ export const Constants = {
         "expired",
         "converted",
       ],
+      expense_billing_treatment: [
+        "internal_cost_only",
+        "included_fixed_price",
+        "included_accepted_quote",
+        "reimbursable_at_cost",
+        "billable_with_markup",
+        "customer_approved_pass_through",
+        "pending_review",
+        "non_billable",
+      ],
+      expense_category: [
+        "materials",
+        "labor",
+        "equipment",
+        "subcontractor",
+        "travel",
+        "permit",
+        "other",
+      ],
+      expense_receipt_visibility: ["internal", "customer_visible"],
+      expense_status: [
+        "draft",
+        "submitted",
+        "needs_receipt",
+        "needs_review",
+        "approved",
+        "rejected",
+        "internal_only",
+        "ready_to_invoice",
+        "partially_invoiced",
+        "invoiced",
+        "reimbursed",
+        "voided",
+      ],
       geofence_event_type: ["entered", "exited", "dwelled"],
       geofence_type: ["property", "home", "shop", "supplier", "custom"],
       invoice_kind: ["deposit", "progress", "final", "standalone", "working"],
@@ -7332,6 +7564,12 @@ export const Constants = {
       ],
       task_priority: ["low", "normal", "high", "urgent"],
       task_status: ["open", "in_progress", "done", "cancelled", "snoozed"],
+      team_availability_status: [
+        "available",
+        "on_job",
+        "off_shift",
+        "on_leave",
+      ],
       trip_purpose: [
         "to_job",
         "from_job",

@@ -31,7 +31,8 @@ export type Capability =
   | 'canCreateQuote'
   | 'canSendQuote'
   | 'canCreateExpenses'
-  | 'canApproveExpenses';
+  | 'canApproveExpenses'
+  | 'canPublishCustomerMedia';
 
 /**
  * Day-to-day estimate/invoice creation and sending is normal operations for
@@ -40,7 +41,7 @@ export type Capability =
  * decision: this is a deliberate product boundary, not just a security
  * restriction, and `viewer` never gets write capabilities of any kind.
  */
-const CAPABILITIES: Record<Capability, readonly OrgRole[]> = {
+export const CAPABILITIES: Record<Capability, readonly OrgRole[]> = {
   canCreateEstimates: ['owner', 'admin', 'employee', 'subcontractor'],
   canSendEstimates: ['owner', 'admin', 'employee', 'subcontractor'],
   canCreateInvoices: ['owner', 'admin', 'employee', 'subcontractor'],
@@ -90,6 +91,15 @@ const CAPABILITIES: Record<Capability, readonly OrgRole[]> = {
   // so this is a pure rename/clarification, not a permissions change.
   canCreateExpenses: ['owner', 'admin', 'employee', 'subcontractor'],
   canApproveExpenses: ['owner', 'admin'],
+
+  // Customer-Safe Photo Visibility (docs/implementation/customer-safe-photo-
+  // visibility-design.md, PR #141). Deliberately narrower than
+  // canScheduleJobs (which still governs who may upload job/estimate
+  // photos, unchanged): publishing a photo to the customer portal is an
+  // outward-facing authorization decision, not routine field-staff media
+  // work, so employee/subcontractor never get it regardless of what other
+  // media capabilities they hold.
+  canPublishCustomerMedia: ['owner', 'admin'],
 };
 
 export function hasCapability(role: OrgRole, capability: Capability): boolean {

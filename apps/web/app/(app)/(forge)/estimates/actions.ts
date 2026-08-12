@@ -12,7 +12,10 @@ import {
   getActiveOrgContext,
   getEstimateById,
   logActivity,
+  publishCustomerVisiblePhoto,
+  unpublishCustomerVisiblePhoto,
   updateEstimateLineItem,
+  type PublishedPhoto,
 } from '@premier/db';
 
 import {
@@ -604,5 +607,54 @@ export async function deleteEstimateLineItemAction(
   const client = createServiceClient();
   const result = await deleteEstimateLineItem(client, { lineItemId, orgId });
   if (result.success && estimateId) revalidatePath(`/estimates/${estimateId}`);
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Customer-Safe Photo Visibility (docs/implementation/customer-safe-photo-
+// visibility-design.md, PR #141). Mirrors jobs/actions.ts's
+// publishJobPhotoAction/unpublishJobPhotoAction exactly. canPublishCustomerMedia
+// is checked here AND re-checked server-side inside the RPC itself.
+// ---------------------------------------------------------------------------
+
+export type PublishEstimatePhotoActionState = Result<PublishedPhoto>;
+
+export async function publishEstimatePhotoAction(
+  vaultItemId: string,
+  estimateId: string
+): Promise<PublishEstimatePhotoActionState> {
+  const access = await getEstimateActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canPublishCustomerMedia')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit publishing photos to the customer portal.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await publishCustomerVisiblePhoto(supabase, vaultItemId);
+  if (!result.success) return result;
+
+  revalidatePath(`/estimates/${estimateId}`);
+  return result;
+}
+
+export async function unpublishEstimatePhotoAction(
+  vaultItemId: string,
+  estimateId: string
+): Promise<PublishEstimatePhotoActionState> {
+  const access = await getEstimateActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canPublishCustomerMedia')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit removing photos from the customer portal.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await unpublishCustomerVisiblePhoto(supabase, vaultItemId);
+  if (!result.success) return result;
+
+  revalidatePath(`/estimates/${estimateId}`);
   return result;
 }
