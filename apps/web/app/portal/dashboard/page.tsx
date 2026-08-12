@@ -9,6 +9,7 @@ import {
   getWorkingInvoiceSummaryForCustomer,
   listChangeOrdersForJob,
   listCustomerVisiblePhotosForJob,
+  listCustomerVisiblePhotosForSiteVisit,
   listOpenSchedulingSlots,
   type CustomerSiteVisitSummary,
 } from '@premier/db';
@@ -163,6 +164,8 @@ export default async function PortalDashboardPage() {
     serviceRequests,
   });
 
+  const serviceClient = createServiceClient();
+
   // Customer-safe presentation: this is the ONLY way the portal reads
   // site-visit data — via the get_my_site_visit_summary() RPC, called with
   // the portal-scoped (RLS-authenticated) client, never the service client.
@@ -171,16 +174,38 @@ export default async function PortalDashboardPage() {
   // actors, or the triage reason — see supabase/migrations/20260802020400_
   // customer_safe_site_visit_summary.sql.
   const siteVisitSummaries = new Map<string, CustomerSiteVisitSummary[]>();
+  // Customer-Safe Photo Visibility fast-follow (docs/implementation/
+  // customer-safe-photo-visibility-design.md, PR #141/#142
+  // 20260811040000_site_visit_customer_photo_visibility.sql): photos are
+  // fetched only for site visits get_my_site_visit_summary already proved
+  // this customer owns, via the same centralized
+  // list_customer_visible_photos() RPC used for job/estimate photos
+  // (called with portalClient — the session client — so its own
+  // auth.uid()-based ownership check runs for real, not just relying on
+  // this loop's own scoping).
+  const siteVisitPhotos = new Map<string, { id: string; imageUrl: string | null }[]>();
   await Promise.all(
     serviceRequests.map(async (request) => {
       const result = await getMySiteVisitSummary(supabase, request.id);
       if (result.success && result.data.length > 0) {
         siteVisitSummaries.set(request.id, result.data);
+        await Promise.all(
+          result.data.map(async (visit) => {
+            const photosResult = await listCustomerVisiblePhotosForSiteVisit(portalClient, visit.siteVisitId);
+            if (!photosResult.success || photosResult.data.length === 0) return;
+            const photos = await Promise.all(
+              photosResult.data.map(async (photo) => {
+                const signedUrl = photo.storagePath ? await getSignedReadUrl(serviceClient, photo.storagePath) : null;
+                return { id: photo.id, imageUrl: signedUrl?.success ? signedUrl.data : null };
+              })
+            );
+            siteVisitPhotos.set(visit.siteVisitId, photos);
+          })
+        );
       }
     })
   );
 
-  const serviceClient = createServiceClient();
   const { data: jobs } = await portalClient
     .from('jobs')
     .select('id, title, status, scheduled_start, scheduled_end, org_id')
@@ -278,12 +303,14 @@ export default async function PortalDashboardPage() {
           requests={activeRequests}
           emptyText="No active service requests yet."
           siteVisitSummaries={siteVisitSummaries}
+          siteVisitPhotos={siteVisitPhotos}
         />
         <RequestList
           title="Completed service requests"
           requests={completedRequests}
           emptyText="No completed service requests yet."
           siteVisitSummaries={siteVisitSummaries}
+          siteVisitPhotos={siteVisitPhotos}
         />
       </section>
 
@@ -472,11 +499,13 @@ function RequestList({
   requests,
   emptyText,
   siteVisitSummaries,
+  siteVisitPhotos,
 }: {
   title: string;
   requests: ServiceRequestRow[];
   emptyText: string;
   siteVisitSummaries: Map<string, CustomerSiteVisitSummary[]>;
+  siteVisitPhotos: Map<string, { id: string; imageUrl: string | null }[]>;
 }) {
   return (
     <Card>
@@ -525,21 +554,42 @@ function RequestList({
                     })}
                   </p>
                 ) : null}
-                {(siteVisitSummaries.get(request.id) ?? []).map((visit) => (
-                  <div key={visit.siteVisitId} className="mt-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
-                    <p className="font-medium capitalize text-foreground">
-                      Site visit: {visit.safeStatus.replace(/_/g, ' ')}
-                    </p>
-                    {visit.scheduledStart ? (
-                      <p className="mt-1 text-muted-foreground">
-                        {new Date(visit.scheduledStart).toLocaleString()}
-                        {visit.isRescheduled ? ' (rescheduled)' : ''}
+                {(siteVisitSummaries.get(request.id) ?? []).map((visit) => {
+                  const photos = siteVisitPhotos.get(visit.siteVisitId) ?? [];
+                  return (
+                    <div key={visit.siteVisitId} className="mt-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                      <p className="font-medium capitalize text-foreground">
+                        Site visit: {visit.safeStatus.replace(/_/g, ' ')}
                       </p>
-                    ) : (
-                      <p className="mt-1 text-muted-foreground">Not yet scheduled.</p>
-                    )}
-                  </div>
-                ))}
+                      {visit.scheduledStart ? (
+                        <p className="mt-1 text-muted-foreground">
+                          {new Date(visit.scheduledStart).toLocaleString()}
+                          {visit.isRescheduled ? ' (rescheduled)' : ''}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-muted-foreground">Not yet scheduled.</p>
+                      )}
+                      {photos.length > 0 ? (
+                        <ul className="mt-2 grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+                          {photos.map((photo) => (
+                            <li key={photo.id} className="overflow-hidden rounded-md border">
+                              <div className="grid aspect-square place-items-center bg-muted">
+                                {photo.imageUrl ? (
+                                  <div
+                                    role="img"
+                                    aria-label="Site visit photo"
+                                    className="h-full w-full bg-cover bg-center"
+                                    style={{ backgroundImage: `url(${photo.imageUrl})` }}
+                                  />
+                                ) : null}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </li>
             ))}
           </ul>

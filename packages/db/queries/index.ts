@@ -370,6 +370,7 @@ export {
   insertFinalizedVaultItem,
   listCustomerVisiblePhotosForEstimate,
   listCustomerVisiblePhotosForJob,
+  listCustomerVisiblePhotosForSiteVisit,
   markPendingUploadFinalized,
   markPendingUploadRejected,
   publishCustomerVisiblePhoto,
