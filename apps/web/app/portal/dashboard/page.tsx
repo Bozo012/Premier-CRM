@@ -26,7 +26,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { AddChangeOrderCommentForm } from '../_components/add-change-order-comment-form';
 import { BookSchedulingSlotForm } from '../_components/book-scheduling-slot-form';
-import { PortalContactSheet } from '../_components/portal-contact-sheet';
+import { NewConversationSheet } from '../_components/new-conversation-sheet';
 import { PortalShell, requirePortalUser } from '../_components/portal-shell';
 import { RequestChangeOrderForm } from '../_components/request-change-order-form';
 import { RespondToChangeOrderForm } from '../_components/respond-change-order-form';
@@ -277,7 +277,7 @@ export default async function PortalDashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <PortalContactSheet model={contactModel} />
+          <NewConversationSheet model={contactModel} />
           <form action={signOutCustomerPortal}>
             <Button type="submit" variant="outline">Sign out</Button>
           </form>

@@ -19,6 +19,7 @@ describe('forgeNavigationLinks', () => {
       'Route Planning',
       'Activity Logs',
       'Site Photos',
+      'Messages',
       'Expenses',
       'Team',
       'Settings',

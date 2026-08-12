@@ -751,6 +751,135 @@ export type Database = {
           },
         ]
       }
+      communication_messages: {
+        Row: {
+          body: string
+          created_at: string
+          customer_account_id: string | null
+          id: string
+          org_id: string
+          sender_type: string
+          sender_user_id: string | null
+          thread_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          customer_account_id?: string | null
+          id?: string
+          org_id: string
+          sender_type: string
+          sender_user_id?: string | null
+          thread_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          customer_account_id?: string | null
+          id?: string
+          org_id?: string
+          sender_type?: string
+          sender_user_id?: string | null
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_messages_customer_account_id_fkey"
+            columns: ["customer_account_id"]
+            isOneToOne: false
+            referencedRelation: "customer_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "communication_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_threads: {
+        Row: {
+          category: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          last_customer_read_at: string | null
+          last_staff_read_at: string | null
+          org_id: string
+          related_property_id: string | null
+          related_request_id: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          customer_id: string
+          id?: string
+          last_customer_read_at?: string | null
+          last_staff_read_at?: string | null
+          org_id: string
+          related_property_id?: string | null
+          related_request_id?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          customer_id?: string
+          id?: string
+          last_customer_read_at?: string | null
+          last_staff_read_at?: string | null
+          org_id?: string
+          related_property_id?: string | null
+          related_request_id?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_threads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_threads_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_threads_related_property_id_fkey"
+            columns: ["related_property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_threads_related_request_id_fkey"
+            columns: ["related_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       communications: {
         Row: {
           action_items: Json | null
@@ -6078,6 +6207,48 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      list_customer_thread_messages: {
+        Args: { p_thread_id: string }
+        Returns: {
+          body: string
+          created_at: string
+          customer_account_id: string | null
+          id: string
+          org_id: string
+          sender_type: string
+          sender_user_id: string | null
+          thread_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "communication_messages"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      list_customer_threads: {
+        Args: never
+        Returns: {
+          category: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          last_customer_read_at: string | null
+          last_staff_read_at: string | null
+          org_id: string
+          related_property_id: string | null
+          related_request_id: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "communication_threads"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       list_customer_visible_photos: {
         Args: {
           p_estimate_id?: string
@@ -6093,6 +6264,10 @@ export type Database = {
         }[]
       }
       longtransactionsenabled: { Args: never; Returns: boolean }
+      mark_thread_read_by_customer: {
+        Args: { p_thread_id: string }
+        Returns: undefined
+      }
       next_estimate_number: { Args: never; Returns: string }
       next_expense_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }
@@ -6379,6 +6554,44 @@ export type Database = {
         Returns: undefined
       }
       seed_premier_data: { Args: { target_org_id: string }; Returns: undefined }
+      send_customer_message: {
+        Args: { p_body: string; p_thread_id: string }
+        Returns: {
+          body: string
+          created_at: string
+          customer_account_id: string | null
+          id: string
+          org_id: string
+          sender_type: string
+          sender_user_id: string | null
+          thread_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "communication_messages"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      send_staff_reply: {
+        Args: { p_body: string; p_thread_id: string }
+        Returns: {
+          body: string
+          created_at: string
+          customer_account_id: string | null
+          id: string
+          org_id: string
+          sender_type: string
+          sender_user_id: string | null
+          thread_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "communication_messages"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_job_lead: {
         Args: { p_job_id: string; p_user_id: string }
         Returns: undefined
@@ -6965,6 +7178,35 @@ export type Database = {
       st_wrapx: {
         Args: { geom: unknown; move: number; wrap: number }
         Returns: unknown
+      }
+      start_customer_thread: {
+        Args: {
+          p_body: string
+          p_category?: string
+          p_related_property_id?: string
+          p_related_request_id?: string
+          p_subject: string
+        }
+        Returns: {
+          category: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          last_customer_read_at: string | null
+          last_staff_read_at: string | null
+          org_id: string
+          related_property_id: string | null
+          related_request_id: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "communication_threads"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       start_site_visit: {
         Args: { p_site_visit_id: string }

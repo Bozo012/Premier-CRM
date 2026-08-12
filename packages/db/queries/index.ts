@@ -383,3 +383,17 @@ export {
   type PublishedPhoto,
   type RequestPendingUploadInput,
 } from './vault-items';
+export {
+  listCustomerThreadMessages,
+  listCustomerThreads,
+  listOrgThreads,
+  listThreadMessages,
+  markThreadReadByCustomer,
+  markThreadReadByStaff,
+  sendCustomerMessage,
+  sendStaffReply,
+  startCustomerThread,
+  type CommunicationMessage,
+  type CommunicationThread,
+  type StartCustomerThreadInput,
+} from './communication-threads';
