@@ -23,6 +23,7 @@ export function ScheduleJobForm({ jobId }: { jobId: string }) {
   const router = useRouter();
   const [scheduledStartLocal, setScheduledStartLocal] = useState('');
   const [scheduledEndLocal, setScheduledEndLocal] = useState('');
+  const [dismissedConflicts, setDismissedConflicts] = useState(false);
   const [isTransitionPending, startTransition] = useTransition();
   const [state, formAction, isActionPending] = useActionState<
     ScheduleJobActionState | null,
@@ -30,46 +31,81 @@ export function ScheduleJobForm({ jobId }: { jobId: string }) {
   >(scheduleJobAction, null);
 
   useEffect(() => {
-    if (!state) return;
+    if (!state || !state.success) return;
+    if (state.data.status !== 'scheduled') return;
 
-    if (state.success) {
-      toast.success(
-        state.data.notificationSent ? 'Job scheduled and customer notified.' : 'Job scheduled.'
-      );
-      router.refresh();
+    toast.success(
+      state.data.notificationSent ? 'Job scheduled and customer notified.' : 'Job scheduled.'
+    );
+    router.refresh();
+  }, [router, state]);
+
+  useEffect(() => {
+    if (state && !state.success) {
+      toast.error(state.error ?? 'Could not schedule the job.');
+    }
+  }, [state]);
+
+  const isPending = isActionPending || isTransitionPending;
+  const conflicts =
+    !dismissedConflicts && state && state.success && state.data.status === 'conflicts' ? state.data.conflicts : null;
+
+  function submitSchedule(overrideConflicts: boolean) {
+    const scheduledStart = toIsoString(scheduledStartLocal);
+    if (!scheduledStart) {
+      toast.error('Enter a valid scheduled start.');
       return;
     }
 
-    toast.error(state.error ?? 'Could not schedule the job.');
-  }, [router, state]);
+    const scheduledEnd = scheduledEndLocal ? toIsoString(scheduledEndLocal) : null;
+    if (scheduledEndLocal && !scheduledEnd) {
+      toast.error('Enter a valid scheduled end.');
+      return;
+    }
 
-  const isPending = isActionPending || isTransitionPending;
+    setDismissedConflicts(false);
+    const nextFormData = new FormData();
+    nextFormData.append('jobId', jobId);
+    nextFormData.append('scheduledStart', scheduledStart);
+    nextFormData.append('scheduledEnd', scheduledEnd ?? '');
+    if (overrideConflicts) nextFormData.append('overrideConflicts', 'true');
+
+    startTransition(() => {
+      formAction(nextFormData);
+    });
+  }
+
+  if (conflicts) {
+    return (
+      <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950">
+        <p className="font-medium text-amber-900 dark:text-amber-200">Schedule conflict</p>
+        <p className="text-amber-800 dark:text-amber-300">Assigned crew already has:</p>
+        <ul className="space-y-1">
+          {conflicts.map((c) => (
+            <li key={`${c.recordType}-${c.recordId}`} className="text-amber-800 dark:text-amber-300">
+              {c.title ?? 'Untitled'} · {new Date(c.conflictStart).toLocaleString()}–
+              {new Date(c.conflictEnd).toLocaleTimeString()}
+              {c.propertyAddress ? ` · ${c.propertyAddress}` : ''}
+            </li>
+          ))}
+        </ul>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={isPending} onClick={() => setDismissedConflicts(true)}>
+            Change schedule
+          </Button>
+          <Button type="button" disabled={isPending} onClick={() => submitSchedule(true)}>
+            {isPending ? 'Scheduling…' : 'Schedule anyway'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-
-        const scheduledStart = toIsoString(scheduledStartLocal);
-        if (!scheduledStart) {
-          toast.error('Enter a valid scheduled start.');
-          return;
-        }
-
-        const scheduledEnd = scheduledEndLocal ? toIsoString(scheduledEndLocal) : null;
-        if (scheduledEndLocal && !scheduledEnd) {
-          toast.error('Enter a valid scheduled end.');
-          return;
-        }
-
-        const nextFormData = new FormData();
-        nextFormData.append('jobId', jobId);
-        nextFormData.append('scheduledStart', scheduledStart);
-        nextFormData.append('scheduledEnd', scheduledEnd ?? '');
-
-        startTransition(() => {
-          formAction(nextFormData);
-        });
+        submitSchedule(false);
       }}
       className="space-y-3"
     >

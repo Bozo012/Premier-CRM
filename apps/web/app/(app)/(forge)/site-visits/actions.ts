@@ -23,6 +23,7 @@ import {
   createQuoteFromEstimateRpc,
   generateEstimateFromSiteVisit,
   getActiveOrgContext,
+  getSchedulingConflicts,
   publishCustomerVisiblePhoto,
   recordRequestTriage,
   requestEstimatePricingReview,
@@ -161,6 +162,22 @@ export async function correctRequestTriageAction(
 
 export type SiteVisitActionState = Result<null> | Result<string>;
 
+// V1 scheduling reliability (20260814010000_scheduling_conflict_detection.sql,
+// Phase 9): reuses the same centralized get_scheduling_conflicts query the
+// atomic job-creation RPC uses, rather than leaving this edit/reschedule
+// path unprotected while creation is guarded. App-layer pre-check only (a
+// small race window remains before the write below) — not described as a
+// DB-level guarantee. Conflicts are surfaced as a formatted message rather
+// than a structured payload, since these two actions' Result<string> shape
+// is used broadly and a discriminated-union change would ripple beyond
+// this slice's scope; `overrideConflicts=true` skips the check entirely.
+function formatConflictsMessage(conflicts: { title: string | null; conflictStart: string; conflictEnd: string }[]): string {
+  const lines = conflicts
+    .slice(0, 5)
+    .map((c) => `${c.title ?? 'Untitled'} (${new Date(c.conflictStart).toLocaleString()}–${new Date(c.conflictEnd).toLocaleTimeString()})`);
+  return `Scheduling conflict: this person already has overlapping work — ${lines.join('; ')}. Resubmit with overrideConflicts to schedule anyway.`;
+}
+
 export async function scheduleSiteVisitAction(_prevState: Result<string> | null, formData: FormData): Promise<Result<string>> {
   const contextResult = await getWorkflowActionContext();
   if (!contextResult.success) return contextResult;
@@ -171,11 +188,25 @@ export async function scheduleSiteVisitAction(_prevState: Result<string> | null,
   const end = readString(formData, 'end');
   if (!siteVisitId || !start || !end) return err(ErrorCode.VALIDATION_ERROR, 'Missing site visit, start, or end time.');
 
+  const assignedUserId = readOptionalString(formData, 'assignedUserId');
+  const overrideConflicts = readString(formData, 'overrideConflicts') === 'true';
+  if (assignedUserId && !overrideConflicts) {
+    const conflictsResult = await getSchedulingConflicts(supabase, {
+      orgId: contextResult.data.orgId,
+      userId: assignedUserId,
+      proposedStart: new Date(start).toISOString(),
+      proposedEnd: new Date(end).toISOString(),
+    });
+    if (conflictsResult.success && conflictsResult.data.length > 0) {
+      return err(ErrorCode.VALIDATION_ERROR, formatConflictsMessage(conflictsResult.data));
+    }
+  }
+
   const result = await scheduleSiteVisit(supabase, {
     siteVisitId,
     start: new Date(start).toISOString(),
     end: new Date(end).toISOString(),
-    assignedUserId: readOptionalString(formData, 'assignedUserId'),
+    assignedUserId,
   });
   if (result.success) {
     revalidatePath(`/site-visits/${siteVisitId}`);
@@ -194,11 +225,37 @@ export async function rescheduleSiteVisitAction(_prevState: Result<string> | nul
   const end = readString(formData, 'end');
   if (!siteVisitId || !start || !end) return err(ErrorCode.VALIDATION_ERROR, 'Missing site visit, start, or end time.');
 
+  const assignedUserId = readOptionalString(formData, 'assignedUserId');
+  const overrideConflicts = readString(formData, 'overrideConflicts') === 'true';
+  if (assignedUserId && !overrideConflicts) {
+    // Exclude the visit's own current active appointment — it's about to
+    // be superseded by reschedule_site_visit, and would otherwise show up
+    // as a false self-conflict against the very window being replaced.
+    const serviceClient = createServiceClient();
+    const { data: activeAppointment } = await serviceClient
+      .from('site_visit_appointments')
+      .select('id')
+      .eq('site_visit_id', siteVisitId)
+      .eq('status', 'scheduled')
+      .maybeSingle();
+
+    const conflictsResult = await getSchedulingConflicts(supabase, {
+      orgId: contextResult.data.orgId,
+      userId: assignedUserId,
+      proposedStart: new Date(start).toISOString(),
+      proposedEnd: new Date(end).toISOString(),
+      excludeSiteVisitAppointmentId: activeAppointment?.id,
+    });
+    if (conflictsResult.success && conflictsResult.data.length > 0) {
+      return err(ErrorCode.VALIDATION_ERROR, formatConflictsMessage(conflictsResult.data));
+    }
+  }
+
   const result = await rescheduleSiteVisit(supabase, {
     siteVisitId,
     start: new Date(start).toISOString(),
     end: new Date(end).toISOString(),
-    assignedUserId: readOptionalString(formData, 'assignedUserId'),
+    assignedUserId,
     reason: readOptionalString(formData, 'reason'),
   });
   if (result.success) {

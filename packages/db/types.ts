@@ -5941,6 +5941,20 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_job_with_schedule: {
+        Args: {
+          p_crew_user_ids?: string[]
+          p_customer_id: string
+          p_description?: string
+          p_lead_user_id?: string
+          p_override_conflicts?: boolean
+          p_property_id: string
+          p_scheduled_end?: string
+          p_scheduled_start?: string
+          p_title: string
+        }
+        Returns: Json
+      }
       create_portal_service_request: {
         Args: {
           p_customer_reported_urgency?: string
@@ -6180,6 +6194,25 @@ export type Database = {
       get_property_memory: {
         Args: { search_org_id: string; search_property_id: string }
         Returns: Json
+      }
+      get_scheduling_conflicts: {
+        Args: {
+          p_exclude_job_id?: string
+          p_exclude_site_visit_appointment_id?: string
+          p_org_id: string
+          p_proposed_end: string
+          p_proposed_start: string
+          p_user_id: string
+        }
+        Returns: {
+          conflict_end: string
+          conflict_start: string
+          customer_name: string
+          property_address: string
+          record_id: string
+          record_type: string
+          title: string
+        }[]
       }
       gettransactionid: { Args: never; Returns: unknown }
       incorporate_change_order_revision: {
