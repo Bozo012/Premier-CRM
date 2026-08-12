@@ -8,7 +8,9 @@ import {
   CreatePropertyInputSchema,
   ErrorCode,
   err,
+  hasCapability,
   ok,
+  type OrgRole,
   type Result,
 } from '@premier/shared';
 import {
@@ -25,6 +27,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 interface CustomerActionContext {
   orgId: string;
   userId: string;
+  role: OrgRole;
 }
 
 async function getCustomerActionContext(): Promise<Result<CustomerActionContext>> {
@@ -43,9 +46,18 @@ async function getCustomerActionContext(): Promise<Result<CustomerActionContext>
     return err(orgContextResult.code, orgContextResult.error);
   }
 
-  return ok({ orgId: orgContextResult.data.orgId, userId: user.id });
+  return ok({ orgId: orgContextResult.data.orgId, userId: user.id, role: orgContextResult.data.role as OrgRole });
 }
 
+// CP-4 (docs/security/customers-properties-authorization-audit.md §10/§15;
+// product decision recorded 2026-08-13): customers/properties are the CRM's
+// authoritative master identity/contact/location records, so create is
+// gated by canManageCustomers (owner/admin/employee) rather than plain
+// active membership. Direct authenticated REST writes to these tables were
+// already fully revoked at the RLS layer (20260804000000_harden_customers_
+// and_properties.sql) — this app-layer check is the only enforcement
+// boundary that ever existed for the service-role action path, and closes
+// it for the first time.
 export type CreateCustomerActionState = Result<{ id: string }>;
 
 export async function createCustomerAction(
@@ -54,6 +66,10 @@ export async function createCustomerAction(
 ): Promise<CreateCustomerActionState> {
   const access = await getCustomerActionContext();
   if (!access.success) return access;
+
+  if (!hasCapability(access.data.role, 'canManageCustomers')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit creating customers.');
+  }
 
   const parsed = CreateCustomerInputSchema.safeParse({
     type: formData.get('type') || undefined,
@@ -125,6 +141,10 @@ export async function createPropertyForCustomerAction(
 ): Promise<CreatePropertyActionState> {
   const access = await getCustomerActionContext();
   if (!access.success) return access;
+
+  if (!hasCapability(access.data.role, 'canManageCustomers')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit adding properties.');
+  }
 
   const parsed = CreatePropertyInputSchema.safeParse({
     customerId: formData.get('customerId'),

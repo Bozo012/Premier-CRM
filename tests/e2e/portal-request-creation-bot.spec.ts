@@ -267,4 +267,103 @@ test.describe('portal request creation bot (create_portal_service_request RPC)',
     await page.goto(routes.portalRequests);
     await expect(page.getByText(title)).toBeVisible();
   });
+
+  // ==========================================================================
+  // Portal customer-reported urgency (product decision recorded 2026-08-13,
+  // docs/implementation/v1-known-gaps-audit.md §11, Option B):
+  // customer_reported_urgency is a separate signal, never mapped into
+  // service_requests.priority. These tests prove that separation live
+  // against the real RPC/table, not just at the app-code level.
+  // ==========================================================================
+
+  test('8. selecting "urgent" writes customer_reported_urgency but leaves priority at its untouched default — the two are never conflated', async () => {
+    const title = `${E2E_TEST_PREFIX} Urgent-reported request ${uniqueSuffix()}`;
+    const result = await createPortalServiceRequest(fixture.userClient, {
+      serviceTitle: title,
+      serviceDescription: 'Customer reports this as urgent.',
+      customerReportedUrgency: 'urgent',
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    const { data: row } = await admin
+      .from('service_requests')
+      .select('priority, customer_reported_urgency')
+      .eq('id', result.data.serviceRequestId)
+      .single();
+
+    expect(row?.customer_reported_urgency).toBe('urgent');
+    // The single most important assertion in this block: internal priority
+    // is completely unchanged by the customer's reported urgency.
+    expect(row?.priority).toBe('normal');
+  });
+
+  test('9. "routine" and "soon" are also stored verbatim, still never touching priority', async () => {
+    for (const urgency of ['routine', 'soon'] as const) {
+      const result = await createPortalServiceRequest(fixture.userClient, {
+        serviceTitle: `${E2E_TEST_PREFIX} ${urgency} request ${uniqueSuffix()}`,
+        serviceDescription: `Customer reports this as ${urgency}.`,
+        customerReportedUrgency: urgency,
+      });
+      expect(result.success).toBe(true);
+      if (!result.success) continue;
+
+      const { data: row } = await admin
+        .from('service_requests')
+        .select('priority, customer_reported_urgency')
+        .eq('id', result.data.serviceRequestId)
+        .single();
+      expect(row?.customer_reported_urgency).toBe(urgency);
+      expect(row?.priority).toBe('normal');
+    }
+  });
+
+  test('10. omitting urgency leaves customer_reported_urgency null, same as before this feature existed', async () => {
+    const result = await createPortalServiceRequest(fixture.userClient, {
+      serviceTitle: `${E2E_TEST_PREFIX} No-urgency request ${uniqueSuffix()}`,
+      serviceDescription: 'Customer does not report an urgency.',
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    const { data: row } = await admin
+      .from('service_requests')
+      .select('priority, customer_reported_urgency')
+      .eq('id', result.data.serviceRequestId)
+      .single();
+    expect(row?.customer_reported_urgency).toBeNull();
+    expect(row?.priority).toBe('normal');
+  });
+
+  test('11. an invalid urgency value is rejected by the RPC itself, not silently coerced or ignored', async () => {
+    const result = await createPortalServiceRequest(fixture.userClient, {
+      serviceTitle: `${E2E_TEST_PREFIX} Invalid-urgency attempt ${uniqueSuffix()}`,
+      serviceDescription: 'Should be rejected: not a real urgency enum value.',
+      // @ts-expect-error — intentionally an invalid value to prove the RPC's
+      // own enum cast rejects it rather than silently accepting arbitrary text.
+      customerReportedUrgency: 'emergency',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('12. direct authenticated UPDATE of priority still fails — this feature does not reopen any other write path to priority', async () => {
+    const seed = await createPortalServiceRequest(fixture.userClient, {
+      serviceTitle: `${E2E_TEST_PREFIX} Priority-tamper-attempt seed ${uniqueSuffix()}`,
+      serviceDescription: 'Seed request for a direct priority-tamper attempt.',
+    });
+    expect(seed.success).toBe(true);
+    if (!seed.success) return;
+
+    const { error } = await fixture.userClient
+      .from('service_requests')
+      .update({ priority: 'emergency' })
+      .eq('id', seed.data.serviceRequestId);
+    expect(error).not.toBeNull();
+
+    const { data: row } = await admin.from('service_requests').select('priority').eq('id', seed.data.serviceRequestId).single();
+    expect(row?.priority).toBe('normal');
+  });
 });

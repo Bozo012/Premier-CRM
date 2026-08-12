@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { recordRequestTriageAction, correctRequestTriageAction } from '../../site-visits/actions';
 
 type Decision = 'remote_estimate' | 'site_visit_required' | 'direct_work_order';
+type CustomerReportedUrgency = 'routine' | 'soon' | 'urgent';
 
 const DECISION_LABELS: Record<Decision, string> = {
   remote_estimate: 'Remote estimate (no visit needed)',
@@ -17,8 +18,16 @@ const DECISION_LABELS: Record<Decision, string> = {
   direct_work_order: 'Direct work order (owner/admin only)',
 };
 
+const URGENCY_LABELS: Record<CustomerReportedUrgency, string> = {
+  routine: 'Routine — whenever works',
+  soon: 'Soon — within the next few days',
+  urgent: 'Urgent — needs attention right away',
+};
+
 interface TriagePanelProps {
   requestId: string;
+  /** What the customer said, shown as context only — the actual triage decision below is what staff acts on. Never fed into `priority` anywhere. */
+  customerReportedUrgency: CustomerReportedUrgency | null;
   triageDecision: Decision | null;
   triageReason: string | null;
   triagedAt: string | null;
@@ -31,6 +40,7 @@ interface TriagePanelProps {
 
 export function TriagePanel({
   requestId,
+  customerReportedUrgency,
   triageDecision,
   triageReason,
   triagedAt,
@@ -41,12 +51,17 @@ export function TriagePanel({
   siteVisitId,
 }: TriagePanelProps) {
   if (!triageDecision) {
-    return <DecisionForm requestId={requestId} />;
+    return <DecisionForm requestId={requestId} customerReportedUrgency={customerReportedUrgency} />;
   }
 
   return (
     <div className="space-y-3">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Triage</h2>
+      {customerReportedUrgency ? (
+        <p className="text-xs text-muted-foreground">
+          Customer reported: <span className="font-medium text-foreground">{URGENCY_LABELS[customerReportedUrgency]}</span> — context only, not staff-set.
+        </p>
+      ) : null}
       <div className="rounded-md border bg-muted/20 p-3 text-sm">
         <p>
           <span className="font-medium text-foreground">Decision:</span> {DECISION_LABELS[triageDecision]}
@@ -82,7 +97,13 @@ export function TriagePanel({
   );
 }
 
-function DecisionForm({ requestId }: { requestId: string }) {
+function DecisionForm({
+  requestId,
+  customerReportedUrgency,
+}: {
+  requestId: string;
+  customerReportedUrgency: CustomerReportedUrgency | null;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [decision, setDecision] = useState<Decision | ''>('');
@@ -108,6 +129,12 @@ function DecisionForm({ requestId }: { requestId: string }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-md border bg-background p-4">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Triage</h2>
+      {customerReportedUrgency ? (
+        <p className="text-xs text-muted-foreground">
+          Customer reported: <span className="font-medium text-foreground">{URGENCY_LABELS[customerReportedUrgency]}</span> — context for
+          your decision below, not an instruction.
+        </p>
+      ) : null}
 
       <div className="space-y-1">
         <label htmlFor="decision" className="text-sm font-medium text-foreground">

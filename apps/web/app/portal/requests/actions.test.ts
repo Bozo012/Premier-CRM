@@ -163,6 +163,70 @@ describe('createPortalServiceRequestAction', () => {
     );
   });
 
+  it('passes a selected customer-reported urgency through, distinct from and never labeled as priority', async () => {
+    mockSignedIn();
+    createPortalServiceRequestMock.mockResolvedValue({
+      success: true,
+      data: { serviceRequestId: 'req-3', requestNumber: 'SR-000003', status: 'new', submittedAt: '2026-01-01T00:00:00Z' },
+    });
+
+    const result = await createPortalServiceRequestAction(
+      null,
+      buildFormData({
+        serviceTitle: 'Roof leak',
+        serviceDescription: 'Water coming through the ceiling.',
+        customerReportedUrgency: 'urgent',
+      })
+    );
+
+    expect(result.success).toBe(true);
+    expect(createPortalServiceRequestMock).toHaveBeenCalledWith(
+      PORTAL_CLIENT,
+      expect.objectContaining({ customerReportedUrgency: 'urgent' })
+    );
+    // This action has no `priority` field anywhere in its schema or call —
+    // there is no code path here that could set internal priority from the
+    // customer's reported urgency.
+    const callArgs = createPortalServiceRequestMock.mock.calls[0]?.[1];
+    expect(callArgs).not.toHaveProperty('priority');
+  });
+
+  it('omitting urgency (not answered) passes null through, same as an empty selection', async () => {
+    mockSignedIn();
+    createPortalServiceRequestMock.mockResolvedValue({
+      success: true,
+      data: { serviceRequestId: 'req-4', requestNumber: 'SR-000004', status: 'new', submittedAt: '2026-01-01T00:00:00Z' },
+    });
+
+    const result = await createPortalServiceRequestAction(
+      null,
+      buildFormData({ serviceTitle: 'Leaky faucet', serviceDescription: 'Kitchen faucet is dripping.' })
+    );
+
+    expect(result.success).toBe(true);
+    expect(createPortalServiceRequestMock).toHaveBeenCalledWith(
+      PORTAL_CLIENT,
+      expect.objectContaining({ customerReportedUrgency: null })
+    );
+  });
+
+  it('rejects an invalid customer-reported urgency value before calling the RPC wrapper', async () => {
+    mockSignedIn();
+
+    const result = await createPortalServiceRequestAction(
+      null,
+      buildFormData({
+        serviceTitle: 'Leaky faucet',
+        serviceDescription: 'Kitchen faucet is dripping.',
+        customerReportedUrgency: 'emergency',
+      })
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('VALIDATION_ERROR');
+    expect(createPortalServiceRequestMock).not.toHaveBeenCalled();
+  });
+
   it('passes through a failure Result from the RPC wrapper unchanged (e.g. property-ownership rejection) without revalidating', async () => {
     mockSignedIn();
     createPortalServiceRequestMock.mockResolvedValue({

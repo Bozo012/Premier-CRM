@@ -56,3 +56,31 @@ describe('canReplyToCustomers — owner/admin/employee only', () => {
     expect(hasCapability('viewer', 'canReplyToCustomers')).toBe(false);
   });
 });
+
+/**
+ * `canManageCustomers` (CP-4, docs/security/customers-properties-
+ * authorization-audit.md §10/§15; product decision recorded 2026-08-13).
+ * Deliberately narrower than canScheduleJobs/canTriageRequests despite the
+ * repo's general pattern of including subcontractor in routine operational
+ * capabilities — customers/properties are the CRM's authoritative master
+ * identity/contact/location records, a distinct sensitivity class from
+ * day-to-day field work, and the decision was to start narrow (owner/admin/
+ * employee) rather than default to the wider pattern. Covers only the two
+ * operations that exist today (createCustomerAction,
+ * createPropertyForCustomerAction) — no archive/delete capability exists
+ * because no archive/delete action exists yet.
+ */
+describe('canManageCustomers — owner/admin/employee only (CP-4, deliberately narrower than the repo default)', () => {
+  const EXPECTED_ALLOWED: readonly OrgRole[] = ['owner', 'admin', 'employee'];
+
+  it.each(ALL_ROLES)('role=%s', (role) => {
+    expect(hasCapability(role, 'canManageCustomers')).toBe(EXPECTED_ALLOWED.includes(role));
+  });
+
+  it('does not grant subcontractor customer/property authority despite holding other operational capabilities', () => {
+    expect(hasCapability('subcontractor', 'canScheduleJobs')).toBe(true);
+    expect(hasCapability('subcontractor', 'canTriageRequests')).toBe(true);
+    expect(hasCapability('subcontractor', 'canManageCustomers')).toBe(false);
+    expect(hasCapability('viewer', 'canManageCustomers')).toBe(false);
+  });
+});
