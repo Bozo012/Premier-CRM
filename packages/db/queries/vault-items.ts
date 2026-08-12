@@ -200,8 +200,11 @@ export async function unpublishCustomerVisiblePhoto(client: DbClient, vaultItemI
  * The ONE centralized customer read path (`list_customer_visible_photos`).
  * Call with the user's own session client — the RPC proves ownership via
  * auth.uid() against customer_accounts, plus explicit customer_visible=true,
- * in a single WHERE clause. Pass exactly one of jobId/estimateId; the RPC
- * itself never trusts a bare vault_item id.
+ * in a single WHERE clause. Pass exactly one of jobId/estimateId/siteVisitId;
+ * the RPC itself never trusts a bare vault_item id. The siteVisitId branch
+ * (20260811040000_site_visit_customer_photo_visibility.sql) proves ownership
+ * via site_visits -> service_requests -> customer_accounts, since site_visits
+ * carries no customer_id of its own.
  */
 export interface CustomerVisiblePhoto {
   id: string;
@@ -218,6 +221,12 @@ export async function listCustomerVisiblePhotosForJob(client: DbClient, jobId: s
 
 export async function listCustomerVisiblePhotosForEstimate(client: DbClient, estimateId: string): Promise<Result<CustomerVisiblePhoto[]>> {
   const { data, error } = await client.rpc('list_customer_visible_photos', { p_estimate_id: estimateId });
+  if (error) return err(ErrorCode.DB_ERROR, error.message);
+  return ok(mapCustomerVisiblePhotoRows(data));
+}
+
+export async function listCustomerVisiblePhotosForSiteVisit(client: DbClient, siteVisitId: string): Promise<Result<CustomerVisiblePhoto[]>> {
+  const { data, error } = await client.rpc('list_customer_visible_photos', { p_site_visit_id: siteVisitId });
   if (error) return err(ErrorCode.DB_ERROR, error.message);
   return ok(mapCustomerVisiblePhotoRows(data));
 }

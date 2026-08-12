@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Clock, MapPin } from 'lucide-react';
 
-import { createServiceClient, getActiveOrgContext, getSiteVisitById } from '@premier/db';
-import type { InspectionFieldDefinition } from '@premier/shared';
+import { createServiceClient, getActiveOrgContext, getSignedReadUrl, getSiteVisitById } from '@premier/db';
+import { hasCapability, type InspectionFieldDefinition, type OrgRole } from '@premier/shared';
 
 import {
   ForgeBackLink,
@@ -18,6 +18,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 import { GenerateEstimateButton } from '../_components/generate-estimate-button';
 import { LifecycleButtons } from '../_components/lifecycle-buttons';
+import { PublishPhotoControl } from '../_components/publish-photo-control';
 import { ScheduleForm } from '../_components/schedule-form';
 import { StartInspectionButton } from '../_components/start-inspection-button';
 import { SiteVisitsShell } from '../_components/site-visits-shell';
@@ -104,6 +105,33 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
   const fieldDefinitions = visit.fieldDefinitions as InspectionFieldDefinition[];
   const progress = inspectionDetailProgress(visit.inspectionResponses ?? {}, fieldDefinitions);
   const actions = siteVisitDetailActions(visit);
+  const canPublishCustomerMedia = hasCapability(orgContextResult.data.role as OrgRole, 'canPublishCustomerMedia');
+
+  // Customer-Safe Photo Visibility fast-follow (docs/implementation/
+  // customer-safe-photo-visibility-design.md, PR #141/#142): a read-only
+  // staff gallery, separate from the live inspection FieldEditor — this
+  // never touches inspection_responses, save state, or the immutable-
+  // findings rule, it only reads the same vault_items rows the photo_list
+  // field already references by id.
+  const { data: photoRows } = await serviceClient
+    .from('vault_items')
+    .select('id, content, created_at, storage_object_key, image_url, customer_visible')
+    .eq('org_id', visit.orgId)
+    .eq('site_visit_id', visit.id)
+    .eq('type', 'photo')
+    .order('created_at', { ascending: false });
+  const sitePhotos = await Promise.all(
+    (photoRows ?? []).map(async (item) => {
+      const storagePath = item.storage_object_key ?? item.image_url;
+      const signedUrl = storagePath ? await getSignedReadUrl(serviceClient, storagePath) : null;
+      return {
+        id: item.id,
+        caption: item.content?.trim() || 'Site visit photo',
+        imageUrl: signedUrl?.success ? signedUrl.data : null,
+        customerVisible: item.customer_visible,
+      };
+    })
+  );
 
   return (
     <SiteVisitsShell shellData={shellData} mobileNav={mobileNav}>
@@ -201,6 +229,41 @@ export default async function SiteVisitDetailPage({ params }: SiteVisitDetailPag
       </ForgeCard>
 
       <VisitContextCard visit={visit} mapsUrl={mapsUrl} />
+
+      {sitePhotos.length > 0 ? (
+        <ForgeCard className="space-y-3">
+          <ForgeSectionTitle>Site visit photos</ForgeSectionTitle>
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {sitePhotos.map((photo) => (
+              <li key={photo.id} className="overflow-hidden rounded-md border">
+                <div className="grid aspect-video place-items-center bg-muted">
+                  {photo.imageUrl ? (
+                    <div
+                      role="img"
+                      aria-label={photo.caption}
+                      className="h-full w-full bg-cover bg-center"
+                      style={{ backgroundImage: `url(${photo.imageUrl})` }}
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Preview unavailable</span>
+                  )}
+                </div>
+                <div className="p-2">
+                  <p className="line-clamp-1 text-xs font-medium text-foreground">{photo.caption}</p>
+                </div>
+                <div className="border-t p-2">
+                  <PublishPhotoControl
+                    vaultItemId={photo.id}
+                    siteVisitId={visit.id}
+                    initialCustomerVisible={photo.customerVisible}
+                    canPublish={canPublishCustomerMedia}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </ForgeCard>
+      ) : null}
 
       {visit.status === 'completed' ? (
         <CompletedInspectionSummary

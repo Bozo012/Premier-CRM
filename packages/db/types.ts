@@ -6079,7 +6079,11 @@ export type Database = {
         }
       }
       list_customer_visible_photos: {
-        Args: { p_estimate_id?: string; p_job_id?: string }
+        Args: {
+          p_estimate_id?: string
+          p_job_id?: string
+          p_site_visit_id?: string
+        }
         Returns: {
           caption: string
           created_at: string

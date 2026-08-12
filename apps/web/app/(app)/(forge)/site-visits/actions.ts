@@ -5,10 +5,12 @@ import { revalidatePath } from 'next/cache';
 import {
   ErrorCode,
   err,
+  hasCapability,
   ok,
   validateInspectionResponses,
   validateRequiredFieldsPresent,
   type InspectionFieldDefinition,
+  type OrgRole,
   type Result,
 } from '@premier/shared';
 import {
@@ -21,6 +23,7 @@ import {
   createQuoteFromEstimateRpc,
   generateEstimateFromSiteVisit,
   getActiveOrgContext,
+  publishCustomerVisiblePhoto,
   recordRequestTriage,
   requestEstimatePricingReview,
   rescheduleSiteVisit,
@@ -31,6 +34,8 @@ import {
   scheduleSiteVisit,
   startSiteVisit,
   undoSiteVisitStart,
+  unpublishCustomerVisiblePhoto,
+  type PublishedPhoto,
 } from '@premier/db';
 
 import { finalizeSiteVisitUpload } from '@/lib/site-visit-attachments';
@@ -513,4 +518,75 @@ export async function createQuoteFromEstimateWorkflowAction(
   revalidatePath(`/estimates/${estimateId}`);
   revalidatePath(`/quotes/${result.data}`);
   return ok({ quoteId: result.data });
+}
+
+// ---------------------------------------------------------------------------
+// Customer-Safe Photo Visibility, fast-follow (docs/implementation/customer-
+// safe-photo-visibility-design.md, PR #141/#142;
+// 20260811040000_site_visit_customer_photo_visibility.sql). Deliberately
+// uses its own local context call (not getWorkflowActionContext, which
+// intentionally omits role) so canPublishCustomerMedia can be checked here
+// for a clean error message — the RPC re-checks it regardless, exactly
+// mirroring jobs/actions.ts's publishJobPhotoAction/unpublishJobPhotoAction.
+// ---------------------------------------------------------------------------
+
+async function getSiteVisitPhotoActionContext(): Promise<Result<{ orgId: string; role: OrgRole }>> {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return err(ErrorCode.FORBIDDEN, 'You must be signed in.');
+  }
+
+  const orgContextResult = await getActiveOrgContext(supabase, user.id);
+  if (!orgContextResult.success) {
+    return err(orgContextResult.code, orgContextResult.error);
+  }
+
+  return ok({ orgId: orgContextResult.data.orgId, role: orgContextResult.data.role as OrgRole });
+}
+
+export type PublishSiteVisitPhotoActionState = Result<PublishedPhoto>;
+
+export async function publishSiteVisitPhotoAction(
+  vaultItemId: string,
+  siteVisitId: string
+): Promise<PublishSiteVisitPhotoActionState> {
+  const access = await getSiteVisitPhotoActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canPublishCustomerMedia')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit publishing photos to the customer portal.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await publishCustomerVisiblePhoto(supabase, vaultItemId);
+  if (!result.success) return result;
+
+  revalidatePath(`/site-visits/${siteVisitId}`);
+  return result;
+}
+
+export async function unpublishSiteVisitPhotoAction(
+  vaultItemId: string,
+  siteVisitId: string
+): Promise<PublishSiteVisitPhotoActionState> {
+  const access = await getSiteVisitPhotoActionContext();
+  if (!access.success) return access;
+  const { role } = access.data;
+
+  if (!hasCapability(role, 'canPublishCustomerMedia')) {
+    return err(ErrorCode.FORBIDDEN, 'Your role does not permit removing photos from the customer portal.');
+  }
+
+  const supabase = await getServerSupabase();
+  const result = await unpublishCustomerVisiblePhoto(supabase, vaultItemId);
+  if (!result.success) return result;
+
+  revalidatePath(`/site-visits/${siteVisitId}`);
+  return result;
 }
