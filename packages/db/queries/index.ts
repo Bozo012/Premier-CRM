@@ -264,6 +264,13 @@ export {
   type SchedulingSlotBooking,
 } from './scheduling';
 export {
+  createJobWithSchedule,
+  getSchedulingConflicts,
+  type CreateJobWithScheduleOutcome,
+  type SchedulingConflict,
+  type SchedulingConflictRecordType,
+} from './scheduling-conflicts';
+export {
   createEstimateLineItem,
   deleteEstimateLineItem,
   getEstimateById,
