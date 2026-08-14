@@ -52,6 +52,7 @@ All 10 pending migrations were read in full (not just diffed by name). Summary:
 - **Indexes**: each new table gets appropriate composite/partial indexes (e.g. `job_assignments_one_lead_per_job` partial unique index, `communication_threads_org_updated_idx`). No `CREATE INDEX CONCURRENTLY` used, but tables are new/empty at migration time so a plain `CREATE INDEX` is instant — not a production-lock concern.
 - **RLS/grants**: consistent discipline throughout — direct `authenticated` write grants are never given on sensitive tables; every mutation path is a `SECURITY DEFINER` RPC with `REVOKE ALL FROM PUBLIC` + explicit `GRANT EXECUTE TO authenticated` (and `service_role` where server-side code needs it). This matches the hardened pattern already locked in for jobs/quotes (`20260803070000_harden_jobs_and_quote_creation_boundary.sql`, already live in prod).
 - **Proven on e2e**: all 10 (in the same order, plus the two squashed hotfixes) were applied and exercised on `premier-crm-e2e` before merge. Cross-referenced against `docs/implementation/v1-known-gaps-audit.md`, which documents live e2e verification (test counts, e.g. 15/15 for scheduling-reliability, 8/8 for archetype-defaults RLS) for 6 of the 10.
+- **`canPublishCustomerMedia` role matrix (exact, verified live against production post-deploy)**: `owner` ✅, `admin` ✅, `employee` ❌, `subcontractor` ❌, `viewer` ❌. This is an owner-**and**-admin capability, not owner-only — `packages/shared/permissions.ts` (`canPublishCustomerMedia: ['owner', 'admin']`) and the production `role_has_capability()` function agree exactly. Recorded here explicitly because an earlier informal status update in this deploy's chat log paraphrased it as "owner-only," which was imprecise; no committed document ever stated that, and no implementation behavior was ever in question.
 
 **No dangerous migration or data issue found** in the pending set.
 
@@ -169,3 +170,58 @@ Conditions before executing §9:
 1. Confirm production Vercel env vars actually target `apnbpcauqrjvkoleisde` (not independently verifiable via available tools this pass).
 2. Explicit go-ahead from you to actually apply the 10 migrations and redeploy — **not done as part of this audit**, per your instruction.
 3. Google Maps P0 remains open and unrelated to this deploy — does not block the migration/deploy sequence above, but should not be described as resolved.
+
+---
+
+## 14. Post-deployment addendum (production promotion executed)
+
+Sections 1–13 above are the pre-deployment audit, left as originally written. This addendum records what actually happened when the conditions in §13 were met and the sequence in §9 was executed.
+
+**Result**: all 10 migrations applied to `apnbpcauqrjvkoleisde` individually with a structural checkpoint after each (table/index/RLS/RPC/grant verification, and for the security-relevant ones, exact role-matrix verification). No error, no improvised hotfix. Post-migration: production and repository migration history match **89/89 with zero logical drift**. Security advisor's `customer_archetype_defaults` `ERROR` finding closed immediately. Storage bucket unchanged (still private). All pre-existing row counts unchanged (`vault_items`=3, `service_requests`=6, `jobs`=3, `customer_archetype_defaults`=7). Deployed SHA: `3de84346c8a227f88dde5cff0bde78939a52d929`.
+
+### Release-sequencing hazard discovered during this deployment
+
+Vercel's GitHub integration auto-deploys to production on every push to `main` — confirmed via `list_deployments`: the production deployment built from `3de84346c8a227f88dde5cff0bde78939a52d929` (containing PR #147's scheduling/job-assignment app code) was already `READY` and serving traffic **before** this session applied the corresponding 10 production migrations. There is no CI/CD coupling between "migrations applied to production" and "app code deployed to production" in the current setup — no GitHub Actions workflow exists (`.github/workflows/` is absent) and `apps/web/vercel.json` has no `ignoreCommand` or other deploy gate.
+
+This created a real window — app code live, referencing `job_assignments`, `communication_threads`, `get_scheduling_conflicts()`, etc. before those objects existed in production — where any user exercising those code paths (e.g. assigning crew via `create_job_with_schedule`) would have hit a hard database error (missing table/function), not a graceful degradation. The window closed when migrations completed in this session; no runtime errors were observed during it (confirmed via `get_runtime_errors`), but that is closer to lucky timing than a property of the process.
+
+**This must not become the normal release process.** The root cause is structural: migrations and app deploys are two independently-triggered systems (Supabase MCP/CLI vs. Vercel's Git integration) with no ordering guarantee between them, and the current runbook (used for PR #147) applied migrations *after* the PR merged — exactly backwards, since merging to `main` triggers the deploy immediately.
+
+**Smallest reliable fix, available today with zero infrastructure changes**: invert the runbook order. For any release that includes schema-dependent app code:
+1. Merge the release candidate PR to a *staging point* — in practice, since this repo has no separate staging branch, this means: finish code review and get the PR to a mergeable, approved state, but do not click merge yet.
+2. Apply and verify the corresponding production migrations first, against the still-unmerged PR's `supabase/migrations/` files (exactly as done in this session, just reordered relative to the merge).
+3. Verify schema/security (advisor, structural checks) — as done in this session.
+4. Merge the PR. Vercel's auto-deploy fires immediately and is now safe, because the schema it needs already exists.
+5. Verify deployment (runtime errors, route health).
+6. Smoke test.
+
+This requires no Vercel configuration change and no new tooling — only a discipline change in the order operations happen in, and it directly matches the order you specified as preferred. The cost: migrations must be identified and applied from the PR branch before it's merged, which means a human (or agent) has to look at the diff pre-merge rather than post-merge — a small process overhead, not an infrastructure one.
+
+**Stronger fix, requires your explicit approval before implementing (not done here)**: Vercel supports an "Ignored Build Step" (a custom command evaluated before each deploy; a non-zero exit skips the deploy). A `vercel.json` `ignoreCommand` could hold production deploys on a manual gate (e.g., only deploy when a marker file/commit trailer is present, flipped once migrations are confirmed applied) — turning step 4 above from "trust the order of operations" into "the platform enforces it." This is a real config change to `apps/web/vercel.json` and/or Vercel project settings, and per your instruction it is not applied — flagged here as the natural next step if the manual-ordering discipline above proves insufficient in practice.
+
+No Vercel configuration was changed as part of this session.
+
+### Exact backlog reconciliation (post-deployment)
+
+The prior §12 count ("P1: ~8") was an approximation and is superseded by this exact list. Each item below is classified against actual production usability, not treated as an automatic launch blocker by virtue of being P1-labeled in the source audit.
+
+**LAUNCH BLOCKER (2)**
+1. **Google Maps credential status is unconfirmed** (§ below) — if genuinely missing, this is the sole outstanding P0. Route Planning (`/routes`) is built but has never been exercised against a real key; the product's own V1 scope treats live Maps/Geocoding as part of the intended route-planning feature, not an optional extra.
+2. **Directions "Calculate route" UI trigger** — the adapter exists but nothing calls it. Classified as launch-related *only* because it's the same Maps/Route-Planning feature as item 1, not an independent gap. Implement only after live Maps/Geocoding are proven, using the existing adapter (no new routing provider).
+
+**PRE-V1 QUALITY / folded into the Maps work, not separate (1)**
+3. **Priority-marker visual distinction, live-verified** — this is a verification step inside the Maps live-check, not a standalone feature gap. It either passes as part of item 1's live verification or it doesn't; there is no separate implementation work here.
+
+**POST-V1 (2)** — agreed: these are cleanup/hygiene, not launch blockers, unless a concrete functional break is found.
+4. **Four legacy route families** (`activity-logs`, `settings`, `site-photos`, `today` under `(app)/(legacy)/`) — architectural/presentational inconsistency (missing `ForgeShell` chrome), not a reported functional break. No evidence surfaced in this session that these pages are broken; deferred post-launch.
+5. **Shared mobile-overflow word-break utility/lint rule** — a process gap (no guard against the *next* instance of a recurring bug class), not an existing unfixed defect. Deferred post-launch; individual overflow defects should be fixed as found, not blocked on building the general tooling first.
+
+**RECLASSIFIED OUT OF THE P1 LIST ENTIRELY (1)**
+6. **Customer-visible job logs** (`activity_log` exposed to the portal) — distinct from customer-visible *photos* (`vault_items.customer_visible`, which shipped in this deployment). No portal lifecycle requirement was found in this session that depends on staff-log visibility specifically — customers already have requests, appointments, jobs, quotes, invoices, threaded messaging, and published photos as their portal surface. Reclassified **post-V1**, matching your assessment; nothing in the product's current V1 scope documentation requires it.
+
+**Exact counts after reclassification**:
+- **P0 (launch blocker): 1** — Google Maps credentials + live verification (items 1–3 above are one blocker, not three).
+- **P1 (should complete before V1, but not a hard blocker): 0** — nothing remaining meets this bar once Maps is resolved one way or the other.
+- **P2/P3 (post-V1): 3** — legacy route families, mobile-overflow tooling, customer-visible job logs.
+
+This matches your read: the real remaining launch work is Maps (credential status + live verification, and the Directions trigger as part of that same feature) plus the still-outstanding authenticated smoke pass — not "five P1s."
