@@ -85,8 +85,20 @@ async function geocodeAddressKeys(addressKeys: string[]): Promise<Map<string, La
   const outcomes = await Promise.allSettled(addressKeys.map((address) => geocodeAddress(apiKey, address)));
   outcomes.forEach((outcome, index) => {
     const addressKey = addressKeys[index];
-    if (addressKey && outcome.status === 'fulfilled' && outcome.value.status === 'ok' && outcome.value.position) {
+    if (!addressKey) return;
+    if (outcome.status === 'fulfilled' && outcome.value.status === 'ok' && outcome.value.position) {
       result.set(addressKey, outcome.value.position);
+      return;
+    }
+    // Diagnostic only — never logs the API key, only Google's own returned
+    // error text (already safe to log; it's provider-side response
+    // content, not a secret) so a real geocoding failure is debuggable via
+    // Vercel function logs instead of silently collapsing into "Location
+    // unavailable" with no trace of *why*.
+    if (outcome.status === 'fulfilled' && outcome.value.status === 'error') {
+      console.error(`[routes] Geocoding failed: ${outcome.value.errorMessage ?? 'unknown error'}`);
+    } else if (outcome.status === 'rejected') {
+      console.error(`[routes] Geocoding request threw unexpectedly: ${String(outcome.reason)}`);
     }
   });
   return result;

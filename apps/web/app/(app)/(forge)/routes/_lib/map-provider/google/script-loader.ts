@@ -67,7 +67,15 @@ export function loadGoogleMaps(apiKey: string): Promise<GoogleMapsNamespace> {
     // `libraries=geometry` adds google.maps.geometry.encoding.decodePath(),
     // needed to render the real overview polyline returned by Compute
     // Routes (never a client-computed straight line between stops).
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=geometry&callback=__forgeGoogleMapsCallback`;
+    // `loading=async` is Google's own current recommendation (without it,
+    // the browser console logs "Google Maps JavaScript API has been loaded
+    // directly without loading=async" — a real console warning observed
+    // during live Demo Key verification, not a functional break, but the
+    // documented current-best-practice fix per Google's load-maps-js-api
+    // guidance). Behavior is unchanged: same script tag, same async
+    // attribute, same callback-based resolution — this only adds the one
+    // missing query param Google's docs call for.
+    script.src = `https://maps.googleapis.com/maps/api/js?loading=async&key=${encodeURIComponent(apiKey)}&libraries=geometry&callback=__forgeGoogleMapsCallback`;
     script.async = true;
     script.onerror = () => reject(new Error('Failed to load the Google Maps script'));
     document.head.appendChild(script);

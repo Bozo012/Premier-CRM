@@ -2,6 +2,36 @@
 
 Status: implemented on `feature/maps-modernization-routes-api`, base `origin/main @ fa195db3b4f5861847f598a0920690183884d0bb`. Not merged, not deployed. No production migration, no production credential, and no production infrastructure change is part of this slice.
 
+## Live verification findings (PR preview, Demo Key)
+
+**Maps JavaScript API: PASS.** Confirmed rendering successfully on the PR preview after allowlisting the preview URL as an HTTP referrer for the Demo Key.
+
+**Geocoding API v4: FAIL — root cause identified, not a code defect.** A real scheduled job (21 Millers Ridge Dr, Warsaw, KY 41095 — an address Google Maps independently resolves correctly) failed to geocode through Forge: "Missing location: 1," no marker, map stayed at the default continental-US extent.
+
+Investigated by independently reproducing the exact request this codebase makes, directly against Google's live servers (no key, to isolate infrastructure/format issues from credential issues):
+
+- `GET https://geocode.googleapis.com/v4/geocode/address/{urlEncodedAddress}` — confirmed live and correctly routed for both `v4` and `v4beta` (returns a real `403 PERMISSION_DENIED` in the exact AIP-193 shape this code's parser expects, not a 404 "no such route").
+- The exact problem address, URL-encoded exactly as this code encodes it (`encodeURIComponent`), reproduced against the same real endpoint: same clean `403 PERMISSION_DENIED`, no 400 `INVALID_ARGUMENT` — rules out an address-encoding/format defect.
+- `X-Goog-Api-Key` header mechanism confirmed correct (this is literally how the reproduction request above authenticates, or rather fails to).
+
+This rules out, with direct evidence rather than inference: wrong endpoint, wrong URL/address encoding, wrong header name, and wrong error-response parsing.
+
+**Most likely remaining cause**: an HTTP referrer (website) restriction. Google's own key-restriction documentation is explicit that website restrictions are for browser-originated requests only — a request must carry a `Referer` header matching the allowed pattern, and server-side `fetch()` calls (this app's Geocoding v4 and Compute Routes calls both run server-side, in Next.js server components/actions) do not send one. If the same Demo Key value populates both `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` and `GOOGLE_MAPS_API_KEY` (as this doc originally suggested for testing convenience — see "correction" below), and it now carries an HTTP referrer restriction (added to fix Maps JS loading on the preview), every server-side call against that key would be rejected for this reason alone, regardless of which server API it targets. This has not been confirmed against the actual key (no access to it, and it should never be pasted into chat per your own instruction) — it is the conclusion best supported by process of elimination after ruling out every code-level explanation, not a certainty.
+
+**Correction to this doc's original Demo Key guidance**: the earlier claim that "the same demo key value may be used for both variables" was about which *APIs* a Demo Key's product tier supports (confirmed true — Maps JS, Geocoding v4, and Routes API are all in scope). It did not account for *restriction type* incompatibility, which is a separate, more fundamental Google Cloud API-key mechanic (HTTP-referrer vs. no-restriction/IP-restriction) that applies to Demo Keys exactly the same as billed keys. **The correct setup, even for Demo Key testing, is two separate key values** — matching the "two separate keys, two separate restriction models" plan this doc always specified for *production* (§ "Final production credential plan"), just pulled forward to the testing phase too:
+- One Demo Key, HTTP-referrer-restricted to the preview/production domain(s), for `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`.
+- A second Demo Key (or the same key with no restriction, if Google's Cloud Console allows an unrestricted Demo Key — restriction-free is the only mode compatible with a referrer-less server call) for `GOOGLE_MAPS_API_KEY`.
+
+**Diagnostic logging added** (`page.tsx`'s `geocodeAddressKeys()`): a geocoding failure now logs Google's own returned error message (never the API key) to server console/Vercel function logs, rather than silently collapsing into "Location unavailable" with no trace of why. Once a second, unrestricted server key is configured and this branch is redeployed, re-visiting `/routes` for a date with a real address will produce a log line with Google's exact rejection reason (or confirm success) — turning this from inference into direct confirmation.
+
+**Compute Routes: NOT EXERCISED.** No day currently has ≥2 geocoded stops (confirmed by you; not independently re-verified against a second data source, since doing so would require the same credential fix above to even attempt). If the diagnosis above is correct, Compute Routes would hit the identical referrer-restriction rejection once real multi-stop data existed — this is a credential-configuration risk to close before merge, not a reason to believe the Compute Routes *code* itself is defective (its request construction was verified the same way as Geocoding's — see the "Compute Routes architecture" section above, and its own fixture-based test suite remains green).
+
+**No production data was created, mutated, or read-write-touched** to investigate this — every check above was either a read-only query against already-existing production rows, or a request against Google's own public endpoint using no real credential.
+
+## Forward-looking architecture note (not implemented in this PR)
+
+You flagged that the next planned slice is canonical `properties.location` persistence (coordinates captured once, at Places-selection time, on the property record itself), with Geocoding API v4 becoming a fallback/backfill path rather than the routine per-page-load behavior this PR implements. That's a real, larger architectural shift — persisted coordinates, a write path, a backfill job for existing properties, and a different call pattern for `/routes` (read `properties.location` first, geocode only on a genuine cache-miss). None of that is implemented here; this PR's `/routes` page continues to geocode ephemerally, every load, exactly as it did before this change (only the underlying API target moved from v3 to v4). Recorded here so the next slice has this context without re-deriving it.
+
 ## Why
 
 Production has no Google Maps credentials configured (confirmed via manual Vercel dashboard check, 2026-08-14). Rather than provision credentials for the pre-existing legacy Directions API implementation and immediately owe a migration, this modernizes the Google provider layer *before* any real key is ever used against it — Route Planning has never been live-verified, so there is no live behavior to preserve compatibility with.
