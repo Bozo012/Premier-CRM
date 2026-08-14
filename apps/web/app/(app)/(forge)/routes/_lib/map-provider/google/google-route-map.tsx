@@ -6,22 +6,28 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { MapMarker } from '../types';
-import { loadGoogleMaps, type GoogleMapInstance, type GoogleMarkerInstance } from './script-loader';
+import { loadGoogleMaps, type GoogleMapInstance, type GoogleMarkerInstance, type GooglePolylineInstance } from './script-loader';
 
 export interface GoogleRouteMapProps {
   apiKey: string;
   markers: MapMarker[];
   selectedId: string | null;
   onSelectMarker: (id: string) => void;
+  /** Real encoded overview polyline from a completed Compute Routes call —
+   * never a client-computed straight line. Optional: routes are calculated
+   * on demand, not automatically, so this is null until "Calculate route"
+   * succeeds. */
+  overviewPolyline?: string | null;
 }
 
-/** Renders the live Google map with one pin per real geocoded marker. Not
- * live-verified in this environment (no API key configured here) — see the
- * report's provisioning checklist. */
-export function GoogleRouteMap({ apiKey, markers, selectedId, onSelectMarker }: GoogleRouteMapProps) {
+/** Renders the live Google map with one pin per real geocoded marker, and
+ * (once a route has been calculated) the real polyline geometry Google
+ * returned. */
+export function GoogleRouteMap({ apiKey, markers, selectedId, onSelectMarker, overviewPolyline = null }: GoogleRouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const markerInstancesRef = useRef<Map<string, GoogleMarkerInstance>>(new Map());
+  const polylineInstanceRef = useRef<GooglePolylineInstance | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,6 +81,26 @@ export function GoogleRouteMap({ apiKey, markers, selectedId, onSelectMarker }: 
       map.setCenter(marker.position);
     }
   }, [selectedId, markers]);
+
+  useEffect(() => {
+    const maps = typeof window !== 'undefined' ? window.google?.maps : undefined;
+    const map = mapRef.current;
+
+    polylineInstanceRef.current?.setMap(null);
+    polylineInstanceRef.current = null;
+
+    if (!maps || !map || !overviewPolyline || !maps.geometry) return;
+
+    const path = maps.geometry.encoding.decodePath(overviewPolyline);
+    polylineInstanceRef.current = new maps.Polyline({
+      path,
+      geodesic: true,
+      strokeColor: '#2563eb',
+      strokeOpacity: 0.9,
+      strokeWeight: 4,
+      map,
+    });
+  }, [overviewPolyline]);
 
   if (loadError) {
     return (

@@ -18,6 +18,8 @@ export interface GoogleMapsNamespace {
   Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
   LatLngBounds: new () => { extend: (point: { lat: number; lng: number }) => void };
   InfoWindow: new (options: Record<string, unknown>) => { open: (map: GoogleMapInstance, marker: GoogleMarkerInstance) => void; close: () => void };
+  Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
+  geometry?: { encoding: { decodePath: (encoded: string) => Array<{ lat: () => number; lng: () => number }> } };
 }
 
 export interface GoogleMapInstance {
@@ -28,6 +30,12 @@ export interface GoogleMapInstance {
 
 export interface GoogleMarkerInstance {
   addListener: (event: string, handler: () => void) => void;
+  setMap: (map: GoogleMapInstance | null) => void;
+}
+
+/** Renders the real, provider-returned overview polyline for a calculated
+ * route — never a client-computed straight line between stops. */
+export interface GooglePolylineInstance {
   setMap: (map: GoogleMapInstance | null) => void;
 }
 
@@ -56,7 +64,10 @@ export function loadGoogleMaps(apiKey: string): Promise<GoogleMapsNamespace> {
       else reject(new Error('Google Maps script loaded but window.google.maps is missing'));
     };
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=__forgeGoogleMapsCallback`;
+    // `libraries=geometry` adds google.maps.geometry.encoding.decodePath(),
+    // needed to render the real overview polyline returned by Compute
+    // Routes (never a client-computed straight line between stops).
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=geometry&callback=__forgeGoogleMapsCallback`;
     script.async = true;
     script.onerror = () => reject(new Error('Failed to load the Google Maps script'));
     document.head.appendChild(script);
