@@ -1,19 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseGeocodeResponse, type GoogleGeocodeResponse } from './geocode';
+import { parseGeocodeV4Error, parseGeocodeV4Response, type GoogleApiErrorBody, type GoogleGeocodeV4Response } from './geocode';
 
-describe('parseGeocodeResponse', () => {
-  it('parses a real OK response with a single result', () => {
-    const response: GoogleGeocodeResponse = {
-      status: 'OK',
+describe('parseGeocodeV4Response', () => {
+  it('parses a real result with a single match', () => {
+    const response: GoogleGeocodeV4Response = {
       results: [
         {
-          formatted_address: '123 Main St, Austin, TX 78701, USA',
-          geometry: { location: { lat: 30.2711, lng: -97.7437 }, location_type: 'ROOFTOP' },
+          location: { latitude: 30.2711, longitude: -97.7437 },
+          formattedAddress: '123 Main St, Austin, TX 78701, USA',
         },
       ],
     };
-    expect(parseGeocodeResponse(response)).toEqual({
+    expect(parseGeocodeV4Response(response)).toEqual({
       status: 'ok',
       position: { lat: 30.2711, lng: -97.7437 },
       formattedAddress: '123 Main St, Austin, TX 78701, USA',
@@ -21,34 +20,45 @@ describe('parseGeocodeResponse', () => {
     });
   });
 
-  it('treats ZERO_RESULTS as not-found, never a fabricated position', () => {
-    const response: GoogleGeocodeResponse = { status: 'ZERO_RESULTS', results: [] };
-    expect(parseGeocodeResponse(response)).toEqual({ status: 'not-found', position: null, formattedAddress: null, errorMessage: null });
+  it('treats a missing results array as not-found, never a fabricated position', () => {
+    const response: GoogleGeocodeV4Response = {};
+    expect(parseGeocodeV4Response(response)).toEqual({ status: 'not-found', position: null, formattedAddress: null, errorMessage: null });
   });
 
-  it('surfaces REQUEST_DENIED as an error with the provider message', () => {
-    const response: GoogleGeocodeResponse = { status: 'REQUEST_DENIED', error_message: 'API key invalid', results: [] };
-    const outcome = parseGeocodeResponse(response);
-    expect(outcome.status).toBe('error');
-    expect(outcome.position).toBeNull();
-    expect(outcome.errorMessage).toBe('API key invalid');
-  });
-
-  it('surfaces OVER_QUERY_LIMIT as an error even with no error_message', () => {
-    const response: GoogleGeocodeResponse = { status: 'OVER_QUERY_LIMIT', results: [] };
-    const outcome = parseGeocodeResponse(response);
-    expect(outcome.status).toBe('error');
-    expect(outcome.errorMessage).toContain('OVER_QUERY_LIMIT');
+  it('treats an empty results array as not-found', () => {
+    const response: GoogleGeocodeV4Response = { results: [] };
+    expect(parseGeocodeV4Response(response)).toEqual({ status: 'not-found', position: null, formattedAddress: null, errorMessage: null });
   });
 
   it('takes the first result when multiple are returned', () => {
-    const response: GoogleGeocodeResponse = {
-      status: 'OK',
+    const response: GoogleGeocodeV4Response = {
       results: [
-        { formatted_address: 'First', geometry: { location: { lat: 1, lng: 2 } } },
-        { formatted_address: 'Second', geometry: { location: { lat: 3, lng: 4 } } },
+        { location: { latitude: 1, longitude: 2 }, formattedAddress: 'First' },
+        { location: { latitude: 3, longitude: 4 }, formattedAddress: 'Second' },
       ],
     };
-    expect(parseGeocodeResponse(response).formattedAddress).toBe('First');
+    expect(parseGeocodeV4Response(response).formattedAddress).toBe('First');
+  });
+});
+
+describe('parseGeocodeV4Error', () => {
+  it('surfaces the standard Google API error envelope message', () => {
+    const body: GoogleApiErrorBody = { error: { code: 403, message: 'API key not authorized for this API.', status: 'PERMISSION_DENIED' } };
+    const outcome = parseGeocodeV4Error(body, 403);
+    expect(outcome.status).toBe('error');
+    expect(outcome.position).toBeNull();
+    expect(outcome.errorMessage).toBe('API key not authorized for this API.');
+  });
+
+  it('surfaces RESOURCE_EXHAUSTED (quota) with the provider message', () => {
+    const body: GoogleApiErrorBody = { error: { code: 429, message: 'Quota exceeded.', status: 'RESOURCE_EXHAUSTED' } };
+    const outcome = parseGeocodeV4Error(body, 429);
+    expect(outcome.errorMessage).toBe('Quota exceeded.');
+  });
+
+  it('falls back to an HTTP-status message when the body is missing/malformed', () => {
+    const outcome = parseGeocodeV4Error(null, 500);
+    expect(outcome.status).toBe('error');
+    expect(outcome.errorMessage).toContain('500');
   });
 });

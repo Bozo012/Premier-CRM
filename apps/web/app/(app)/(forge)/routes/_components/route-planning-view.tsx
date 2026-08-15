@@ -39,6 +39,7 @@ export function RoutePlanningView({
   selectedId,
   mobileTab,
   mapSlot,
+  calculateRouteSlot,
   errorMessage,
   callbacks,
 }: {
@@ -53,6 +54,7 @@ export function RoutePlanningView({
   selectedId: string | null;
   mobileTab: 'route' | 'map';
   mapSlot: ReactNode;
+  calculateRouteSlot?: ReactNode;
   errorMessage: string | null;
   callbacks: RoutePlanningViewCallbacks;
 }) {
@@ -138,6 +140,8 @@ export function RoutePlanningView({
           Map
         </button>
       </div>
+
+      {calculateRouteSlot}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_380px]">
         <div className={`h-[420px] md:h-[640px] ${mobileTab === 'map' ? 'block' : 'hidden'} md:block`}>{mapSlot}</div>

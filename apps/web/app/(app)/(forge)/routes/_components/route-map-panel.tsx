@@ -37,14 +37,16 @@ export function RouteMapPanel({
   markers,
   selectedId,
   onSelectMarker,
+  overviewPolyline = null,
 }: {
   apiKey: string | null;
   markers: MapMarker[];
   selectedId: string | null;
   onSelectMarker: (id: string) => void;
+  overviewPolyline?: string | null;
 }) {
   if (!apiKey) {
     return <MapsNotConfigured markerEligibleCount={markers.length} />;
   }
-  return <GoogleRouteMap apiKey={apiKey} markers={markers} selectedId={selectedId} onSelectMarker={onSelectMarker} />;
+  return <GoogleRouteMap apiKey={apiKey} markers={markers} selectedId={selectedId} onSelectMarker={onSelectMarker} overviewPolyline={overviewPolyline} />;
 }
