@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetClose } from '@/components/ui/sheet';
 
@@ -48,7 +49,7 @@ const iconMap: Record<string, typeof Home> = {
   settings: Settings,
 };
 
-export function MobileBottomNav({ config }: { config: MobileNavConfig }) {
+export function MobileBottomNav({ config, badges }: { config: MobileNavConfig; badges?: Record<string, ReactNode> }) {
   const pathname = usePathname();
   const isActive = (href: string) => (href === '/today' ? pathname === '/today' : pathname?.startsWith(href));
   const primary = config.primary;
@@ -111,6 +112,10 @@ export function MobileBottomNav({ config }: { config: MobileNavConfig }) {
               className={`relative flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'text-primary' : 'text-muted-foreground hover:text-card-foreground'}`}
             >
               {active && <span className="absolute top-0 h-0.5 w-7 rounded-full bg-primary" aria-hidden="true" />}
+              {/* Corner-positioned, matching the legacy AppBottomNav's own
+                  badge placement — inline placement risks the label
+                  overflowing its narrow grid column on small screens. */}
+              {badges?.[item.id] ? <span className="absolute right-1 top-0">{badges[item.id]}</span> : null}
               <Icon className="h-5 w-5" aria-hidden="true" />
               {item.label}
             </Link>

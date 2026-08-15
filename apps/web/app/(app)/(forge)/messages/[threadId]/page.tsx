@@ -9,6 +9,8 @@ import { ForgeBackLink, ForgeCard, ForgePage, ForgeSectionTitle } from '@/compon
 import { OrgContextError } from '@/components/org-context-error';
 import { getServerSupabase } from '@/lib/supabase-server';
 
+import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
+import { MessagesShell } from '../_components/messages-shell';
 import { StaffReplyForm } from '../_components/staff-reply-form';
 
 export const metadata: Metadata = { title: 'Messages' };
@@ -52,6 +54,15 @@ export default async function MessageThreadDetailPage({ params }: MessageThreadD
   const canReply = hasCapability(role as OrgRole, 'canReplyToCustomers');
   const serviceClient = createServiceClient();
 
+  const profile = await supabase.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+  const shellData = buildForgeShellData({
+    orgContext: orgContext.data,
+    userId: user.id,
+    displayName: profile.data?.full_name?.trim() || user.email || 'Staff',
+    email: user.email ?? 'No email',
+  });
+  const mobileNav = buildMobileNavConfig();
+
   const { data: thread, error: threadError } = await serviceClient
     .from('communication_threads')
     .select('id, subject, category, status, customer_id, related_request_id, related_property_id')
@@ -61,12 +72,14 @@ export default async function MessageThreadDetailPage({ params }: MessageThreadD
 
   if (threadError || !thread) {
     return (
-      <ForgePage className="max-w-3xl gap-5">
-        <ForgeBackLink href="/messages">Messages</ForgeBackLink>
-        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          Conversation not found.
-        </p>
-      </ForgePage>
+      <MessagesShell shellData={shellData} mobileNav={mobileNav}>
+        <ForgePage className="max-w-3xl gap-5">
+          <ForgeBackLink href="/messages">Messages</ForgeBackLink>
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            Conversation not found.
+          </p>
+        </ForgePage>
+      </MessagesShell>
     );
   }
 
@@ -87,6 +100,7 @@ export default async function MessageThreadDetailPage({ params }: MessageThreadD
   const relatedRequest = requestResult.data;
 
   return (
+    <MessagesShell shellData={shellData} mobileNav={mobileNav}>
     <ForgePage className="max-w-3xl gap-5">
       <ForgeBackLink href="/messages">Messages</ForgeBackLink>
 
@@ -137,5 +151,6 @@ export default async function MessageThreadDetailPage({ params }: MessageThreadD
 
       <StaffReplyForm threadId={thread.id} canReply={canReply} />
     </ForgePage>
+    </MessagesShell>
   );
 }
