@@ -15,11 +15,14 @@
  */
 export interface GoogleMapsNamespace {
   Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMapInstance;
-  Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
   LatLngBounds: new () => { extend: (point: { lat: number; lng: number }) => void };
-  InfoWindow: new (options: Record<string, unknown>) => { open: (map: GoogleMapInstance, marker: GoogleMarkerInstance) => void; close: () => void };
+  InfoWindow: new (options: Record<string, unknown>) => { open: (map: GoogleMapInstance, marker: unknown) => void; close: () => void };
   Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
   geometry?: { encoding: { decodePath: (encoded: string) => Array<{ lat: () => number; lng: () => number }> } };
+  marker?: {
+    AdvancedMarkerElement: new (options: GoogleAdvancedMarkerOptions) => GoogleAdvancedMarkerInstance;
+    PinElement: new (options: GooglePinElementOptions) => { element: HTMLElement };
+  };
 }
 
 export interface GoogleMapInstance {
@@ -28,9 +31,30 @@ export interface GoogleMapInstance {
   setZoom: (zoom: number) => void;
 }
 
-export interface GoogleMarkerInstance {
-  addListener: (event: string, handler: () => void) => void;
-  setMap: (map: GoogleMapInstance | null) => void;
+/** google.maps.marker.AdvancedMarkerElement — replaces the deprecated
+ * google.maps.Marker. Requires a `mapId` on the Map itself (see
+ * google-route-map.tsx); has no effect without one. */
+export interface GoogleAdvancedMarkerOptions {
+  map: GoogleMapInstance;
+  position: { lat: number; lng: number };
+  title?: string;
+  content?: HTMLElement;
+  gmpClickable?: boolean;
+}
+
+export interface GoogleAdvancedMarkerInstance {
+  addEventListener: (event: 'gmp-click', handler: () => void) => void;
+  map: GoogleMapInstance | null;
+}
+
+/** google.maps.marker.PinElement — used only to give a priority marker a
+ * real shape/glyph distinction, never color alone. */
+export interface GooglePinElementOptions {
+  background?: string;
+  borderColor?: string;
+  glyphColor?: string;
+  glyphText?: string;
+  scale?: number;
 }
 
 /** Renders the real, provider-returned overview polyline for a calculated
@@ -64,18 +88,14 @@ export function loadGoogleMaps(apiKey: string): Promise<GoogleMapsNamespace> {
       else reject(new Error('Google Maps script loaded but window.google.maps is missing'));
     };
     const script = document.createElement('script');
-    // `libraries=geometry` adds google.maps.geometry.encoding.decodePath(),
-    // needed to render the real overview polyline returned by Compute
-    // Routes (never a client-computed straight line between stops).
-    // `loading=async` is Google's own current recommendation (without it,
-    // the browser console logs "Google Maps JavaScript API has been loaded
-    // directly without loading=async" — a real console warning observed
-    // during live Demo Key verification, not a functional break, but the
-    // documented current-best-practice fix per Google's load-maps-js-api
-    // guidance). Behavior is unchanged: same script tag, same async
-    // attribute, same callback-based resolution — this only adds the one
-    // missing query param Google's docs call for.
-    script.src = `https://maps.googleapis.com/maps/api/js?loading=async&key=${encodeURIComponent(apiKey)}&libraries=geometry&callback=__forgeGoogleMapsCallback`;
+    // `libraries=geometry,marker` — geometry adds
+    // google.maps.geometry.encoding.decodePath() (real Compute Routes
+    // polyline rendering); marker adds google.maps.marker.AdvancedMarkerElement
+    // and PinElement, replacing the deprecated google.maps.Marker (see
+    // google-route-map.tsx). `loading=async` is Google's own current
+    // recommendation (without it, the console logs "Google Maps JavaScript
+    // API has been loaded directly without loading=async").
+    script.src = `https://maps.googleapis.com/maps/api/js?loading=async&key=${encodeURIComponent(apiKey)}&libraries=geometry,marker&callback=__forgeGoogleMapsCallback`;
     script.async = true;
     script.onerror = () => reject(new Error('Failed to load the Google Maps script'));
     document.head.appendChild(script);
