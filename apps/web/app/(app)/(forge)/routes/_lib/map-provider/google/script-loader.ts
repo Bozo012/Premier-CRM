@@ -40,6 +40,7 @@ export interface GoogleAdvancedMarkerOptions {
   title?: string;
   content?: HTMLElement;
   gmpClickable?: boolean;
+  zIndex?: number;
 }
 
 export interface GoogleAdvancedMarkerInstance {
