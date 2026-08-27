@@ -194,5 +194,55 @@ test.describe('routes base44 shell bot', () => {
       await expect(page).toHaveURL(/[?&]crew=unassigned/);
       await expect(page.getByRole('heading', { name: 'Route Planning' })).toBeVisible();
     });
+
+    // Regression coverage for the live production defect found after PR
+    // #150's AdvancedMarkerElement migration: stop markers were visible
+    // before "Calculate route" and disappeared after it succeeded, even
+    // though they were never removed from the map (a polyline/marker
+    // z-index stacking issue on the vector map, fixed via explicit
+    // zIndex — see marker-rendering.ts). Both tests below require a real
+    // NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to be configured for whatever
+    // environment this suite runs against; they skip honestly (not a false
+    // pass) when the map isn't live, matching every other Maps-dependent
+    // test's convention in this file.
+    test('every geocoded stop has a visible AdvancedMarkerElement marker', async ({ page }) => {
+      await page.goto(routes.routePlanning);
+      const mapConfigured = (await page.getByText('Maps not configured').count()) === 0;
+      test.skip(!mapConfigured, 'No live NEXT_PUBLIC_GOOGLE_MAPS_API_KEY configured in this environment.');
+
+      const geocodedCount = await page
+        .locator('div.text-\\[11px\\]', { hasText: 'Scheduled stops' })
+        .first()
+        .locator('xpath=preceding-sibling::div[1]')
+        .textContent();
+      const missingLocationCount = await page.locator('div.text-\\[11px\\]', { hasText: 'Missing location' }).first().locator('xpath=preceding-sibling::div[1]').textContent();
+      test.skip(!geocodedCount || Number(geocodedCount) - Number(missingLocationCount ?? 0) < 1, 'No geocoded stops for the default date.');
+
+      const markers = page.locator('gmp-advanced-marker');
+      await expect(markers.first()).toBeVisible();
+    });
+
+    test('markers remain visible after Calculate Route succeeds — the exact reported regression', async ({ page }) => {
+      await page.goto(routes.routePlanning);
+      const mapConfigured = (await page.getByText('Maps not configured').count()) === 0;
+      test.skip(!mapConfigured, 'No live NEXT_PUBLIC_GOOGLE_MAPS_API_KEY configured in this environment.');
+
+      const calculateButton = page.getByRole('button', { name: /calculate route/i });
+      const hasButton = (await calculateButton.count()) > 0;
+      test.skip(!hasButton, 'Calculate route control not present.');
+      const isEnabled = await calculateButton.isEnabled();
+      test.skip(!isEnabled, 'Fewer than two geocoded stops for the default date — Calculate route is correctly disabled.');
+
+      const markers = page.locator('gmp-advanced-marker');
+      const beforeCount = await markers.count();
+      expect(beforeCount, 'markers must exist before Calculate Route is even clicked').toBeGreaterThan(0);
+
+      await calculateButton.click();
+      await expect(page.getByText(/mi$/).first()).toBeVisible({ timeout: 15_000 });
+
+      const afterCount = await markers.count();
+      expect(afterCount, 'Calculate Route must not remove any marker from the DOM').toBe(beforeCount);
+      await expect(markers.first()).toBeVisible();
+    });
   });
 });

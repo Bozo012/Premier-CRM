@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { MapMarker } from '../types';
+import { MARKER_Z_INDEX, POLYLINE_Z_INDEX, resolvePriorityPinOptions } from './marker-rendering';
 import { loadGoogleMaps, type GoogleAdvancedMarkerInstance, type GoogleMapInstance, type GooglePolylineInstance } from './script-loader';
 
 export interface GoogleRouteMapProps {
@@ -68,24 +69,23 @@ export function GoogleRouteMap({ apiKey, markers, selectedId, onSelectMarker, ov
 
     const bounds = new maps.LatLngBounds();
     for (const marker of markers) {
-      // Priority distinction via PinElement (shape/glyph/scale), never
-      // color alone — matches the prior red-pushpin-vs-default-balloon
-      // distinction's intent, expressed in the current Advanced Markers API.
-      const content = marker.isPriority
-        ? new maps.marker.PinElement({
-            background: '#dc2626',
-            borderColor: '#7f1d1d',
-            glyphColor: '#ffffff',
-            glyphText: '!',
-            scale: 1.2,
-          }).element
-        : undefined;
+      // Priority distinction via a fresh PinElement per marker
+      // (shape/glyph/scale, never color alone) — see marker-rendering.ts;
+      // resolvePriorityPinOptions never returns a shared instance, so this
+      // `new PinElement(...)` always builds a distinct DOM node.
+      const pinOptions = resolvePriorityPinOptions(marker);
+      const content = pinOptions ? new maps.marker.PinElement(pinOptions).element : undefined;
 
       const instance = new maps.marker.AdvancedMarkerElement({
         position: marker.position,
         map,
         title: marker.label,
         gmpClickable: true,
+        // Explicit zIndex — see marker-rendering.ts: without this, the
+        // route polyline (added later, only once Calculate Route succeeds)
+        // can visually occlude AdvancedMarkerElements on a vector (mapId)
+        // map, even though the markers are never removed from the map.
+        zIndex: MARKER_Z_INDEX,
         ...(content ? { content } : {}),
       });
       instance.addEventListener('gmp-click', () => onSelectMarker(marker.id));
@@ -121,6 +121,10 @@ export function GoogleRouteMap({ apiKey, markers, selectedId, onSelectMarker, ov
       strokeColor: '#2563eb',
       strokeOpacity: 0.9,
       strokeWeight: 4,
+      // Explicit, deliberately lower than MARKER_Z_INDEX — see
+      // marker-rendering.ts. The polyline must render alongside/underneath
+      // the stop markers, never occlude them.
+      zIndex: POLYLINE_Z_INDEX,
       map,
     });
   }, [overviewPolyline]);
