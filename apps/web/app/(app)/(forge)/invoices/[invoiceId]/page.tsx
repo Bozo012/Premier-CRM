@@ -20,6 +20,7 @@ import { InvoiceMetadataForm } from '../_components/invoice-metadata-form';
 import { LineItemEditor } from '../_components/line-item-editor';
 import { RecordPaymentForm } from '../_components/record-payment-form';
 import { SendInvoiceButton } from '../_components/send-invoice-button';
+import { InvoiceEmailDeliveryStatus } from '../_components/invoice-email-delivery-status';
 import { VoidInvoiceButton } from '../_components/void-invoice-button';
 import { EligibleExpensesSection } from '../_components/eligible-expenses-section';
 import { buildForgeShellData, buildMobileNavConfig } from '../_lib/forge-shell-context';
@@ -293,12 +294,10 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
             ) : (
               <div className="space-y-3">
                 {invoice.share_token ? (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Customer link
-                    </p>
-                    <p className="break-all text-xs text-foreground">/i/{invoice.share_token}</p>
-                  </div>
+                  <InvoiceEmailDeliveryStatus
+                    invoiceId={invoice.id}
+                    invoiceUrl={`/i/${invoice.share_token}`}
+                  />
                 ) : null}
                 <VoidInvoiceButton invoiceId={invoice.id} status={invoice.status} />
               </div>

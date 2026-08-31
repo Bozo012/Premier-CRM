@@ -30,19 +30,24 @@ export function SendInvoiceButton({ invoiceId, status }: SendInvoiceButtonProps)
         });
 
         if (result.data.emailSent) {
-          toast.success('Invoice sent and emailed to customer.', {
+          toast.success('Invoice is ready and email was sent successfully.', {
             description: fullUrl,
             duration: 8000,
           });
         } else {
+          // Email failed (or no address on file) — this must never read as
+          // a success. A durable, non-toast indicator + Retry/Copy actions
+          // also render below once the invoice is no longer a draft (see
+          // InvoiceEmailDeliveryStatus), so this failure isn't only visible
+          // for the few seconds this toast is on screen.
           try {
             await navigator.clipboard.writeText(fullUrl);
-            toast.success('Invoice sent — customer link copied to clipboard.', {
-              description: fullUrl,
-              duration: 8000,
+            toast.error('Invoice is ready, but the email could not be sent.', {
+              description: `Customer link copied to clipboard: ${fullUrl}`,
+              duration: 10000,
             });
           } catch {
-            toast.success('Invoice marked as sent.', {
+            toast.error('Invoice is ready, but the email could not be sent.', {
               description: `Customer link: ${fullUrl}`,
               duration: 10000,
             });

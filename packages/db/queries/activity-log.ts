@@ -38,7 +38,9 @@ export type ActivityLogEventType =
   | 'expense_voided'
   | 'job_note_general'
   | 'job_note_material'
-  | 'job_note_safety';
+  | 'job_note_safety'
+  | 'invoice_email_sent'
+  | 'invoice_email_failed';
 
 /** Single shared insert path — every write site should call this, not `.insert()` directly. */
 export async function logActivity(
@@ -80,6 +82,34 @@ export async function getEntityTimeline(
   }
 
   return ok(data ?? []);
+}
+
+/**
+ * Staff-facing: the single most recent entry matching one of `eventTypes`
+ * for an entity, or null if none exists yet. Used to show a durable
+ * (survives page refresh, unlike a toast) "last known" state — e.g. was
+ * the customer actually emailed the last time this invoice was sent.
+ */
+export async function getLatestEntityEvent(
+  client: DbClient,
+  args: { orgId: string; entityType: string; entityId: string; eventTypes: ActivityLogEventType[] }
+): Promise<Result<ActivityLogEntry | null>> {
+  const { data, error } = await client
+    .from('activity_log')
+    .select('*')
+    .eq('org_id', args.orgId)
+    .eq('entity_type', args.entityType)
+    .eq('entity_id', args.entityId)
+    .in('event_type', args.eventTypes)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    return err(ErrorCode.DB_ERROR, error.message);
+  }
+
+  return ok(data ?? null);
 }
 
 export interface CustomerTimelineEntry {

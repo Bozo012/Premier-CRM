@@ -27,7 +27,9 @@ import {
   createDraftInvoiceFromQuote,
   getActiveOrgContext,
   getInvoiceById,
+  getLatestEntityEvent,
   listJobs,
+  logActivity,
   recordPayment,
   removeInvoiceLineItem,
   sendInvoice,
@@ -407,7 +409,7 @@ export async function sendInvoiceAction(
 ): Promise<SendInvoiceActionState> {
   const contextResult = await getInvoiceActionContext('canSendInvoices');
   if (!contextResult.success) return contextResult;
-  const { orgId } = contextResult.data;
+  const { orgId, userId } = contextResult.data;
 
   const rawInput = { invoiceId: readString(formData, 'invoiceId') };
   const parsed = SendInvoiceInputSchema.safeParse(rawInput);
@@ -427,29 +429,151 @@ export async function sendInvoiceAction(
   const invoiceUrl = `/i/${result.data.share_token}`;
 
   // Attempt email delivery — best-effort, never blocks the send transition
-  // that already succeeded above.
-  let emailSent = false;
-  const detailResult = await getInvoiceById(client, {
-    invoiceId: parsed.data.invoiceId,
+  // that already succeeded above. The financial state change (draft->sent)
+  // is already committed regardless of what happens below; this only ever
+  // affects the activity_log record of whether the customer was actually
+  // emailed, which the UI reads back to show a truthful, durable (not just
+  // an ephemeral toast) delivery status. See retrySendInvoiceEmailAction
+  // for the recovery path when this fails.
+  const emailSent = await attemptInvoiceEmailAndLog(client, {
     orgId,
+    userId,
+    invoiceId: parsed.data.invoiceId,
+    invoiceUrl,
   });
 
-  if (detailResult.success) {
-    const { customer, invoice } = detailResult.data;
-    if (customer?.email) {
-      const emailResult = await sendInvoiceEmail({
-        customerEmail: customer.email,
-        customerName: customer.displayName,
-        invoiceTitle: invoice.title?.trim() || invoice.invoice_number || 'Your invoice',
-        invoiceTotal: invoice.total,
-        invoiceUrl,
-        dueDate: invoice.due_date,
-      });
-      emailSent = emailResult.sent;
-    }
+  return ok({ invoiceUrl, emailSent });
+}
+
+/**
+ * Shared by sendInvoiceAction and retrySendInvoiceEmailAction — looks up
+ * the invoice/customer fresh (org-scoped) and attempts delivery, logging
+ * the real outcome to activity_log either way so the UI has a durable
+ * record instead of only a toast that disappears on refresh.
+ */
+async function attemptInvoiceEmailAndLog(
+  client: ReturnType<typeof createServiceClient>,
+  args: { orgId: string; userId: string; invoiceId: string; invoiceUrl: string }
+): Promise<boolean> {
+  const detailResult = await getInvoiceById(client, {
+    invoiceId: args.invoiceId,
+    orgId: args.orgId,
+  });
+
+  if (!detailResult.success) return false;
+  const { customer, invoice } = detailResult.data;
+
+  if (!customer?.email) {
+    await logActivity(client, {
+      orgId: args.orgId,
+      entityType: 'invoice',
+      entityId: args.invoiceId,
+      eventType: 'invoice_email_failed',
+      message: 'No email address on file for this customer — invoice was not emailed.',
+      actorUserId: args.userId,
+    });
+    return false;
   }
 
-  return ok({ invoiceUrl, emailSent });
+  const emailResult = await sendInvoiceEmail({
+    customerEmail: customer.email,
+    customerName: customer.displayName,
+    invoiceTitle: invoice.title?.trim() || invoice.invoice_number || 'Your invoice',
+    invoiceTotal: invoice.total,
+    invoiceUrl: args.invoiceUrl,
+    dueDate: invoice.due_date,
+  });
+
+  await logActivity(client, {
+    orgId: args.orgId,
+    entityType: 'invoice',
+    entityId: args.invoiceId,
+    eventType: emailResult.sent ? 'invoice_email_sent' : 'invoice_email_failed',
+    message: emailResult.sent
+      ? `Invoice emailed to ${customer.email}.`
+      : `Email delivery to ${customer.email} failed.`,
+    actorUserId: args.userId,
+  });
+
+  return emailResult.sent;
+}
+
+export type InvoiceEmailDeliveryStatus = 'sent' | 'failed' | 'unknown';
+
+export type GetInvoiceEmailDeliveryStatusActionState = Result<InvoiceEmailDeliveryStatus>;
+
+/** Read-only: the most recent known email delivery outcome for an invoice, for the durable status indicator on the detail page. */
+export async function getInvoiceEmailDeliveryStatusAction(
+  invoiceId: string
+): Promise<GetInvoiceEmailDeliveryStatusActionState> {
+  const contextResult = await getInvoiceActionContext('canSendInvoices');
+  if (!contextResult.success) return contextResult;
+  const { orgId } = contextResult.data;
+
+  const client = createServiceClient();
+  const eventResult = await getLatestEntityEvent(client, {
+    orgId,
+    entityType: 'invoice',
+    entityId: invoiceId,
+    eventTypes: ['invoice_email_sent', 'invoice_email_failed'],
+  });
+  if (!eventResult.success) return eventResult;
+
+  if (!eventResult.data) return ok('unknown');
+  return ok(eventResult.data.event_type === 'invoice_email_sent' ? 'sent' : 'failed');
+}
+
+export type RetryInvoiceEmailActionState = Result<{ emailSent: boolean }>;
+
+/**
+ * Recovery path for BLOCKER 1 in docs/ops/invoice-cutover-readiness.md —
+ * re-attempts customer email delivery for an already-sent invoice WITHOUT
+ * touching any financial state: no status transition, no total/payment
+ * recalculation, no new share_token (the existing one — already handed out
+ * to the customer if delivery partially succeeded before — is reused).
+ * Purely re-runs the same best-effort email attempt and logs the outcome.
+ */
+export async function retryInvoiceEmailAction(
+  _prevState: RetryInvoiceEmailActionState | null,
+  formData: FormData
+): Promise<RetryInvoiceEmailActionState> {
+  const contextResult = await getInvoiceActionContext('canSendInvoices');
+  if (!contextResult.success) return contextResult;
+  const { orgId, userId } = contextResult.data;
+
+  const rawInput = { invoiceId: readString(formData, 'invoiceId') };
+  const parsed = SendInvoiceInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    const firstError = parsed.error.errors[0];
+    return err(ErrorCode.VALIDATION_ERROR, firstError?.message ?? 'Invalid invoice ID.');
+  }
+
+  const client = createServiceClient();
+  const detailResult = await getInvoiceById(client, { invoiceId: parsed.data.invoiceId, orgId });
+  if (!detailResult.success) return detailResult;
+
+  const { invoice } = detailResult.data;
+  if (invoice.status === 'draft') {
+    return err(ErrorCode.VALIDATION_ERROR, 'This invoice has not been sent yet.');
+  }
+  if (invoice.status === 'void') {
+    return err(ErrorCode.VALIDATION_ERROR, 'This invoice has been voided and cannot be emailed.');
+  }
+  if (!invoice.share_token) {
+    return err(ErrorCode.VALIDATION_ERROR, 'This invoice has no customer link to deliver.');
+  }
+
+  const invoiceUrl = `/i/${invoice.share_token}`;
+  const emailSent = await attemptInvoiceEmailAndLog(client, {
+    orgId,
+    userId,
+    invoiceId: parsed.data.invoiceId,
+    invoiceUrl,
+  });
+
+  revalidatePath(`/invoices/${parsed.data.invoiceId}`);
+
+  return ok({ emailSent });
 }
 
 // ---------------------------------------------------------------------------
