@@ -103,6 +103,7 @@ export {
   createPortalServiceRequest,
   getEntityTimeline,
   getEntityTimelineForCustomer,
+  getLatestEntityEvent,
   logActivity,
   type ActivityLogEntry,
   type ActivityLogEventType,

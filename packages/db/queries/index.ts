@@ -216,6 +216,7 @@ export {
 export {
   getEntityTimeline,
   getEntityTimelineForCustomer,
+  getLatestEntityEvent,
   logActivity,
   type ActivityLogEntry,
   type ActivityLogEventType,

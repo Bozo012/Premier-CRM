@@ -2,17 +2,26 @@
 
 Audit of whether Forge can replace Premier Property Maintenance's external invoicing tool for real customers, and what permanent environment isolation is needed so ongoing development can never mutate production data by accident.
 
-## 1. Baseline
+**Update (delivery-fix session, branch `fix/invoice-delivery-confirmation`, built on top of the audit branch)**: BLOCKER 1 (customer delivery status was never durably recorded — see §4) has been fixed in code. See §2a and §4a below for the new verdict, the exact delivery-path trace, and what actually changed. Sections 1–9 below this point are preserved from the original audit pass unedited except where explicitly marked "Update".
+
+## 1. Baseline (original audit pass)
 
 - Branch: `audit/invoice-cutover-readiness`
 - Base SHA (origin/main at start, verified as an ancestor before creating the worktree): `5a8139264476e276d44992ebe9aea26d63afc502` (PR #152 merge commit — no commits had landed on `main` past this before the audit began)
-- Final HEAD SHA: see PR — one commit added on top of base, adding `tests/e2e/payment-authority-bot.spec.ts` only. No other files changed.
+- Final HEAD SHA: see PR #153 — one commit added on top of base, adding `tests/e2e/payment-authority-bot.spec.ts` only. No other files changed.
+- **Delivery-fix session baseline**: branched from `origin/audit/invoice-cutover-readiness` at `8a57dab96203f65b126cea9f8002119679648740` (PR #153's HEAD, confirmed clean/mergeable/CLEAN before branching). New branch: `fix/invoice-delivery-confirmation`.
 
-## 2. Executive verdict
+## 2. Executive verdict (original audit pass — superseded, see §2a)
 
 **NOT READY FOR REAL-INVOICE SMOKE TEST.**
 
 The creation → totals → expense-linkage → payment → history spine of the invoice lifecycle is real, DB-authoritative, and now has direct test evidence (including two gaps closed by this audit — see §5). The blocker is entirely on the **customer delivery** side: this environment's email domain is unverified (a live, confirmed 403 from Resend), the invoice is marked "sent" regardless of whether the email actually went out, and there is no PDF or delivery-status record to fall back on. Sending a real invoice today means the customer may receive nothing, with no signal to staff that anything went wrong.
+
+## 2a. Updated verdict (delivery-fix session)
+
+**CODE READY — EXTERNAL CONFIGURATION REQUIRED.**
+
+The code-level defect from BLOCKER 1 — an invoice could be marked "sent" with no durable record of whether the customer was actually emailed — is fixed (§4a). Every other item on the cutover checklist (§3) was already PASS. The only remaining item before the first real invoice is **entirely external and requires your action**: the Resend sending domain is not verified (confirmed independently via public DNS, not just the app's own error — see §4a). Once that's done, no further code changes are anticipated to send the first real invoice.
 
 ## 3. Cutover checklist
 
@@ -26,7 +35,7 @@ The creation → totals → expense-linkage → payment → history spine of the
 | Customer association | PASS | `job_id NOT NULL`, customer resolved via job, org-scoped |
 | Job/quote association | PASS | `job_id` mandatory FK, `quote_id` optional FK |
 | Finalize/send | PASS (status transition) / **BLOCKED** (delivery, see below) | DB status flip is real and Result-typed; email is best-effort and its failure isn't surfaced |
-| Customer delivery | **BLOCKED** | Resend sending domain unverified in this environment (confirmed 403, documented in `tests/e2e/transactional-email-bot.spec.ts`); invoice marked "sent" regardless of actual delivery outcome |
+| Customer delivery | **CODE READY — EXTERNAL CONFIG REQUIRED** (Update, §4a) | Delivery outcome is now durably logged and truthfully shown to staff, with retry/copy-link recovery; Resend sending domain itself still needs owner-side verification (§4a Resend checklist) |
 | Customer authorization | PASS | Portal path RLS-scoped; public token path uses an unguessable UUID + an app-layer draft gate (no RLS backstop — see §4) |
 | Customer invoice view | PASS | Both portal and public-token routes render live, server-computed data; no PDF divergence risk because no PDF exists |
 | Manual payment | PASS | `payments` table + `apply_payment_to_invoice()` trigger, atomic via `SELECT ... FOR UPDATE` |
@@ -47,6 +56,63 @@ The creation → totals → expense-linkage → payment → history spine of the
 - **Required behavior**: An invoice should never be indistinguishable between "customer was actually emailed" and "link was generated but delivery failed." At minimum: (a) the Resend sending domain must be verified for whatever domain Premier will actually send from, and (b) the schema needs a way to durably record delivery outcome (e.g. a `delivery_status`/`emailed_at` column, or reuse of the existing best-effort `emailSent` flag persisted rather than only toast-surfaced) so staff can see, days later, whether a "sent" invoice was actually delivered.
 - **Smallest safe fix**: (1) Verify the Resend domain in the Resend dashboard — **this is a credential/external-provider decision requiring your action, not something to do inside this audit.** (2) Once verified, add a nullable `email_delivered_at TIMESTAMPTZ` (or similar) column to `invoices`, set it only on confirmed Resend success, and surface its absence in the UI/detail page as a visible "delivery not confirmed" state instead of a silent toast. This is a small, additive migration — no redesign — but it's schema work, so it should be proposed and approved as its own slice, not bundled into this audit.
 - **Also flagged, not a blocker**: no PDF generation exists for invoices (only a live HTML page at `/i/[token]`). Not required for cutover — the live page is a legitimate customer-facing artifact — but worth knowing if Premier's customers expect a downloadable/printable document.
+
+## 4a. BLOCKER 1 — delivery path trace, fix, and Resend owner checklist
+
+### Exact delivery path trace (as it existed before this fix)
+
+`staff clicks "Send invoice"` → `SendInvoiceButton` (`_components/send-invoice-button.tsx`) submits a form → `sendInvoiceAction()` (`invoices/actions.ts:404`) → `sendInvoice()` DB function flips `invoices.status: draft → sent` (unconditional, this always commits) → action builds `invoiceUrl = /i/{share_token}` from the row `sendInvoice()` already returned → action re-fetches invoice detail via `getInvoiceById()` (org-scoped) → if `customer.email` exists, calls `sendInvoiceEmail()` (`lib/email.ts`) → that calls `deliverEmail()` → Resend SDK `.emails.send()` → **before this fix**, the boolean result was returned to the client as `emailSent` and shown in a toast, but nothing was ever written to durable storage → `revalidatePath` refreshes the page → customer, separately, can open `/i/[token]` (`app/i/[token]/page.tsx`) — public, service-role client (bypasses RLS), explicitly excludes `status === 'draft'` invoices, authorization is the UUID token itself (unguessable, DB-unique).
+
+Answering the audit's exact questions, as the code stood **before** this fix:
+
+- **A. What did `invoice.status='sent'` mean?** "Finalized and a customer link now exists." Nothing about email.
+- **B. Finalized/shareable, or emailed?** Finalized/shareable only. The status column has never meant "the customer was emailed."
+- **C. What happened when Resend errored?** `deliverEmail()` caught it, logged to the server console (`console.error`), and returned `{ sent: false }`. No exception propagated.
+- **D. Was the error visible to staff?** Only as a client toast for the ~8-10 seconds it was on screen, then gone forever with no other record.
+- **E. Could staff retry without changing financial state?** No — there was no retry action at all. The send button vanishes forever once `status !== 'draft'` (`SendInvoiceButton` returns `null`).
+- **F. Could staff copy/open the link manually?** Yes, but only as plain unstyled text on the detail page — no copy button, easy to miss, and gave no indication *whether they needed to*.
+- **G. Was the share URL authorized correctly?** Yes — confirmed by this session's new E2E test: an unrecognized/random token returns "could not be found," and the token itself is a DB-unique, cryptographically random UUID (`gen_random_uuid()` default), not enumerable.
+- **H. Auth required, or is token possession sufficient?** Token possession is sufficient by design (a bearer-link model, same as the quote share flow) — no customer login required for `/i/[token]`.
+- **I. Was any provider response persisted?** No — `deliverEmail()`'s `{ sent: boolean }` was read once by the caller and discarded; the Resend API's own response body/error was only ever `console.error`'d, never stored.
+- **J. Was there an existing mechanism to record this without a new table?** Yes — `activity_log` (`supabase/migrations/20260731010000_activity_log.sql`). `event_type` is a plain `TEXT NOT NULL` column with **no CHECK constraint**, so new event type values need zero migration, only a TS union extension. This made Option A viable.
+
+### The fix (Option A — schema-free, as the audit anticipated)
+
+No migration. Changes, all additive:
+
+1. **`packages/db/queries/activity-log.ts`**: added `'invoice_email_sent'` / `'invoice_email_failed'` to the `ActivityLogEventType` union (no DB constraint to update), and a new `getLatestEntityEvent()` query — the single most recent matching log entry for an entity, used to render a durable (survives refresh) status instead of only a toast.
+2. **`invoices/actions.ts`**:
+   - `sendInvoiceAction()` now logs `invoice_email_sent` or `invoice_email_failed` to `activity_log` after every send attempt (including the "no customer email on file" case, which previously logged nothing at all).
+   - New `retryInvoiceEmailAction()` — re-attempts delivery for an already-sent invoice. Requires `canSendInvoices` (same capability as send), fetches the invoice fresh and org-scoped, **rejects `draft`** (nothing to retry) and **rejects `void`** (added defensively — emailing a voided invoice is meaningless), reuses the **existing** `share_token` (never regenerates it — a customer who already received a partially-successful link must not have it silently invalidated), calls **no** financial function (`sendInvoice`, `recordPayment`, totals recalculation are never touched), and logs its own outcome the same way.
+   - New `getInvoiceEmailDeliveryStatusAction()` — read-only, returns the most recent logged outcome (`'sent' | 'failed' | 'unknown'`) for the detail page.
+3. **`_components/send-invoice-button.tsx`**: the failure-path toast changed from `toast.success` (a literal false-positive-styled success toast on a delivery failure — the exact bug the audit flagged) to `toast.error`, with truthful copy.
+4. **`_components/invoice-email-delivery-status.tsx`** (new): renders on the invoice detail page once a `share_token` exists. Shows the durable last-known state, a **Retry email** button (only when the last attempt failed or is unknown), and a **Copy invoice link** button (always available) — the two recovery actions the audit specified.
+5. **`invoices/[invoiceId]/page.tsx`**: swapped the old plain-text "Customer link" block for the new component.
+
+Financial-state invariants, verified by both a vitest unit suite (Resend mocked — no real email sent) and a live E2E spec (Resend's real, currently-failing response — also no real email sent, since it's genuinely rejected):
+- The `draft → sent` transition **never** depends on email outcome (already true before; unchanged).
+- Retry **never** calls `sendInvoice()`, `recordPayment()`, or any totals/line-item mutation — proven directly (`sendInvoiceMock`/equivalent "not called" assertions).
+- Retry **never** regenerates `share_token` — proven by asserting the retry email uses the pre-existing token's URL.
+- A failed retry is logged as `invoice_email_failed`, never `invoice_email_sent` — a retry failure cannot masquerade as success.
+
+### Resend configuration audit (read-only — no credentials touched, none requested)
+
+- Code expects `RESEND_API_KEY` (from resend.com/api-keys) and `RESEND_FROM_EMAIL` (falls back to `quotes@ppmnky.com` if unset — `apps/web/lib/email.ts:27-29`). `NEXT_PUBLIC_APP_URL` (falls back to `http://localhost:3000`) is used to build the absolute link inside the email body.
+- **Independently confirmed via public DNS** (not just the app's own 403, a second, unrelated data source): `ppmnky.com`'s TXT/SPF record is `v=spf1 include:_spf.google.com ~all` — **it does not include Resend's SPF** (`include:spf.resend.com` or similar). A `resend._domainkey.ppmnky.com` DKIM lookup returns **NXDOMAIN — the record does not exist at all.** This is conclusive: Resend has never been granted send authority for this domain at the DNS level, independent of whatever is or isn't configured inside the Resend dashboard itself.
+- `.env.example` documents both vars but has a stray comment ("Stripe — required for invoicing") on an unrelated nearby line that contradicts this audit's finding that Stripe is not required; not fixed here (out of scope, cosmetic doc issue, flagged for a future doc pass).
+- **I could not enumerate Vercel's actual configured environment variables** (name, scope, or value) — no read-only "list env vars" tool was available in this session's toolset, and I did not attempt to guess or extract values. The checklist below is what needs to exist, based on the code's requirements; confirming what's *actually* set in Vercel today is still open (ties into §8's Preview-isolation finding, since Preview/Production may not even be using the same values).
+
+**OWNER ACTION CHECKLIST — Resend:**
+1. Log into resend.com → Domains.
+2. Add/verify `ppmnky.com` (or a dedicated sending subdomain, e.g. `mail.ppmnky.com` — often preferred so transactional-email reputation doesn't affect the root domain's regular mail).
+3. Resend will provide DNS records to add (typically an SPF `TXT` at the domain root or subdomain, a DKIM `TXT` at `resend._domainkey.<domain>`, and often a `MX`/`TXT` for return-path). Add these at your DNS provider — same place the existing Google Workspace MX/SPF records live.
+4. Success looks like: the domain's status in the Resend dashboard shows **Verified** (green), and a `dig TXT resend._domainkey.ppmnky.com` (or the subdomain you chose) returns a record instead of NXDOMAIN.
+
+**OWNER ACTION CHECKLIST — Vercel:**
+1. Confirm `RESEND_API_KEY` and `RESEND_FROM_EMAIL` exist in Project Settings → Environment Variables (I cannot see the values, only that the code requires these exact names).
+2. Confirm the scope: at minimum **Production** needs correct values pointed at the now-verified domain. Whether **Preview** should share the same values or use a distinct sandbox/test sender is your call — but see §8: Preview must never share *Supabase* production credentials regardless of what's decided for email.
+3. No secret values were requested or should be pasted into chat — set these directly in the Vercel dashboard.
+4. **A redeploy (or redeploy-on-save, which Vercel does automatically for env var changes on the next deployment) is needed** for a changed env var to take effect — existing running deployments do not pick up env var changes live.
 
 ### BLOCKER 2 (minor, non-cutover-blocking) — Draft-immutability has no DB-level backstop
 
@@ -95,6 +161,28 @@ A first full parallel run (`--project=chromium` default workers) showed 6 failur
 
 No skip was reported as a pass. No assertion was weakened to make a test green.
 
+### Delivery-fix session — additional evidence
+
+Same E2E project (`slbnizoskumwhleeiccv`), reconfirmed via `/api/e2e-health` before any mutation. Confirmed `ACTIVE_HEALTHY` before running anything (it had auto-paused again since the prior session).
+
+**New vitest** (`apps/web/app/(app)/(forge)/invoices/actions.test.ts`) — Resend fully mocked, no real email sent: 10/10 passed. Covers: send-success logs `invoice_email_sent`; send-failure still commits the `sent` transition and logs `invoice_email_failed`; no-customer-email logs `invoice_email_failed` (not silently nothing); retry reuses the existing share token and never calls the financial `sendInvoice` function; retry is blocked for `draft` and `void`; a failed retry logs `invoice_email_failed`, never `invoice_email_sent`; `getInvoiceEmailDeliveryStatusAction` reads back `sent`/`failed`/`unknown` correctly.
+
+**New Playwright** (`tests/e2e/invoice-delivery-status-bot.spec.ts`) — exercises the real, live, currently-failing Resend path (genuinely no email sent, satisfying "don't send real emails to satisfy the test"): 3/3 passed —
+1. a failed delivery is logged as `invoice_email_failed` (never `invoice_email_sent`) and the durable UI indicator + Retry/Copy buttons survive a page reload;
+2. retrying does not change `status`/`total`/`amount_paid`/`amount_due`/`share_token` (byte-for-byte equal before/after), and logs a second, independent `activity_log` row;
+3. an unrecognized share token returns "could not be found" (cross-customer/enumeration check).
+
+One genuine bug was found and fixed during this: the delivery-status component's initial status fetch had no error handling, so a failed/rejected read left the UI stuck showing nothing (indistinguishable from "still loading") instead of falling back to a visible "unknown" state — fixed with an explicit `.catch()`/error branch. One test (`retry ... never changes invoice financial state`) initially flaked on a one-shot DB read racing the server-confirmed write; fixed by switching to the same `expect(async () => {...}).toPass(...)` polling pattern already used elsewhere in this test suite (`invoice-management-bot.spec.ts`) — not a product defect, a test-timing fix.
+
+**Full regression pass** — reran all previously-passing invoice/payment/portal specs plus the new `payment-authority-bot.spec.ts` from the prior session, serially (`--workers=1`): 45 passed, 2 honest skips (org-state-dependent, unrelated to this change), 0 failures.
+
+**Vitest (full suite)**: 508/508 passed, 56 files.
+**Typecheck**: clean across all 5 workspace packages.
+**Build**: `pnpm --filter @premier/web build` succeeded.
+**Lint**: all 9 changed/added files (`invoices/actions.ts`, `actions.test.ts`, `send-invoice-button.tsx`, `invoice-email-delivery-status.tsx` (new), `[invoiceId]/page.tsx`, `activity-log.ts`, `queries/index.ts`, `db/index.ts`, `invoice-delivery-status-bot.spec.ts`) → 0 errors, 0 warnings.
+
+No migration was applied or needed for this fix — `event_type` has no CHECK constraint, so the two new event type values required only a TypeScript union change.
+
 ## 6. Production differences
 
 **Read-only findings only — production (`apnbpcauqrjvkoleisde`) was never queried or mutated during this audit.** Everything below is either from repo history/docs or from what's known about E2E; nothing here required touching prod.
@@ -103,19 +191,22 @@ No skip was reported as a pass. No assertion was weakened to make a test green.
 - **Inferred, not verified this session**: whether production has since caught up to `main`'s full migration set is **unknown** — this audit did not query production's `schema_migrations` table or its live schema, per the explicit instruction not to. Before any real production deployment/migration work, production's actual applied-migration state should be read (read-only) and reconciled explicitly, not assumed from E2E's state.
 - **Unknown**: whether production's Vercel environment variables for `NEXT_PUBLIC_SUPABASE_URL` point at prod or something else — out of scope for this audit (no Vercel Production environment inspection was performed).
 
-## 7. Minimum cutover plan
+## 7. Minimum cutover plan (Update: steps 1 and 3 are now the only remaining ones)
 
 Shortest ordered path from current `main` to "Kevin can send the first real Forge invoice":
 
-1. **Verify the Resend sending domain** for whatever address Premier will send invoices from (owner/Resend-dashboard action, not code).
-2. **Add a delivery-confirmation signal** to invoices (small additive migration + one server-action edit) so a failed send is visibly different from a successful one — propose as its own slice per Blocker 1.
-3. Re-run `transactional-email-bot.spec.ts` against a real (or sandbox-verified) domain to confirm delivery actually succeeds, not just that failure degrades gracefully.
+1. **Verify the Resend sending domain** for whatever address Premier will send invoices from (owner/Resend-dashboard + DNS action — see the checklist in §4a; not something this session could do).
+2. ~~Add a delivery-confirmation signal to invoices~~ — **done this session** (§4a), schema-free, no migration.
+3. Once the domain is verified, send one real test invoice to a real staff-controlled inbox (not a customer) through the normal UI and confirm the new durable status indicator shows "sent successfully" — cheap final confirmation before touching a real customer.
 4. Do the controlled real-invoice smoke test in §9 below, on production, with your explicit go-ahead at each step.
 5. (Not required for cutover, but recommended soon after) Harden draft-immutability with a DB trigger (Blocker 2) and fix the void-with-payments gap (Blocker 3) before either becomes a live incident.
+6. (Recommended next priority, per your instruction — see §8's new P0 item) Fix Vercel Preview's Supabase credential isolation before this becomes routine development risk.
 
 No new payment provider, PDF designer, or accounting integration is required to cross this line — manual payment recording is already DB-authoritative and sufficiently proven.
 
 ## 8. Permanent environment architecture
+
+> **P0 — do not let this get lost after invoicing cutover** (per explicit instruction, delivery-fix session): item **C** below — Vercel Preview possibly using production Supabase credentials — is the very next priority once the first real invoice ships. Not implemented in this session (out of scope, and doing so safely requires actually inspecting/changing live Vercel project configuration, which needs its own authorized slice). Restated here so it is not lost in a large document: **Preview deployments must never receive production Supabase credentials; Preview must use a dedicated non-prod backend; the runtime must fail closed if a Preview resolves to the production project ref; E2E/dev mutations must continue to hard-refuse production; only synthetic data is allowed outside production.**
 
 Target model (per your brief): local → dedicated E2E → Vercel Preview/staging → manual approval → production, with the invariant that **no automated test or normal dev workflow can ever mutate production data.**
 
@@ -135,7 +226,7 @@ Target model (per your brief): local → dedicated E2E → Vercel Preview/stagin
 
 ## 9. First real invoice smoke plan (prepared, NOT executed)
 
-To be run only after Blocker 1 is resolved and with your explicit go-ahead at each step. No step below was performed.
+To be run only after the Resend domain is verified (§4a checklist) and with your explicit go-ahead at each step. No step below was performed.
 
 1. Identify one legitimate, already-existing PPM job with a real customer and confirmed email address.
 2. Verify that customer's email address is current (ask Kevin or check recent correspondence).
